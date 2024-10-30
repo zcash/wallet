@@ -1,0 +1,11 @@
+[package]
+name = "zallet"
+version = "0.0.0"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "TBD"
+license.workspace = true
+categories.workspace = true
+
+[dependencies]

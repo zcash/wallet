@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "zallet",
+]
+resolver = "2"
+
+[workspace.package]
+authors = [
+    "Jack Grigg <jack@electriccoin.co>",
+    "Kris Nuttycombe <kris@electriccoin.co>",
+]
+edition = "2021"
+rust-version = "1.82"
+repository = "https://github.com/zcash/wallet"
+license = "MIT OR Apache-2.0"
+categories = ["cryptography::cryptocurrencies"]
+
+[workspace.dependencies]
