@@ -16,13 +16,15 @@ macro_rules! fl {
         i18n_embed_fl::fl!($crate::i18n::LANGUAGE_LOADER, $message_id, $($args), *)
     }};
 }
-fn main() -> Result<(), error::Error> {
+
+#[tokio::main]
+async fn main() -> Result<(), error::Error> {
     let requested_languages = DesktopLanguageRequester::requested_languages();
     i18n::load_languages(&requested_languages);
 
     let opts = cli::CliOptions::parse();
 
     match opts.command {
-        cli::Command::Run(cmd) => cmd.run(),
+        cli::Command::Run(cmd) => cmd.run().await,
     }
 }

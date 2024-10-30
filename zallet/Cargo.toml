@@ -13,3 +13,4 @@ clap = { workspace = true, features = ["string", "unstable-styles"] }
 i18n-embed = { workspace = true, features = ["desktop-requester"] }
 i18n-embed-fl.workspace = true
 rust-embed.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

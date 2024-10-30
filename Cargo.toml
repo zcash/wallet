@@ -16,6 +16,8 @@ license = "MIT OR Apache-2.0"
 categories = ["cryptography::cryptocurrencies"]
 
 [workspace.dependencies]
+# Async
+tokio = "1"
 
 # Localization
 i18n-embed = { version = "0.15", features = ["fluent-system"] }
