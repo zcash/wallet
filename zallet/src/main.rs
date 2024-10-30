@@ -2,6 +2,8 @@ use clap::Parser;
 use i18n_embed::DesktopLanguageRequester;
 
 mod cli;
+mod commands;
+mod error;
 mod i18n;
 
 #[macro_export]
@@ -14,10 +16,13 @@ macro_rules! fl {
         i18n_embed_fl::fl!($crate::i18n::LANGUAGE_LOADER, $message_id, $($args), *)
     }};
 }
-
-fn main() {
+fn main() -> Result<(), error::Error> {
     let requested_languages = DesktopLanguageRequester::requested_languages();
     i18n::load_languages(&requested_languages);
 
-    let _opts = cli::CliOptions::parse();
+    let opts = cli::CliOptions::parse();
+
+    match opts.command {
+        cli::Command::Run(cmd) => cmd.run(),
+    }
 }

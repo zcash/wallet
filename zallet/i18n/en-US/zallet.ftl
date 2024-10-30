@@ -17,3 +17,12 @@
 usage-header = Usage
 
 flags-header = Options
+
+## General errors
+
+err-discombobulated = Discombobulated
+
+err-ux-A = Did {-zallet} not do what you expected? Could the error be more useful?
+err-ux-B = Tell us
+# Put (len(A) - len(B) - 41) spaces here.
+err-ux-C = {"                    "}

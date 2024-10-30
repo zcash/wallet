@@ -1,4 +1,4 @@
-use clap::{builder::Styles, Parser};
+use clap::{builder::Styles, Args, Parser, Subcommand};
 
 use crate::fl;
 
@@ -14,4 +14,15 @@ use crate::fl;
     fl!("usage-header"),
     Styles::default().get_usage().render_reset()))]
 #[command(next_help_heading = fl!("flags-header"))]
-pub(crate) struct CliOptions {}
+pub(crate) struct CliOptions {
+    #[command(subcommand)]
+    pub(crate) command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum Command {
+    Run(Run),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct Run {}
