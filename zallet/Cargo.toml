@@ -4,8 +4,13 @@ version = "0.0.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "TBD"
+description = "A prototype wallet. Don't rely on this for privacy or with significant funds yet!"
 license.workspace = true
 categories.workspace = true
 
 [dependencies]
+clap = { workspace = true, features = ["string", "unstable-styles"] }
+i18n-embed = { workspace = true, features = ["desktop-requester"] }
+i18n-embed-fl.workspace = true
+rust-embed.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
