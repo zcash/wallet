@@ -1,5 +1,7 @@
 //! Zallet Abscissa Application
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use abscissa_core::{
     application::{self, AppCell},
     config::{self, CfgCell},
@@ -51,7 +53,17 @@ impl Application for ZalletApp {
 
     fn register_components(&mut self, command: &Self::Cmd) -> Result<(), FrameworkError> {
         let mut components = self.framework_components(command)?;
-        components.push(Box::new(TokioComponent::new()?));
+        components.push(Box::new(TokioComponent::from(
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_name_fn(|| {
+                    static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+                    let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+                    format!("tokio-worker-{}", id)
+                })
+                .build()
+                .expect("failed to build Tokio runtime"),
+        )));
         self.state.components_mut().register(components)
     }
 
