@@ -1,4 +1,7 @@
 use std::fmt;
+use std::ops::Deref;
+
+use abscissa_core::error::{BoxError, Context};
 
 macro_rules! wfl {
     ($f:ident, $message_id:literal) => {
@@ -20,16 +23,15 @@ macro_rules! wlnfl {
     };
 }
 
-pub(crate) enum Error {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ErrorKind {
     Discombobulated,
 }
 
-// Rust only supports `fn main() -> Result<(), E: Debug>`, so we implement `Debug`
-// manually to provide the error output we want.
-impl fmt::Debug for Error {
+impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Discombobulated => wlnfl!(f, "err-discombobulated")?,
+            ErrorKind::Discombobulated => wlnfl!(f, "err-discombobulated")?,
         }
         writeln!(f)?;
         writeln!(f, "[ {} ]", crate::fl!("err-ux-A"))?;
@@ -39,5 +41,50 @@ impl fmt::Debug for Error {
             crate::fl!("err-ux-B"),
             crate::fl!("err-ux-C")
         )
+    }
+}
+
+impl std::error::Error for ErrorKind {}
+
+impl ErrorKind {
+    /// Creates an error context from this error.
+    pub(crate) fn context(self, source: impl Into<BoxError>) -> Context<ErrorKind> {
+        Context::new(self, Some(source.into()))
+    }
+}
+
+/// Error type
+#[derive(Debug)]
+pub(crate) struct Error(Box<Context<ErrorKind>>);
+
+impl Deref for Error {
+    type Target = Context<ErrorKind>;
+
+    fn deref(&self) -> &Context<ErrorKind> {
+        &self.0
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
+
+impl From<ErrorKind> for Error {
+    fn from(kind: ErrorKind) -> Self {
+        Context::new(kind, None).into()
+    }
+}
+
+impl From<Context<ErrorKind>> for Error {
+    fn from(context: Context<ErrorKind>) -> Self {
+        Error(Box::new(context))
     }
 }
