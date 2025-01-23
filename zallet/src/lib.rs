@@ -16,6 +16,7 @@
 pub mod application;
 mod cli;
 mod commands;
+mod components;
 pub mod config;
 mod error;
 mod i18n;

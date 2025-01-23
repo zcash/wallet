@@ -20,7 +20,7 @@ flags-header = Options
 
 ## General errors
 
-err-discombobulated = Discombobulated
+err-init = Failed to initialize {-zallet}
 
 err-ux-A = Did {-zallet} not do what you expected? Could the error be more useful?
 err-ux-B = Tell us

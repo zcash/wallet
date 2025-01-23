@@ -1,0 +1,65 @@
+use jsonrpsee::{core::RpcResult, tracing::warn};
+use serde::{Deserialize, Serialize};
+
+/// Response to a `getwalletinfo` RPC request.
+pub(crate) type Response = RpcResult<GetWalletInfo>;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct GetWalletInfo {
+    /// The wallet version, in its "Bitcoin client version" form.
+    walletversion: u64,
+
+    /// The total confirmed transparent balance of the wallet in ZEC.
+    balance: f64,
+
+    /// The total unconfirmed transparent balance of the wallet in ZEC.
+    ///
+    /// Not included if `asOfHeight` is specified.
+    unconfirmed_balance: Option<f64>,
+
+    /// The total immature transparent balance of the wallet in ZEC.
+    immature_balance: f64,
+
+    /// The total confirmed shielded balance of the wallet in ZEC.
+    shielded_balance: String,
+
+    /// The total unconfirmed shielded balance of the wallet in ZEC.
+    ///
+    /// Not included if `asOfHeight` is specified.
+    shielded_unconfirmed_balance: Option<String>,
+
+    /// The total number of transactions in the wallet
+    txcount: u64,
+
+    /// The timestamp (seconds since GMT epoch) of the oldest pre-generated key in the
+    /// key pool.
+    keypoololdest: u64,
+
+    /// How many new keys are pre-generated.
+    keypoolsize: u32,
+
+    /// The timestamp in seconds since epoch (midnight Jan 1 1970 GMT) that the wallet is
+    /// unlocked for transfers, or 0 if the wallet is locked.
+    unlocked_until: u32,
+
+    /// The BLAKE2b-256 hash of the HD seed derived from the wallet's emergency recovery phrase.
+    mnemonic_seedfp: String,
+}
+
+pub(crate) fn call() -> Response {
+    warn!("TODO: Implement getwalletinfo");
+
+    Ok(GetWalletInfo {
+        walletversion: 0,
+        balance: 0.0,
+        unconfirmed_balance: Some(0.0),
+        immature_balance: 0.0,
+        shielded_balance: "0.00".into(),
+        shielded_unconfirmed_balance: Some("0.00".into()),
+        txcount: 0,
+        keypoololdest: 0,
+        keypoolsize: 0,
+        unlocked_until: 0,
+        mnemonic_seedfp: "TODO".into(),
+    })
+}
