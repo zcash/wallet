@@ -24,5 +24,10 @@ i18n-embed = { version = "0.15", features = ["fluent-system"] }
 i18n-embed-fl = "0.9"
 rust-embed = "8"
 
+# Parsing
+serde = { version = "1", features = ["serde_derive"] }
+
 # CLI
+abscissa_core = "0.8"
+abscissa_tokio = "0.8"
 clap = { version = "4.5", features = ["derive"] }

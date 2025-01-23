@@ -1,9 +1,10 @@
-use clap::{builder::Styles, Args, Parser, Subcommand};
+use abscissa_core::{Command, Runnable};
+use clap::{builder::Styles, Parser};
 
 use crate::fl;
 
-#[derive(Debug, Parser)]
-#[command(author, version)]
+#[derive(Debug, Parser, Command)]
+#[command(author, about, version)]
 #[command(help_template = format!("\
 {{before-help}}{{about-with-newline}}
 {}{}:{} {{usage}}
@@ -14,15 +15,25 @@ use crate::fl;
     fl!("usage-header"),
     Styles::default().get_usage().render_reset()))]
 #[command(next_help_heading = fl!("flags-header"))]
-pub(crate) struct CliOptions {
+pub struct EntryPoint {
     #[command(subcommand)]
-    pub(crate) command: Command,
+    pub(crate) cmd: ZalletCmd,
+
+    /// Enable verbose logging
+    #[arg(short, long)]
+    pub(crate) verbose: bool,
+
+    /// Use the specified config file
+    #[arg(short, long)]
+    pub(crate) config: Option<String>,
 }
 
-#[derive(Debug, Subcommand)]
-pub(crate) enum Command {
-    Run(Run),
+#[derive(Debug, Parser, Command, Runnable)]
+pub(crate) enum ZalletCmd {
+    /// The `start` subcommand
+    Start(StartCmd),
 }
 
-#[derive(Debug, Args)]
-pub(crate) struct Run {}
+/// `start` subcommand
+#[derive(Debug, Parser, Command)]
+pub(crate) struct StartCmd {}

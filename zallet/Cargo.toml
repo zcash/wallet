@@ -9,8 +9,15 @@ license.workspace = true
 categories.workspace = true
 
 [dependencies]
+abscissa_core.workspace = true
+abscissa_tokio.workspace = true
 clap = { workspace = true, features = ["string", "unstable-styles"] }
 i18n-embed = { workspace = true, features = ["desktop-requester"] }
 i18n-embed-fl.workspace = true
 rust-embed.workspace = true
+serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[dev-dependencies]
+abscissa_core = { workspace = true, features = ["testing"] }
+once_cell = "1.2"
