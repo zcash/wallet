@@ -25,13 +25,13 @@ macro_rules! wlnfl {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ErrorKind {
-    Discombobulated,
+    Init,
 }
 
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::Discombobulated => wlnfl!(f, "err-discombobulated")?,
+            ErrorKind::Init => wlnfl!(f, "err-init")?,
         }
         writeln!(f)?;
         writeln!(f, "[ {} ]", crate::fl!("err-ux-A"))?;
