@@ -594,6 +594,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "home"
+version = "0.5.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "589533453244b0995c858700322199b2becb13b627df2851f64a2775d024abcf"
+dependencies = [
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "http"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1660,6 +1669,7 @@ dependencies = [
  "futures-util",
  "pin-project",
  "pin-project-lite",
+ "tokio",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -1958,6 +1968,7 @@ dependencies = [
  "abscissa_tokio",
  "clap",
  "futures",
+ "home",
  "http-body-util",
  "hyper",
  "i18n-embed",
@@ -1969,6 +1980,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "toml 0.8.19",
  "tower",
 ]
 

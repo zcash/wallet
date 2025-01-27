@@ -25,12 +25,14 @@ macro_rules! wlnfl {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ErrorKind {
+    Generic,
     Init,
 }
 
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ErrorKind::Generic => wfl!(f, "err-kind-generic"),
             ErrorKind::Init => wfl!(f, "err-kind-init"),
         }
     }

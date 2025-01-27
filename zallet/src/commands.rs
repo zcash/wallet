@@ -9,6 +9,7 @@ use crate::{
     config::ZalletConfig,
 };
 
+mod migrate_zcash_conf;
 mod start;
 
 /// Zallet Configuration Filename
@@ -51,6 +52,7 @@ impl Configurable<ZalletConfig> for EntryPoint {
             // If you don't need special overrides for some
             // subcommands, you can just use a catch all
             // _ => Ok(config),
+            _ => Ok(config),
         }
     }
 }
