@@ -1,4 +1,4 @@
-//! `start` subcommand - example of how to write a subcommand
+//! `start` subcommand
 
 use abscissa_core::{config, tracing::Instrument, FrameworkError, Runnable, Shutdown};
 use tokio::{pin, select};
