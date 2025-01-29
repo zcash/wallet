@@ -1,21 +1,32 @@
-//! `start` subcommand - example of how to write a subcommand
+//! `start` subcommand
 
 use abscissa_core::{config, tracing::Instrument, FrameworkError, Runnable, Shutdown};
 use tokio::{pin, select};
 
-use crate::{cli::StartCmd, components::json_rpc, config::ZalletConfig, error::Error, prelude::*};
+use crate::{
+    cli::StartCmd,
+    components::json_rpc,
+    config::ZalletConfig,
+    error::{Error, ErrorKind},
+    prelude::*,
+};
 
 impl StartCmd {
     async fn start(&self) -> Result<(), Error> {
         let config = APP.config();
 
         // Launch RPC server.
-        let rpc_task_handle = if let Some(listen_addr) = config.rpc.listen_addr {
+        let rpc_task_handle = if !config.rpc.bind.is_empty() {
+            if config.rpc.bind.len() > 1 {
+                return Err(ErrorKind::Init
+                    .context("Only one RPC bind address is supported (for now)")
+                    .into());
+            }
             info!("Spawning RPC server");
-            info!("Trying to open RPC endpoint at {}...", listen_addr);
+            info!("Trying to open RPC endpoint at {}...", config.rpc.bind[0]);
             json_rpc::server::spawn(config.rpc.clone()).await?
         } else {
-            warn!("Configure a listen_addr to start the RPC server");
+            warn!("Configure `rpc.bind` to start the RPC server");
             // Emulate a normally-operating ongoing task to simplify subsequent logic.
             tokio::spawn(std::future::pending().in_current_span())
         };

@@ -25,22 +25,16 @@ macro_rules! wlnfl {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ErrorKind {
+    Generic,
     Init,
 }
 
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::Init => wlnfl!(f, "err-init")?,
+            ErrorKind::Generic => wfl!(f, "err-kind-generic"),
+            ErrorKind::Init => wfl!(f, "err-kind-init"),
         }
-        writeln!(f)?;
-        writeln!(f, "[ {} ]", crate::fl!("err-ux-A"))?;
-        write!(
-            f,
-            "[ {}: https://github.com/zcash/wallet/issues {} ]",
-            crate::fl!("err-ux-B"),
-            crate::fl!("err-ux-C")
-        )
     }
 }
 
@@ -67,7 +61,15 @@ impl Deref for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        writeln!(f, "{}", self.0)?;
+        writeln!(f)?;
+        writeln!(f, "[ {} ]", crate::fl!("err-ux-A"))?;
+        write!(
+            f,
+            "[ {}: https://github.com/zcash/wallet/issues {} ]",
+            crate::fl!("err-ux-B"),
+            crate::fl!("err-ux-C")
+        )
     }
 }
 

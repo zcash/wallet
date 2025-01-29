@@ -20,16 +20,18 @@ mod rpc_call_compatibility;
 type ServerTask = JoinHandle<Result<(), Error>>;
 
 pub(crate) async fn spawn(config: RpcSection) -> Result<ServerTask, Error> {
-    let listen_addr = config
-        .listen_addr
-        .expect("caller should make sure listen_addr is set");
+    // Caller should make sure `bind` only contains a single address (for now).
+    assert_eq!(config.bind.len(), 1);
+    let listen_addr = config.bind[0];
 
     // Initialize the RPC methods.
     let rpc_impl = RpcImpl::new();
 
     let http_middleware_layer = http_request_compatibility::HttpRequestMiddlewareLayer::new();
 
-    let http_middleware = tower::ServiceBuilder::new().layer(http_middleware_layer);
+    let http_middleware = tower::ServiceBuilder::new()
+        .layer(http_middleware_layer)
+        .timeout(config.timeout());
 
     let rpc_middleware = RpcServiceBuilder::new()
         .rpc_logger(1024)

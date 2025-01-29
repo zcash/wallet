@@ -20,6 +20,9 @@ categories = ["cryptography::cryptocurrencies"]
 futures = "0.3"
 tokio = "1"
 
+# Filesystem
+home = "0.5"
+
 # Localization
 i18n-embed = { version = "0.15", features = ["fluent-system"] }
 i18n-embed-fl = "0.9"
@@ -28,6 +31,7 @@ rust-embed = "8"
 # Parsing and serialization
 serde = { version = "1", features = ["serde_derive"] }
 serde_json = "1"
+toml = "0.8"
 
 # Randomness
 rand = "0.8"
