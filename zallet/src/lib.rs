@@ -20,6 +20,7 @@ mod components;
 pub mod config;
 mod error;
 mod i18n;
+pub mod network;
 mod prelude;
 
 #[macro_export]

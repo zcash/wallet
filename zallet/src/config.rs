@@ -4,13 +4,17 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use zcash_protocol::consensus::NetworkType;
+
+use crate::network::{Network, RegTestNuParam};
 
 /// Zallet Configuration
 ///
-/// All fields are `Option<T>` to enable distinguishing between a user relying on a
+/// Most fields are `Option<T>` to enable distinguishing between a user relying on a
 /// default value (which may change over time), and a user explicitly configuring an
-/// option with the current default value (which should be preserved).
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+/// option with the current default value (which should be preserved). The sole exception
+/// to this is `network`, which cannot change for the lifetime of the wallet.
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
     /// Whether the wallet should broadcast transactions.
@@ -19,10 +23,20 @@ pub struct ZalletConfig {
     /// Directory to be used when exporting data.
     pub export_dir: Option<String>,
 
+    /// Network type.
+    #[serde(with = "crate::network::kind")]
+    pub network: NetworkType,
+
     /// Execute command when a wallet transaction changes.
     ///
     /// `%s` in the command is replaced by TxID.
     pub notify: Option<String>,
+
+    /// The parameters for regtest mode.
+    ///
+    /// Ignored if `network` is not `NetworkType::Regtest`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub regtest_nuparams: Vec<RegTestNuParam>,
 
     /// By default, the wallet will not allow generation of new spending keys & addresses
     /// from the mnemonic seed until the backup of that seed has been confirmed with the
@@ -39,12 +53,33 @@ pub struct ZalletConfig {
     pub rpc: RpcSection,
 }
 
+impl Default for ZalletConfig {
+    fn default() -> Self {
+        Self {
+            broadcast: None,
+            export_dir: None,
+            network: NetworkType::Main,
+            notify: None,
+            regtest_nuparams: vec![],
+            require_backup: None,
+            builder: Default::default(),
+            limits: Default::default(),
+            rpc: Default::default(),
+        }
+    }
+}
+
 impl ZalletConfig {
     /// Whether the wallet should broadcast transactions.
     ///
     /// Default is `true`.
     pub fn broadcast(&self) -> bool {
         self.broadcast.unwrap_or(true)
+    }
+
+    /// Returns the network parameters for this wallet.
+    pub fn network(&self) -> Network {
+        Network::from_type(self.network, &self.regtest_nuparams)
     }
 
     /// Whether to require a confirmed wallet backup.

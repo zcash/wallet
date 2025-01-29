@@ -77,6 +77,10 @@ err-migrate-duplicate-zcashd-option =
     then re-run this command.
 err-migrate-invalid-line = Invalid line '{$line}' in {$conf}
 err-migrate-invalid-zcashd-option = Invalid value '{$value}' for {-zcashd} option '{$option}'
+err-migrate-multiple-related-zcashd-options =
+    {-zcashd} option '{$option}' collides with '{$prev}', but both appear in
+    {$conf}
+    Remove one of the conflicting options, then re-run this command.
 err-migrate-unknown-zcashd-option = Unknown {-zcashd} option '{$option}'
 
 err-ux-A = Did {-zallet} not do what you expected? Could the error be more useful?

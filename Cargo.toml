@@ -46,3 +46,6 @@ http-body-util = "0.1"
 hyper = "1"
 jsonrpsee = "0.24"
 tower = "0.4"
+
+# Zcash consensus
+zcash_protocol = "0.4"
