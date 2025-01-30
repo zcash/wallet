@@ -7,6 +7,7 @@ mod get_notes_count;
 mod get_wallet_info;
 mod list_accounts;
 mod list_unified_receivers;
+mod list_unspent;
 
 #[rpc(server)]
 pub(crate) trait Rpc {
@@ -18,6 +19,18 @@ pub(crate) trait Rpc {
 
     #[method(name = "z_listunifiedreceivers")]
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response;
+
+    /// Returns an array of unspent shielded notes with between minconf and maxconf
+    /// (inclusive) confirmations.
+    ///
+    /// Results may be optionally filtered to only include notes sent to specified
+    /// addresses. When `minconf` is 0, unspent notes with zero confirmations are
+    /// returned, even though they are not immediately spendable.
+    ///
+    /// # Arguments
+    /// - `minconf` (default = 1)
+    #[method(name = "z_listunspent")]
+    async fn list_unspent(&self) -> list_unspent::Response;
 
     #[method(name = "z_getnotescount")]
     async fn get_notes_count(
@@ -57,6 +70,10 @@ impl RpcServer for RpcImpl {
 
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response {
         list_unified_receivers::call(unified_address)
+    }
+
+    async fn list_unspent(&self) -> list_unspent::Response {
+        list_unspent::call(self.wallet().await?.as_ref())
     }
 
     async fn get_notes_count(
