@@ -15,6 +15,7 @@ use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
     fl,
+    network::RegTestNuParam,
     prelude::*,
 };
 
@@ -41,7 +42,8 @@ impl MigrateZcashConfCmd {
 
         let actions = build_actions();
         let mut config = ZalletConfig::default();
-        let mut configured = HashSet::new();
+        let mut observed = HashSet::new();
+        let mut related = HashMap::<String, String>::new();
         let mut warnings = vec![];
 
         while let Some(line) = lines
@@ -70,8 +72,17 @@ impl MigrateZcashConfCmd {
                 .map_or_else(|| rest.trim_end(), |(value, _)| value.trim_end());
 
             match actions.get(option) {
-                Some(Action::MapTo(f)) => {
-                    if configured.contains(option) {
+                Some(Action::MapTo { f, target }) => {
+                    if let Some(prev) = target.and_then(|target| related.get(target)) {
+                        return Err(ErrorKind::Generic
+                            .context(fl!(
+                                "err-migrate-multiple-related-zcashd-options",
+                                option = option,
+                                prev = prev,
+                                conf = conf.display().to_string(),
+                            ))
+                            .into());
+                    } else if observed.contains(option) {
                         return Err(ErrorKind::Generic
                             .context(fl!(
                                 "err-migrate-duplicate-zcashd-option",
@@ -80,7 +91,10 @@ impl MigrateZcashConfCmd {
                             ))
                             .into());
                     } else {
-                        configured.insert(option.to_owned());
+                        observed.insert(option.to_owned());
+                        if let Some(target) = target {
+                            related.insert(target.to_string(), option.to_owned());
+                        }
                         f(&mut config, value)?
                     }
                 }
@@ -197,7 +211,11 @@ fn default_data_dir() -> Option<PathBuf> {
 /// The action to take when a specific `zcashd` option is encountered.
 enum Action {
     /// Maps the option to its equivalent Zallet config option.
-    MapTo(Box<dyn Fn(&mut ZalletConfig, &str) -> Result<(), Error>>),
+    MapTo {
+        f: Box<dyn Fn(&mut ZalletConfig, &str) -> Result<(), Error>>,
+        /// The target Zallet config option, if this is one of a set of related `zcashd` options.
+        target: Option<&'static str>,
+    },
     /// Maps the multi-valued option to its equivalent Zallet config option.
     MapMulti(Box<dyn Fn(&mut ZalletConfig, &str) -> Result<(), Error>>),
     /// Silently ignores the option.
@@ -216,14 +234,17 @@ impl Action {
     ) -> Option<(&'static str, Self)> {
         Some((
             option,
-            Self::MapTo(Box::new(move |config, value| {
-                let value = match v(value) {
-                    Ok(v) => Ok(v),
-                    Err(()) => invalid_option_value(option, value),
-                }?;
-                *f(config) = Some(value);
-                Ok(())
-            })),
+            Self::MapTo {
+                f: Box::new(move |config, value| {
+                    let value = match v(value) {
+                        Ok(v) => Ok(v),
+                        Err(()) => invalid_option_value(option, value),
+                    }?;
+                    *f(config) = Some(value);
+                    Ok(())
+                }),
+                target: None,
+            },
         ))
     }
 
@@ -236,6 +257,30 @@ impl Action {
             "1" => Ok(true),
             _ => Err(()),
         })
+    }
+
+    /// Maps multiple related boolean flags onto the same config option.
+    fn map_related<T>(
+        option: &'static str,
+        target: &'static str,
+        f: impl for<'a> Fn(&'a mut ZalletConfig) -> &'a mut T + 'static,
+        v: impl Fn(&str) -> Result<Option<T>, ()> + 'static,
+    ) -> Option<(&'static str, Self)> {
+        Some((
+            option,
+            Self::MapTo {
+                f: Box::new(move |config, value| {
+                    if let Some(value) = match v(value) {
+                        Ok(v) => Ok(v),
+                        Err(()) => invalid_option_value(option, value),
+                    }? {
+                        *f(config) = value;
+                    }
+                    Ok(())
+                }),
+                target: Some(target),
+            },
+        ))
     }
 
     fn map_multi<T>(
@@ -456,8 +501,17 @@ fn build_actions() -> HashMap<&'static str, Action> {
             |config| &mut config.export_dir,
             |value| Ok(value.into()),
         ))
-        // TODO
-        .chain(Action::ignore("regtest"))
+        .chain(Action::map_multi(
+            "nuparams",
+            |config| &mut config.regtest_nuparams,
+            |value| RegTestNuParam::try_from(value).map_err(|_| ()),
+        ))
+        .chain(Action::map_related(
+            "regtest",
+            "network",
+            |config| &mut config.network,
+            |value| Ok((value == "1").then_some(zcash_protocol::consensus::NetworkType::Regtest)),
+        ))
         // TODO: Support mapping multi-arg options.
         .chain(Action::ignore("rpcallowip"))
         // Unsupported in `zcashd` since 1.0.0-beta1.
@@ -497,8 +551,12 @@ fn build_actions() -> HashMap<&'static str, Action> {
         .chain(Action::ignore("rpcthreads"))
         // TODO: Not quite the same thing as `ServerBuilder::set_message_buffer_capacity` I think?
         .chain(Action::ignore("rpcworkqueue"))
-        // TODO
-        .chain(Action::ignore("testnet"));
+        .chain(Action::map_related(
+            "testnet",
+            "network",
+            |config| &mut config.network,
+            |value| Ok((value == "1").then_some(zcash_protocol::consensus::NetworkType::Test)),
+        ));
 
     // Node options never used by the `zcashd` wallet. These can be safely ignored if
     // encountered in a `zcashd` config file.
@@ -577,7 +635,6 @@ fn build_actions() -> HashMap<&'static str, Action> {
         "minrelaytxfee",
         "mocktime",
         "nodebug",
-        "nuparams",
         "nurejectoldversions",
         "onion",
         "onlynet",

@@ -7,6 +7,7 @@ use jsonrpsee::{
 use tokio::task::JoinHandle;
 
 use crate::{
+    components::wallet::Wallet,
     config::RpcSection,
     error::{Error, ErrorKind},
 };
@@ -14,18 +15,20 @@ use crate::{
 use super::methods::{RpcImpl, RpcServer as _};
 
 mod error;
+pub(crate) use error::LegacyCode;
+
 mod http_request_compatibility;
 mod rpc_call_compatibility;
 
 type ServerTask = JoinHandle<Result<(), Error>>;
 
-pub(crate) async fn spawn(config: RpcSection) -> Result<ServerTask, Error> {
+pub(crate) async fn spawn(config: RpcSection, wallet: Wallet) -> Result<ServerTask, Error> {
     // Caller should make sure `bind` only contains a single address (for now).
     assert_eq!(config.bind.len(), 1);
     let listen_addr = config.bind[0];
 
     // Initialize the RPC methods.
-    let rpc_impl = RpcImpl::new();
+    let rpc_impl = RpcImpl::new(wallet);
 
     let http_middleware_layer = http_request_compatibility::HttpRequestMiddlewareLayer::new();
 
