@@ -1,6 +1,7 @@
 //! Zallet Config
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -44,6 +45,12 @@ pub struct ZalletConfig {
     /// to allow generation of spending keys even if the backup has not yet been confirmed.
     pub require_backup: Option<bool>,
 
+    /// Path to the wallet database file.
+    ///
+    /// TODO: If we decide to support a data directory, allow this to have a relative path
+    /// within it as well as a default name.
+    pub wallet_db: Option<PathBuf>,
+
     /// Settings that affect transactions created by Zallet.
     pub builder: BuilderSection,
 
@@ -62,6 +69,7 @@ impl Default for ZalletConfig {
             notify: None,
             regtest_nuparams: vec![],
             require_backup: None,
+            wallet_db: None,
             builder: Default::default(),
             limits: Default::default(),
             rpc: Default::default(),

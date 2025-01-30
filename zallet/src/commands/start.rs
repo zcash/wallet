@@ -5,7 +5,7 @@ use tokio::{pin, select};
 
 use crate::{
     cli::StartCmd,
-    components::json_rpc,
+    components::{json_rpc, wallet::Wallet},
     config::ZalletConfig,
     error::{Error, ErrorKind},
     prelude::*,
@@ -14,6 +14,21 @@ use crate::{
 impl StartCmd {
     async fn start(&self) -> Result<(), Error> {
         let config = APP.config();
+
+        // Open the wallet.
+        let wallet = {
+            let path = config
+                .wallet_db
+                .as_ref()
+                .ok_or_else(|| ErrorKind::Init.context("wallet_db must be set (for now)"))?;
+            if path.is_relative() {
+                return Err(ErrorKind::Init
+                    .context("wallet_db must be an absolute path (for now)")
+                    .into());
+            }
+
+            Wallet::open(path, config.network(), self.lwd_server.clone())?
+        };
 
         // Launch RPC server.
         let rpc_task_handle = if !config.rpc.bind.is_empty() {
@@ -31,10 +46,14 @@ impl StartCmd {
             tokio::spawn(std::future::pending().in_current_span())
         };
 
+        // Start the wallet sync process.
+        let wallet_sync_task_handle = wallet.spawn_sync().await?;
+
         info!("Spawned Zallet tasks");
 
         // ongoing tasks.
         pin!(rpc_task_handle);
+        pin!(wallet_sync_task_handle);
 
         // Wait for tasks to finish.
         let res = loop {
@@ -45,6 +64,13 @@ impl StartCmd {
                     let rpc_server_result = rpc_join_result
                         .expect("unexpected panic in the RPC task");
                     info!(?rpc_server_result, "RPC task exited");
+                    Ok(())
+                }
+
+                wallet_sync_join_result = &mut wallet_sync_task_handle => {
+                    let wallet_sync_result = wallet_sync_join_result
+                        .expect("unexpected panic in the wallet sync task");
+                    info!(?wallet_sync_result, "Wallet sync task exited");
                     Ok(())
                 }
             };
@@ -62,6 +88,7 @@ impl StartCmd {
 
         // ongoing tasks
         rpc_task_handle.abort();
+        wallet_sync_task_handle.abort();
 
         info!("All tasks have been asked to stop, waiting for remaining tasks to finish");
 
