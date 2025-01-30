@@ -14,7 +14,9 @@ use crate::{
 };
 
 mod cache;
+
 mod connection;
+pub(crate) use connection::WalletConnection;
 
 pub(crate) type WalletHandle = deadpool::managed::Object<connection::WalletManager>;
 

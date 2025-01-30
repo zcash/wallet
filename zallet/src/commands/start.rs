@@ -39,7 +39,7 @@ impl StartCmd {
             }
             info!("Spawning RPC server");
             info!("Trying to open RPC endpoint at {}...", config.rpc.bind[0]);
-            json_rpc::server::spawn(config.rpc.clone()).await?
+            json_rpc::server::spawn(config.rpc.clone(), wallet.clone()).await?
         } else {
             warn!("Configure `rpc.bind` to start the RPC server");
             // Emulate a normally-operating ongoing task to simplify subsequent logic.

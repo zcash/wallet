@@ -85,6 +85,10 @@ pub(crate) struct WalletConnection {
 }
 
 impl WalletConnection {
+    pub(crate) fn params(&self) -> &Network {
+        &self.params
+    }
+
     fn with<T>(&self, f: impl FnOnce(WalletDb<&rusqlite::Connection, Network>) -> T) -> T {
         tokio::task::block_in_place(|| {
             f(WalletDb::from_connection(
