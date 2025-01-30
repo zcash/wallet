@@ -20,7 +20,7 @@ pub(crate) trait Rpc {
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response;
 
     #[method(name = "z_getnotescount")]
-    fn get_notes_count(
+    async fn get_notes_count(
         &self,
         minconf: Option<u32>,
         as_of_height: Option<i32>,
@@ -59,11 +59,11 @@ impl RpcServer for RpcImpl {
         list_unified_receivers::call(unified_address)
     }
 
-    fn get_notes_count(
+    async fn get_notes_count(
         &self,
         minconf: Option<u32>,
         as_of_height: Option<i32>,
     ) -> get_notes_count::Response {
-        get_notes_count::call(minconf, as_of_height)
+        get_notes_count::call(self.wallet().await?.as_ref(), minconf, as_of_height)
     }
 }

@@ -5,18 +5,18 @@ use std::path::Path;
 
 use secrecy::SecretVec;
 use shardtree::{error::ShardTreeError, ShardTree};
-use transparent::{address::TransparentAddress, keys::NonHardenedChildIndex};
+use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
 use zcash_client_backend::{
     data_api::{
-        AccountBirthday, WalletCommitmentTrees, WalletRead, WalletWrite, ORCHARD_SHARD_HEIGHT,
-        SAPLING_SHARD_HEIGHT,
+        AccountBirthday, AccountMeta, InputSource, NoteFilter, SpendableNotes,
+        WalletCommitmentTrees, WalletRead, WalletWrite, ORCHARD_SHARD_HEIGHT, SAPLING_SHARD_HEIGHT,
     },
     keys::{UnifiedFullViewingKey, UnifiedSpendingKey},
-    wallet::TransparentAddressMetadata,
+    wallet::{Note, ReceivedNote, TransparentAddressMetadata, WalletTransparentOutput},
 };
 use zcash_client_sqlite::WalletDb;
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
-use zcash_protocol::{consensus::BlockHeight, value::Zatoshis};
+use zcash_protocol::{consensus::BlockHeight, value::Zatoshis, ShieldedProtocol};
 use zip32::fingerprint::SeedFingerprint;
 
 use crate::{
@@ -307,6 +307,61 @@ impl WalletRead for WalletConnection {
     }
 }
 
+impl InputSource for WalletConnection {
+    type Error = <WalletDb<rusqlite::Connection, Network> as InputSource>::Error;
+    type AccountId = <WalletDb<rusqlite::Connection, Network> as InputSource>::AccountId;
+    type NoteRef = <WalletDb<rusqlite::Connection, Network> as InputSource>::NoteRef;
+
+    fn get_spendable_note(
+        &self,
+        txid: &zcash_protocol::TxId,
+        protocol: ShieldedProtocol,
+        index: u32,
+    ) -> Result<Option<ReceivedNote<Self::NoteRef, Note>>, Self::Error> {
+        self.with(|db_data| db_data.get_spendable_note(txid, protocol, index))
+    }
+
+    fn select_spendable_notes(
+        &self,
+        account: Self::AccountId,
+        target_value: Zatoshis,
+        sources: &[ShieldedProtocol],
+        anchor_height: BlockHeight,
+        exclude: &[Self::NoteRef],
+    ) -> Result<SpendableNotes<Self::NoteRef>, Self::Error> {
+        self.with(|db_data| {
+            db_data.select_spendable_notes(account, target_value, sources, anchor_height, exclude)
+        })
+    }
+
+    fn get_unspent_transparent_output(
+        &self,
+        outpoint: &OutPoint,
+    ) -> Result<Option<WalletTransparentOutput>, Self::Error> {
+        self.with(|db_data| db_data.get_unspent_transparent_output(outpoint))
+    }
+
+    fn get_spendable_transparent_outputs(
+        &self,
+        address: &TransparentAddress,
+        target_height: BlockHeight,
+        min_confirmations: u32,
+    ) -> Result<Vec<WalletTransparentOutput>, Self::Error> {
+        self.with(|db_data| {
+            db_data.get_spendable_transparent_outputs(address, target_height, min_confirmations)
+        })
+    }
+
+    fn get_account_metadata(
+        &self,
+        account: Self::AccountId,
+        selector: &NoteFilter,
+        exclude: &[Self::NoteRef],
+    ) -> Result<AccountMeta, Self::Error> {
+        self.with(|db_data| db_data.get_account_metadata(account, selector, exclude))
+    }
+}
+
 impl WalletWrite for WalletConnection {
     type UtxoRef = <WalletDb<rusqlite::Connection, Network> as WalletWrite>::UtxoRef;
 
@@ -370,7 +425,7 @@ impl WalletWrite for WalletConnection {
 
     fn put_received_transparent_utxo(
         &mut self,
-        output: &zcash_client_backend::wallet::WalletTransparentOutput,
+        output: &WalletTransparentOutput,
     ) -> Result<Self::UtxoRef, Self::Error> {
         self.with_mut(|mut db_data| db_data.put_received_transparent_utxo(output))
     }
