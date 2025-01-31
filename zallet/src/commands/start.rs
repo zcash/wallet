@@ -27,7 +27,8 @@ impl StartCmd {
                     .into());
             }
 
-            Wallet::open(path, config.network(), self.lwd_server.clone())?
+            info!("Opening wallet");
+            Wallet::open(path, config.network(), self.lwd_server.clone()).await?
         };
 
         // Launch RPC server.

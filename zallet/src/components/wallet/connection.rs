@@ -98,7 +98,7 @@ impl WalletConnection {
         })
     }
 
-    fn with_mut<T>(&self, f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network>) -> T) -> T {
+    pub(crate) fn with_mut<T>(&self, f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network>) -> T) -> T {
         tokio::task::block_in_place(|| {
             f(WalletDb::from_connection(
                 self.inner.lock().unwrap().as_mut(),
