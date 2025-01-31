@@ -87,3 +87,10 @@ err-ux-A = Did {-zallet} not do what you expected? Could the error be more usefu
 err-ux-B = Tell us
 # Put (len(A) - len(B) - 41) spaces here.
 err-ux-C = {"                    "}
+
+## zallet manpage
+
+man-zallet-about = A {-zcash} wallet.
+
+man-zallet-description =
+    {-zallet} is a {-zcash} wallet.

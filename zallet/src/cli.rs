@@ -1,11 +1,17 @@
 use std::path::PathBuf;
 
-use abscissa_core::{Command, Runnable};
 use clap::{builder::Styles, Parser};
 
-use crate::{fl, remote::Servers};
+#[cfg(outside_buildscript)]
+use abscissa_core::{Command, Runnable};
 
-#[derive(Debug, Parser, Command)]
+use crate::fl;
+
+#[cfg(outside_buildscript)]
+use crate::remote::Servers;
+
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
 #[command(author, about, version)]
 #[command(help_template = format!("\
 {{before-help}}{{about-with-newline}}
@@ -30,7 +36,8 @@ pub struct EntryPoint {
     pub(crate) config: Option<String>,
 }
 
-#[derive(Debug, Parser, Command, Runnable)]
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command, Runnable))]
 pub(crate) enum ZalletCmd {
     /// The `start` subcommand
     Start(StartCmd),
@@ -40,7 +47,8 @@ pub(crate) enum ZalletCmd {
 }
 
 /// `start` subcommand
-#[derive(Debug, Parser, Command)]
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct StartCmd {
     /// The lightwalletd server to sync with (default is \"ecc\")
     #[arg(long)]
@@ -49,7 +57,8 @@ pub(crate) struct StartCmd {
 }
 
 /// `migrate-zcash-conf` subcommand
-#[derive(Debug, Parser, Command)]
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct MigrateZcashConfCmd {
     /// Specify `zcashd` configuration file.
     ///
@@ -79,4 +88,17 @@ pub(crate) struct MigrateZcashConfCmd {
     /// Temporary flag ensuring any alpha users are aware the migration is not stable.
     #[arg(long)]
     pub(crate) this_is_alpha_code_and_you_will_need_to_redo_the_migration_later: bool,
+}
+
+// Below are temporary types included here so manpage building works.
+
+#[cfg(not(outside_buildscript))]
+#[derive(Clone, Debug)]
+pub(crate) struct Servers;
+
+#[cfg(not(outside_buildscript))]
+impl Servers {
+    pub(crate) fn parse(_: &str) -> Result<Self, &'static str> {
+        Err("Mocked for buildscript")
+    }
 }
