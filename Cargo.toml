@@ -63,6 +63,7 @@ deadpool = "0.12"
 deadpool-sqlite = "0.9"
 deadpool-sync = "0.1"
 rusqlite = "0.32"
+schemerz = "0.2"
 secrecy = "0.8"
 shardtree = "0.5"
 zcash_client_backend = "0.16"
@@ -76,8 +77,8 @@ tonic = "0.12"
 orchard = { git = "https://github.com/zcash/orchard.git", rev = "c684e9185a0449efb00428f807d3bf286b5dae03" }
 redjubjub = { git = "https://github.com/ZcashFoundation/redjubjub", rev = "eae848c5c14d9c795d000dd9f4c4762d1aee7ee1" }
 sapling = { package = "sapling-crypto", git = "https://github.com/zcash/sapling-crypto.git", rev = "e607c52d13bb7ade66293f9ab8d07e311f4ad868" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "b106a89841c493c37bc269b6b5c490727f10ed91" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "b106a89841c493c37bc269b6b5c490727f10ed91" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "b106a89841c493c37bc269b6b5c490727f10ed91" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "b106a89841c493c37bc269b6b5c490727f10ed91" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "b106a89841c493c37bc269b6b5c490727f10ed91" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
