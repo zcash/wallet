@@ -2,10 +2,11 @@ use std::fmt;
 use std::path::Path;
 use std::time::Duration;
 
-use abscissa_core::{Component, FrameworkError};
+use abscissa_core::{tracing::info, Component, FrameworkError};
 use abscissa_tokio::TokioComponent;
-use tokio::{task::JoinHandle, time};
+use tokio::{fs, task::JoinHandle, time};
 use zcash_client_backend::sync;
+use zcash_client_sqlite::wallet::init::{init_wallet_db, WalletMigrationError};
 
 use crate::{
     error::{Error, ErrorKind},
@@ -38,17 +39,45 @@ impl fmt::Debug for Wallet {
 }
 
 impl Wallet {
-    pub fn open(
+    pub async fn open(
         path: impl AsRef<Path>,
         params: Network,
         lightwalletd_server: Servers,
     ) -> Result<Self, Error> {
-        let db_data_pool = connection::pool(path, params)?;
-        Ok(Self {
+        let wallet_exists = fs::try_exists(&path)
+            .await
+            .map_err(|e| ErrorKind::Init.context(e))?;
+
+        let wallet = Self {
             params,
-            db_data_pool,
+            db_data_pool: connection::pool(path, params)?,
             lightwalletd_server,
-        })
+        };
+
+        if wallet_exists {
+            info!("Applying latest database migrations");
+        } else {
+            info!("Creating empty database");
+        }
+        let handle = wallet.handle().await?;
+        handle.with_mut(|mut db_data| {
+            match init_wallet_db(&mut db_data, None) {
+                Ok(()) => Ok(()),
+                // TODO: Support single-seed migrations once we have key storage.
+                //       https://github.com/zcash/wallet/issues/18
+                // TODO: Support multi-seed or seed-absent migrations.
+                //       https://github.com/zcash/librustzcash/issues/1284
+                Err(schemerz::MigratorError::Migration {
+                    error: WalletMigrationError::SeedRequired,
+                    ..
+                }) => Err(ErrorKind::Init.context("TODO: Support seed-required migrations")),
+                Err(e) => Err(ErrorKind::Init.context(e)),
+            }?;
+
+            Ok::<(), Error>(())
+        })?;
+
+        Ok(wallet)
     }
 
     /// Called automatically after `TokioComponent` is initialized
