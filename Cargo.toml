@@ -23,6 +23,7 @@ tokio = "1"
 
 # Filesystem
 home = "0.5"
+xdg = "2.5"
 
 # Localization
 i18n-embed = { version = "0.15", features = ["fluent-system"] }

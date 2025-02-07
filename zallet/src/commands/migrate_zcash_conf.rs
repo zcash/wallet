@@ -19,6 +19,8 @@ use crate::{
     prelude::*,
 };
 
+use xdg;
+
 impl MigrateZcashConfCmd {
     async fn start(&self) -> Result<(), Error> {
         let conf = if self.conf.is_relative() {
