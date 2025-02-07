@@ -39,6 +39,7 @@ toml.workspace = true
 tonic.workspace = true
 tower = { workspace = true, features = ["timeout"] }
 transparent.workspace = true
+xdg.workspace = true
 zcash_client_backend = { workspace = true, features = [
     "lightwalletd-tonic-tls-webpki-roots",
     "orchard",
