@@ -658,6 +658,8 @@ fn build_actions() -> HashMap<&'static str, Action> {
         "rest",
         "rpcclienttimeout",
         "rpcconnect",
+        "rpcpassword",
+        "rpcuser",
         "rpcwait",
         "seednode",
         "sendalert",
