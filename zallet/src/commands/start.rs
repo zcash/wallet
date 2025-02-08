@@ -103,11 +103,11 @@ impl Runnable for StartCmd {
             Ok(Ok(())) => (),
             Ok(Err(e)) => {
                 eprintln!("{}", e);
-                APP.shutdown(Shutdown::Forced);
+                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
             Err(e) => {
                 eprintln!("{}", e);
-                APP.shutdown(Shutdown::Forced);
+                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
         }
     }

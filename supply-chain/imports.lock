@@ -1502,6 +1502,36 @@ version = "0.1.3"
 notes = "Reviewed in full."
 aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
+[[audits.zcash.audits.known-folders]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.0.1"
+notes = """
+Uses `unsafe` blocks to interact with `windows-sys` crate.
+- `SHGetKnownFolderPath` safety requirements are met.
+- `CoTaskMemFree` has no effect if passed `NULL`, so there is no issue if some
+  future refactor created a pathway where `ffi::Guard` could be dropped before
+  `SHGetKnownFolderPath` is called.
+- Small nit: `ffi::Guard::as_pwstr` takes `&self` but returns `PWSTR` which is
+  the mutable type; it should instead return `PCWSTR` which is the const type
+  (and what `lstrlenW` takes) instead of implicitly const-casting the pointer,
+  as this would better reflect the intent to take an immutable reference.
+- The slice constructed from the `PWSTR` correctly goes out of scope before
+  `guard` is dropped.
+- A code comment says that `path_ptr` is valid for `len` bytes, but `PCWSTR` is
+  a `*const u16` and `lstrlenW` returns its length \"in characters\" (which the
+  Windows documentation confirms means the number of `WCHAR` values). This is
+  likely a typo; the code checks that `len * size_of::<u16>() <= isize::MAX`.
+"""
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
+
+[[audits.zcash.audits.known-folders]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.1 -> 1.1.0"
+notes = "Addresses the notes from my previous review :)"
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
+
 [[audits.zcash.audits.maybe-rayon]]
 who = "Sean Bowe <ewillbefull@gmail.com>"
 criteria = "safe-to-deploy"

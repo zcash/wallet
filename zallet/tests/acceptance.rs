@@ -29,8 +29,8 @@ pub static RUNNER: Lazy<CmdRunner> = Lazy::new(CmdRunner::default);
 fn start_no_args() {
     let mut runner = RUNNER.clone();
     let mut cmd = runner.arg("start").capture_stdout().run();
-    cmd.stdout().expect_line("run");
-    cmd.wait().unwrap().expect_success();
+    cmd.stdout().expect_line("");
+    cmd.wait().unwrap().expect_code(1);
 }
 
 /// Example of a test which matches a regular expression

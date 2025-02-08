@@ -95,7 +95,10 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         id: toolchain
-      - run: rustup override set ${{steps.toolchain.outputs.name}}
+      - run: rustup override set ${RUST_TOOLCHAIN}
+        shell: bash
+        env:
+          RUST_TOOLCHAIN: ${{steps.toolchain.outputs.name}}
       - name: Remove lockfile to build with latest dependencies
         run: rm Cargo.lock
       - name: Build crates
