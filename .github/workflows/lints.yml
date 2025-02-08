@@ -1,0 +1,90 @@
+name: Lints
+
+on:
+  pull_request:
+  push:
+    branches: main
+
+permissions: {}
+
+jobs:
+  clippy:
+    name: Clippy (MSRV)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          name: Clippy (MSRV)
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: >
+            --all-targets
+            --
+            -D warnings
+
+  clippy-beta:
+    name: Clippy (beta)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@beta
+        id: toolchain
+      - run: rustup override set "${TOOLCHAIN}"
+        env:
+          TOOLCHAIN: ${{steps.toolchain.outputs.name}}
+      - name: Run Clippy (beta)
+        uses: actions-rs/clippy-check@v1
+        continue-on-error: true
+        with:
+          name: Clippy (beta)
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: >
+            --all-targets
+            --
+            -W clippy::all
+
+  doc-links:
+    name: Intra-doc links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: cargo fetch
+      # Requires #![deny(rustdoc::broken_intra_doc_links)] in crates.
+      - name: Check intra-doc links
+        run: >
+          cargo doc
+          --all
+          --document-private-items
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  required-lints:
+    name: Required lints have passed
+    needs:
+      - clippy
+      - doc-links
+      - fmt
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine whether all required-pass steps succeeded
+        run: |
+          echo "${NEEDS}" | jq -e '[ .[] | .result == "success" ] | all'
+        env:
+          NEEDS: ${{ toJSON(needs) }}

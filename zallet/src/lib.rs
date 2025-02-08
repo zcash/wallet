@@ -5,6 +5,7 @@
 //! [Abscissa]: https://github.com/iqlusioninc/abscissa
 
 #![forbid(unsafe_code)]
+#![deny(rustdoc::broken_intra_doc_links)]
 #![warn(
     missing_docs,
     rust_2018_idioms,
