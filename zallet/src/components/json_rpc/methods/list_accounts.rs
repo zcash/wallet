@@ -39,13 +39,13 @@ pub(crate) fn call(wallet: &WalletConnection) -> Response {
             .get_account(account_id)
             .map_err(|_| RpcErrorCode::from(LegacyCode::Database))?
             // This would be a race condition between this and account deletion.
-            .ok_or_else(|| RpcErrorCode::InternalError)?;
+            .ok_or(RpcErrorCode::InternalError)?;
 
         let address = wallet
             .get_current_address(account_id)
             .map_err(|_| RpcErrorCode::from(LegacyCode::Database))?
             // This would be a race condition between this and account deletion.
-            .ok_or_else(|| RpcErrorCode::InternalError)?;
+            .ok_or(RpcErrorCode::InternalError)?;
 
         // `z_listaccounts` assumes a single HD seed.
         // TODO: Fix this limitation.

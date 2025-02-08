@@ -99,9 +99,9 @@ impl Wallet {
             .connect_direct()
             .await?;
 
-        let params = self.params.clone();
+        let params = self.params;
 
-        let mut db_cache = cache::MemoryCache::new();
+        let db_cache = cache::MemoryCache::new();
 
         let mut db_data = self.handle().await?;
 
@@ -113,15 +113,9 @@ impl Wallet {
                 // every interval.
                 interval.tick().await;
 
-                sync::run(
-                    &mut client,
-                    &params,
-                    &mut db_cache,
-                    db_data.as_mut(),
-                    10_000,
-                )
-                .await
-                .map_err(|e| ErrorKind::Generic.context(e))?;
+                sync::run(&mut client, &params, &db_cache, db_data.as_mut(), 10_000)
+                    .await
+                    .map_err(|e| ErrorKind::Generic.context(e))?;
             }
         });
 

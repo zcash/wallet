@@ -84,14 +84,12 @@ impl TryFrom<&str> for RegTestNuParam {
     type Error = &'static str;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let (branch_id, height) = value
-            .split_once(':')
-            .ok_or_else(|| "Invalid `regtest_nuparam`")?;
+        let (branch_id, height) = value.split_once(':').ok_or("Invalid `regtest_nuparam`")?;
 
         let consensus_branch_id = u32::from_str_radix(branch_id, 16)
             .ok()
             .and_then(|branch_id| consensus::BranchId::try_from(branch_id).ok())
-            .ok_or_else(|| "Invalid `regtest_nuparam`")?;
+            .ok_or("Invalid `regtest_nuparam`")?;
 
         let activation_height = height
             .parse()

@@ -13,6 +13,7 @@ macro_rules! wfl {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! wlnfl {
     ($f:ident, $message_id:literal) => {
         writeln!($f, "{}", $crate::fl!($message_id))

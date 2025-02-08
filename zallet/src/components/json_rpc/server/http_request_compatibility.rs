@@ -114,7 +114,7 @@ impl<S> HttpRequestMiddleware<S> {
                 } else {
                     (
                         version,
-                        serde_json::to_vec(&request.to_2()).expect("valid").into(),
+                        serde_json::to_vec(&request.into_2()).expect("valid").into(),
                     )
                 }
             } else {
@@ -141,7 +141,7 @@ impl<S> HttpRequestMiddleware<S> {
 
         let bytes =
             if let Ok(response) = serde_json::from_slice::<'_, JsonRpcResponse>(bytes.as_ref()) {
-                serde_json::to_vec(&response.to_version(version))
+                serde_json::to_vec(&response.into_version(version))
                     .expect("valid")
                     .into()
             } else {
@@ -248,7 +248,7 @@ impl JsonRpcRequest {
         }
     }
 
-    fn to_2(mut self) -> Self {
+    fn into_2(mut self) -> Self {
         self.jsonrpc = Some("2.0".into());
         self
     }
@@ -267,7 +267,7 @@ struct JsonRpcResponse {
 }
 
 impl JsonRpcResponse {
-    fn to_version(mut self, version: JsonRpcVersion) -> Self {
+    fn into_version(mut self, version: JsonRpcVersion) -> Self {
         match version {
             JsonRpcVersion::Bitcoind => {
                 self.jsonrpc = None;

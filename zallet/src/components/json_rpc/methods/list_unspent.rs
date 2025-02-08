@@ -106,7 +106,7 @@ pub(crate) fn call(wallet: &WalletConnection) -> Response {
                 )
             })?
             // This would be a race condition between this and account deletion.
-            .ok_or_else(|| RpcErrorCode::InternalError)?;
+            .ok_or(RpcErrorCode::InternalError)?;
 
         let spendable = matches!(account.purpose(), AccountPurpose::Spending { .. });
 
@@ -115,7 +115,7 @@ pub(crate) fn call(wallet: &WalletConnection) -> Response {
         let account = account
             .source()
             .key_derivation()
-            .map(|derivation| u32::from(derivation.account_index()).into());
+            .map(|derivation| u32::from(derivation.account_index()));
 
         let notes = wallet
             .select_spendable_notes(

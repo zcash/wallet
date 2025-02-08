@@ -25,6 +25,10 @@ pub mod network;
 mod prelude;
 mod remote;
 
+/// A macro to obtain localized Zallet messages and optionally their attributes, and check
+/// the `message_id`, `attribute_id` and arguments at compile time.
+///
+/// See [`i18n_embed_fl::fl`] for full documentation.
 #[macro_export]
 macro_rules! fl {
     ($message_id:literal) => {{

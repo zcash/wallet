@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::future::Future;
 use std::ops::Range;
 use std::path::Path;
 
@@ -56,26 +55,24 @@ impl deadpool::managed::Manager for WalletManager {
     type Type = WalletConnection;
     type Error = rusqlite::Error;
 
-    fn create(&self) -> impl Future<Output = Result<Self::Type, Self::Error>> + Send {
-        async {
-            let inner = self.inner.create().await?;
-            inner
-                .interact(|conn| rusqlite::vtab::array::load_module(&conn))
-                .await
-                .map_err(|_| rusqlite::Error::UnwindingPanic)??;
-            Ok(WalletConnection {
-                inner,
-                params: self.params.clone(),
-            })
-        }
+    async fn create(&self) -> Result<Self::Type, Self::Error> {
+        let inner = self.inner.create().await?;
+        inner
+            .interact(|conn| rusqlite::vtab::array::load_module(conn))
+            .await
+            .map_err(|_| rusqlite::Error::UnwindingPanic)??;
+        Ok(WalletConnection {
+            inner,
+            params: self.params,
+        })
     }
 
-    fn recycle(
+    async fn recycle(
         &self,
         obj: &mut Self::Type,
         metrics: &deadpool_sqlite::Metrics,
-    ) -> impl Future<Output = deadpool::managed::RecycleResult<Self::Error>> + Send {
-        async { self.inner.recycle(&mut obj.inner, metrics).await }
+    ) -> deadpool::managed::RecycleResult<Self::Error> {
+        self.inner.recycle(&mut obj.inner, metrics).await
     }
 }
 
@@ -93,16 +90,19 @@ impl WalletConnection {
         tokio::task::block_in_place(|| {
             f(WalletDb::from_connection(
                 self.inner.lock().unwrap().as_ref(),
-                self.params.clone(),
+                self.params,
             ))
         })
     }
 
-    pub(crate) fn with_mut<T>(&self, f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network>) -> T) -> T {
+    pub(crate) fn with_mut<T>(
+        &self,
+        f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network>) -> T,
+    ) -> T {
         tokio::task::block_in_place(|| {
             f(WalletDb::from_connection(
                 self.inner.lock().unwrap().as_mut(),
-                self.params.clone(),
+                self.params,
             ))
         })
     }
