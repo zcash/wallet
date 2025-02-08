@@ -26,6 +26,12 @@ publication of this crate from CI. This repository requires all PRs are reviewed
 by a Bytecode Alliance maintainer and it owned by the Bytecode Alliance itself.
 """
 
+[[audits.bytecode-alliance.audits.adler2]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+version = "2.0.0"
+notes = "Fork of the original `adler` crate, zero unsfae code, works in `no_std`, does what it says on th tin."
+
 [[audits.bytecode-alliance.audits.arrayref]]
 who = "Nick Fitzgerald <fitzgen@gmail.com>"
 criteria = "safe-to-deploy"
@@ -169,6 +175,26 @@ notes = "Minor documentation updates an additions, nothing major."
 who = "Pat Hickey <phickey@fastly.com>"
 criteria = "safe-to-deploy"
 version = "0.1.0"
+
+[[audits.bytecode-alliance.audits.miniz_oxide]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+version = "0.7.1"
+notes = """
+This crate is a Rust implementation of zlib compression/decompression and has
+been used by default by the Rust standard library for quite some time. It's also
+a default dependency of the popular `backtrace` crate for decompressing debug
+information. This crate forbids unsafe code and does not otherwise access system
+resources. It's originally a port of the `miniz.c` library as well, and given
+its own longevity should be relatively hardened against some of the more common
+compression-related issues.
+"""
+
+[[audits.bytecode-alliance.audits.miniz_oxide]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "0.7.1 -> 0.8.0"
+notes = "Minor updates, using new Rust features like `const`, no major changes."
 
 [[audits.bytecode-alliance.audits.nu-ansi-term]]
 who = "Pat Hickey <phickey@fastly.com>"
@@ -356,6 +382,18 @@ delta = "4.5.18 -> 4.5.20"
 notes = "Trivial changes"
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
+[[audits.google.audits.crc32fast]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+version = "1.4.2"
+notes = """
+Security review of earlier versions of the crate can be found at
+(Google-internal, sorry): go/image-crate-chromium-security-review
+
+Audit comments for 1.4.2 can be found at https://crrev.com/c/4723145.
+"""
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
 [[audits.google.audits.displaydoc]]
 who = "Manish Goregaokar <manishearth@google.com>"
 criteria = "safe-to-deploy"
@@ -368,6 +406,100 @@ who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-deploy"
 version = "1.0.1"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
+
+[[audits.google.audits.flate2]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+version = "1.0.30"
+notes = '''
+WARNING: This certification is a result of a **partial** audit.  The
+`any_zlib` code has **not** been audited.  Ability to track partial
+audits is tracked in https://github.com/mozilla/cargo-vet/issues/380
+Chromium does use the `any_zlib` feature(s).  Accidentally depending on
+this feature in the future is prevented using the `ban_features` feature
+of `gnrt` - see:
+https://crrev.com/c/4723145/31/third_party/rust/chromium_crates_io/gnrt_config.toml
+
+Security review of earlier versions of the crate can be found at
+(Google-internal, sorry): go/image-crate-chromium-security-review
+
+I grepped for `-i cipher`, `-i crypto`, `'\bfs\b'`, `'\bnet\b'`, `'\bunsafe\b'`.
+
+All `unsafe` in `flate2` is gated behind `#[cfg(feature = "any_zlib")]`:
+
+* The code under `src/ffi/...` will not be used because the `mod c`
+  declaration in `src/ffi/mod.rs` depends on the `any_zlib` config
+* 7 uses of `unsafe` in `src/mem.rs` also all depend on the
+  `any_zlib` config:
+    - 2 in `fn set_dictionary` (under `impl Compress`)
+    - 2 in `fn set_level` (under `impl Compress`)
+    - 3 in `fn set_dictionary` (under `impl Decompress`)
+
+All hits of `'\bfs\b'` are in comments, or example code, or test code
+(but not in product code).
+
+There were no hits of `-i cipher`, `-i crypto`, `'\bnet\b'`.
+'''
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
+[[audits.google.audits.flate2]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.30 -> 1.0.31"
+notes = """
+WARNING: This certification is a result of a **partial** audit.  The
+`any_zlib` code has **not** been audited.  See the audit of 1.0.30 for
+more details.
+
+Only benign changes:
+
+* Comment-only changes in `.rs` files
+* Also changing dependency version in `Cargo.toml`, but this is for `any_zlib`
+  feature which is not used in Chromium (i.e. this is a *partial* audit - see
+  the previous audit notes for 1.0.30)
+"""
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
+[[audits.google.audits.flate2]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.31 -> 1.0.33"
+notes = """
+WARNING: This certification is a result of a **partial** audit.  The
+`any_zlib` code has **not** been audited.  See the audit of 1.0.30 for
+more details.
+
+This delta audit has been reviewed in https://crrev.com/c/5811890
+The delta can be seen at https://diff.rs/flate2/1.0.31/1.0.33
+The delta bumps up `miniz_oxide` dependency to `0.8.0`
+The delta also contains some changes to `src/ffi/c.rs` which is *NOT* used by Chromium
+and therefore hasn't been covered by this partial audit.
+"""
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
+[[audits.google.audits.flate2]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.33 -> 1.0.34"
+notes = """
+WARNING: This certification is a result of a **partial** audit.  The
+`any_zlib` code has **not** been audited.  See the audit of 1.0.30 for
+more details.
+
+The delta can be seen at https://diff.rs/flate2/1.0.33/1.0.34
+The delta bumps up `libz-rs-sys` dependency from `0.2.1` to `0.3.0`
+The delta in `lib.rs` only tweaks comments and has no code changes.
+The delta also contains some changes to `src/ffi/c.rs` which is *NOT* used by Chromium
+and therefore hasn't been covered by this partial audit.
+"""
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
+[[audits.google.audits.flate2]]
+who = "Adrian Taylor <adetaylor@chromium.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.34 -> 1.0.35"
+notes = "There are no significant code changes in this delta (just one string constant change). Note that prior audits may have been partial."
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
 [[audits.google.audits.heck]]
 who = "Lukasz Anforowicz <lukasza@chromium.org>"
@@ -473,6 +605,18 @@ the crate meets the `ub-risk-0` criteria.
 Note that some additional, internal notes about an older version of this crate
 can be found at go/image-crate-chromium-security-review.
 '''
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
+[[audits.google.audits.miniz_oxide]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+delta = "0.8.0 -> 0.8.2"
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
+[[audits.google.audits.miniz_oxide]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+delta = "0.8.2 -> 0.8.3"
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
 [[audits.google.audits.nom]]

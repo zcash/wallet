@@ -221,12 +221,20 @@ criteria = "safe-to-deploy"
 version = "4.5.20"
 criteria = "safe-to-deploy"
 
+[[exemptions.clap_complete]]
+version = "4.5.44"
+criteria = "safe-to-deploy"
+
 [[exemptions.clap_derive]]
 version = "4.5.18"
 criteria = "safe-to-deploy"
 
 [[exemptions.clap_lex]]
 version = "0.7.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.clap_mangen]]
+version = "0.2.26"
 criteria = "safe-to-deploy"
 
 [[exemptions.color-eyre]]
@@ -739,6 +747,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.ripemd]]
 version = "0.2.0-pre.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.roff]]
+version = "0.2.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.route-recognizer]]
