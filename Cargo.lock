@@ -3530,6 +3530,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "xdg"
+version = "2.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "213b7324336b53d2414b2db8537e56544d981803139155afa84f76eeebb7a546"
+
+[[package]]
 name = "zallet"
 version = "0.0.0"
 dependencies = [
@@ -3563,6 +3569,7 @@ dependencies = [
  "toml 0.8.19",
  "tonic",
  "tower 0.4.13",
+ "xdg",
  "zcash_client_backend",
  "zcash_client_sqlite",
  "zcash_primitives",
