@@ -58,7 +58,7 @@ impl StartCmd {
 
         // Wait for tasks to finish.
         let res = loop {
-            let mut exit_when_task_finishes = true;
+            let exit_when_task_finishes = true;
 
             let result = select! {
                 rpc_join_result = &mut rpc_task_handle => {
@@ -103,11 +103,11 @@ impl Runnable for StartCmd {
             Ok(Ok(())) => (),
             Ok(Err(e)) => {
                 eprintln!("{}", e);
-                APP.shutdown(Shutdown::Forced);
+                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
             Err(e) => {
                 eprintln!("{}", e);
-                APP.shutdown(Shutdown::Forced);
+                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
         }
     }

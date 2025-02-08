@@ -23,6 +23,7 @@ tokio = "1"
 
 # Filesystem
 home = "0.5"
+known-folders = "1"
 xdg = "2.5"
 
 # Localization

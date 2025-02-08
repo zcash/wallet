@@ -208,22 +208,25 @@ fn default_data_dir() -> Option<PathBuf> {
     }
 }
 
+type MapAction = Box<dyn Fn(&mut ZalletConfig, &str) -> Result<(), Error>>;
+type WarnMessage = Box<dyn Fn(&str) -> Option<String>>;
+
 /// The action to take when a specific `zcashd` option is encountered.
 enum Action {
     /// Maps the option to its equivalent Zallet config option.
     MapTo {
-        f: Box<dyn Fn(&mut ZalletConfig, &str) -> Result<(), Error>>,
+        f: MapAction,
         /// The target Zallet config option, if this is one of a set of related `zcashd` options.
         target: Option<&'static str>,
     },
     /// Maps the multi-valued option to its equivalent Zallet config option.
-    MapMulti(Box<dyn Fn(&mut ZalletConfig, &str) -> Result<(), Error>>),
+    MapMulti(MapAction),
     /// Silently ignores the option.
     Ignore,
     /// Warns the user that the option is not supported in Zallet.
     ///
     /// The warning might be conditional on the configured value of the option.
-    Warn(Box<dyn Fn(&str) -> Option<String>>),
+    Warn(WarnMessage),
 }
 
 impl Action {
@@ -694,8 +697,7 @@ fn build_actions() -> HashMap<&'static str, Action> {
         .chain(
             node_options_unused_wallet
                 .into_iter()
-                .map(Action::ignore)
-                .flatten(),
+                .filter_map(Action::ignore),
         )
         .collect()
 }

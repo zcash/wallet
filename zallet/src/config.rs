@@ -57,6 +57,7 @@ pub struct ZalletConfig {
     /// Configurable limits on wallet operation (to prevent e.g. memory exhaustion).
     pub limits: LimitsSection,
 
+    /// Settings for the JSON-RPC interface.
     pub rpc: RpcSection,
 }
 
