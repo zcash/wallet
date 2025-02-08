@@ -24,10 +24,22 @@ jobs:
       - run: cargo install cargo-vet --version ~0.10
       - run: cargo vet --locked
 
+  cargo-deny:
+    name: Check licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
+
   required-audits:
     name: Required audits have passed
     needs:
       - cargo-vet
+      - cargo-deny
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
