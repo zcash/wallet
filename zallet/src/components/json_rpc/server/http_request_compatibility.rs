@@ -280,9 +280,15 @@ impl JsonRpcResponse {
                 self.error = self.error.or(Some(serde_json::Value::Null));
             }
             JsonRpcVersion::TwoPointZero => {
-                // `jsonrpsee` should be returning valid JSON-RPC 2.0 responses.
+                // `jsonrpsee` should be returning valid JSON-RPC 2.0 responses. However,
+                // a valid result of `null` can be parsed into `None` by this parser, so
+                // we map the result explicitly to `Null` when there is no error.
                 assert_eq!(self.jsonrpc.as_deref(), Some("2.0"));
-                assert_eq!(self.result.is_some(), self.error.is_none());
+                if self.error.is_none() {
+                    self.result = self.result.or(Some(serde_json::Value::Null));
+                } else {
+                    assert!(self.result.is_none());
+                }
             }
             JsonRpcVersion::Unknown => (),
         }
