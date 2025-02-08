@@ -7,6 +7,9 @@ version = "0.10"
 [imports.google]
 url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
 
+[imports.isrg]
+url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml"
+
 [imports.mozilla]
 url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 
@@ -683,10 +686,6 @@ criteria = "safe-to-deploy"
 version = "1.20.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.opaque-debug]]
-version = "0.3.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.orchard]]
 version = "0.10.1@git:c684e9185a0449efb00428f807d3bf286b5dae03"
 criteria = "safe-to-deploy"
@@ -789,22 +788,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.rand]]
 version = "0.8.5"
-criteria = "safe-to-deploy"
-
-[[exemptions.rand_chacha]]
-version = "0.3.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.rand_core]]
-version = "0.6.4"
-criteria = "safe-to-deploy"
-
-[[exemptions.rayon]]
-version = "1.10.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.rayon-core]]
-version = "1.12.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.reddsa]]
@@ -960,10 +943,6 @@ version = "0.10.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.sha2]]
-version = "0.10.8"
-criteria = "safe-to-deploy"
-
-[[exemptions.sha2]]
 version = "0.11.0-pre.4"
 criteria = "safe-to-deploy"
 
@@ -997,10 +976,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.spin]]
 version = "0.9.8"
-criteria = "safe-to-deploy"
-
-[[exemptions.subtle]]
-version = "2.6.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.syn]]
@@ -1141,10 +1116,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.uint]]
 version = "0.9.5"
-criteria = "safe-to-deploy"
-
-[[exemptions.universal-hash]]
-version = "0.5.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.untrusted]]
