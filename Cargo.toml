@@ -52,13 +52,13 @@ jsonrpsee = "0.24"
 tower = "0.4"
 
 # Zcash consensus
-zcash_protocol = "0.4"
+zcash_protocol = "0.5"
 
 # Zcash payment protocols
-orchard = "0.10"
-sapling = { package = "sapling-crypto", version = "0.4" }
-transparent = { package = "zcash_transparent", version = "0.1" }
-zcash_primitives = "0.21"
+orchard = "0.11"
+sapling = { package = "sapling-crypto", version = "0.5" }
+transparent = { package = "zcash_transparent", version = "0.2" }
+zcash_primitives = "0.22"
 
 # Zcash wallet
 deadpool = "0.12"
@@ -67,20 +67,10 @@ deadpool-sync = "0.1"
 rusqlite = "0.32"
 schemerz = "0.2"
 secrecy = "0.8"
-shardtree = "0.5"
-zcash_client_backend = "0.16"
-zcash_client_sqlite = "0.14"
-zip32 = "0.1"
+shardtree = "0.6"
+zcash_client_backend = "0.17"
+zcash_client_sqlite = "0.15"
+zip32 = "0.2"
 
 # lightwalletd (temporary)
 tonic = "0.12"
-
-[patch.crates-io]
-orchard = { git = "https://github.com/zcash/orchard.git", rev = "c684e9185a0449efb00428f807d3bf286b5dae03" }
-redjubjub = { git = "https://github.com/ZcashFoundation/redjubjub", rev = "eae848c5c14d9c795d000dd9f4c4762d1aee7ee1" }
-sapling = { package = "sapling-crypto", git = "https://github.com/zcash/sapling-crypto.git", rev = "e607c52d13bb7ade66293f9ab8d07e311f4ad868" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "895b298a2b042ae352a8a9f0fd4176c3db78253e" }
