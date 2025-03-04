@@ -74,3 +74,10 @@ zip32 = "0.2"
 
 # lightwalletd (temporary)
 tonic = "0.12"
+
+[patch.crates-io]
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "4a8cd251ef5cc7779d23ee02d8c60feb56520eaa" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "4a8cd251ef5cc7779d23ee02d8c60feb56520eaa" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "4a8cd251ef5cc7779d23ee02d8c60feb56520eaa" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "4a8cd251ef5cc7779d23ee02d8c60feb56520eaa" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "4a8cd251ef5cc7779d23ee02d8c60feb56520eaa" }

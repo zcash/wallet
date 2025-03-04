@@ -6,17 +6,18 @@ use secrecy::SecretVec;
 use shardtree::{error::ShardTreeError, ShardTree};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
 use zcash_client_backend::{
+    address::UnifiedAddress,
     data_api::{
         AccountBirthday, AccountMeta, InputSource, NoteFilter, SpendableNotes,
         WalletCommitmentTrees, WalletRead, WalletWrite, ORCHARD_SHARD_HEIGHT, SAPLING_SHARD_HEIGHT,
     },
-    keys::{UnifiedFullViewingKey, UnifiedSpendingKey},
+    keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
     wallet::{Note, ReceivedNote, TransparentAddressMetadata, WalletTransparentOutput},
 };
-use zcash_client_sqlite::WalletDb;
+use zcash_client_sqlite::{util::SystemClock, WalletDb};
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
 use zcash_protocol::{consensus::BlockHeight, value::Zatoshis, ShieldedProtocol};
-use zip32::fingerprint::SeedFingerprint;
+use zip32::{fingerprint::SeedFingerprint, DiversifierIndex};
 
 use crate::{
     error::{Error, ErrorKind},
@@ -86,32 +87,38 @@ impl WalletConnection {
         &self.params
     }
 
-    fn with<T>(&self, f: impl FnOnce(WalletDb<&rusqlite::Connection, Network>) -> T) -> T {
+    fn with<T>(
+        &self,
+        f: impl FnOnce(WalletDb<&rusqlite::Connection, Network, SystemClock>) -> T,
+    ) -> T {
         tokio::task::block_in_place(|| {
             f(WalletDb::from_connection(
                 self.inner.lock().unwrap().as_ref(),
                 self.params,
+                SystemClock,
             ))
         })
     }
 
     pub(crate) fn with_mut<T>(
         &self,
-        f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network>) -> T,
+        f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network, SystemClock>) -> T,
     ) -> T {
         tokio::task::block_in_place(|| {
             f(WalletDb::from_connection(
                 self.inner.lock().unwrap().as_mut(),
                 self.params,
+                SystemClock,
             ))
         })
     }
 }
 
 impl WalletRead for WalletConnection {
-    type Error = <WalletDb<rusqlite::Connection, Network> as WalletRead>::Error;
-    type AccountId = <WalletDb<rusqlite::Connection, Network> as WalletRead>::AccountId;
-    type Account = <WalletDb<rusqlite::Connection, Network> as WalletRead>::Account;
+    type Error = <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletRead>::Error;
+    type AccountId =
+        <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletRead>::AccountId;
+    type Account = <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletRead>::Account;
 
     fn get_account_ids(&self) -> Result<Vec<Self::AccountId>, Self::Error> {
         self.with(|db_data| db_data.get_account_ids())
@@ -154,11 +161,12 @@ impl WalletRead for WalletConnection {
         self.with(|db_data| db_data.get_account_for_ufvk(ufvk))
     }
 
-    fn get_current_address(
+    fn get_last_generated_address_matching(
         &self,
         account: Self::AccountId,
-    ) -> Result<Option<zcash_client_backend::address::UnifiedAddress>, Self::Error> {
-        self.with(|db_data| db_data.get_current_address(account))
+        address_filter: UnifiedAddressRequest,
+    ) -> Result<Option<UnifiedAddress>, Self::Error> {
+        self.with(|db_data| db_data.get_last_generated_address_matching(account, address_filter))
     }
 
     fn get_account_birthday(&self, account: Self::AccountId) -> Result<BlockHeight, Self::Error> {
@@ -265,8 +273,9 @@ impl WalletRead for WalletConnection {
     fn get_transparent_receivers(
         &self,
         account: Self::AccountId,
+        include_change: bool,
     ) -> Result<HashMap<TransparentAddress, Option<TransparentAddressMetadata>>, Self::Error> {
-        self.with(|db_data| db_data.get_transparent_receivers(account))
+        self.with(|db_data| db_data.get_transparent_receivers(account, include_change))
     }
 
     fn get_transparent_balances(
@@ -283,6 +292,10 @@ impl WalletRead for WalletConnection {
         address: &TransparentAddress,
     ) -> Result<Option<TransparentAddressMetadata>, Self::Error> {
         self.with(|db_data| db_data.get_transparent_address_metadata(account, address))
+    }
+
+    fn utxo_query_height(&self, account: Self::AccountId) -> Result<BlockHeight, Self::Error> {
+        self.with(|db_data| db_data.utxo_query_height(account))
     }
 
     fn get_known_ephemeral_addresses(
@@ -308,9 +321,10 @@ impl WalletRead for WalletConnection {
 }
 
 impl InputSource for WalletConnection {
-    type Error = <WalletDb<rusqlite::Connection, Network> as InputSource>::Error;
-    type AccountId = <WalletDb<rusqlite::Connection, Network> as InputSource>::AccountId;
-    type NoteRef = <WalletDb<rusqlite::Connection, Network> as InputSource>::NoteRef;
+    type Error = <WalletDb<rusqlite::Connection, Network, SystemClock> as InputSource>::Error;
+    type AccountId =
+        <WalletDb<rusqlite::Connection, Network, SystemClock> as InputSource>::AccountId;
+    type NoteRef = <WalletDb<rusqlite::Connection, Network, SystemClock> as InputSource>::NoteRef;
 
     fn get_spendable_note(
         &self,
@@ -363,7 +377,7 @@ impl InputSource for WalletConnection {
 }
 
 impl WalletWrite for WalletConnection {
-    type UtxoRef = <WalletDb<rusqlite::Connection, Network> as WalletWrite>::UtxoRef;
+    type UtxoRef = <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletWrite>::UtxoRef;
 
     fn create_account(
         &mut self,
@@ -406,9 +420,20 @@ impl WalletWrite for WalletConnection {
     fn get_next_available_address(
         &mut self,
         account: Self::AccountId,
-        request: Option<zcash_client_backend::keys::UnifiedAddressRequest>,
-    ) -> Result<Option<zcash_client_backend::address::UnifiedAddress>, Self::Error> {
+        request: UnifiedAddressRequest,
+    ) -> Result<Option<(UnifiedAddress, DiversifierIndex)>, Self::Error> {
         self.with_mut(|mut db_data| db_data.get_next_available_address(account, request))
+    }
+
+    fn get_address_for_index(
+        &mut self,
+        account: Self::AccountId,
+        diversifier_index: DiversifierIndex,
+        request: UnifiedAddressRequest,
+    ) -> Result<Option<UnifiedAddress>, Self::Error> {
+        self.with_mut(|mut db_data| {
+            db_data.get_address_for_index(account, diversifier_index, request)
+        })
     }
 
     fn update_chain_tip(&mut self, tip_height: BlockHeight) -> Result<(), Self::Error> {
@@ -466,9 +491,10 @@ impl WalletWrite for WalletConnection {
 }
 
 impl WalletCommitmentTrees for WalletConnection {
-    type Error = <WalletDb<rusqlite::Connection, Network> as WalletCommitmentTrees>::Error;
+    type Error =
+        <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletCommitmentTrees>::Error;
     type SaplingShardStore<'a> =
-        <WalletDb<rusqlite::Connection, Network> as WalletCommitmentTrees>::SaplingShardStore<'a>;
+        <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletCommitmentTrees>::SaplingShardStore<'a>;
 
     fn with_sapling_tree_mut<F, A, E>(&mut self, callback: F) -> Result<A, E>
     where
@@ -493,7 +519,7 @@ impl WalletCommitmentTrees for WalletConnection {
     }
 
     type OrchardShardStore<'a> =
-        <WalletDb<rusqlite::Connection, Network> as WalletCommitmentTrees>::OrchardShardStore<'a>;
+        <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletCommitmentTrees>::OrchardShardStore<'a>;
 
     fn with_orchard_tree_mut<F, A, E>(&mut self, callback: F) -> Result<A, E>
     where
