@@ -1,6 +1,9 @@
 use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
 use serde::{Deserialize, Serialize};
-use zcash_client_backend::data_api::{Account as _, WalletRead};
+use zcash_client_backend::{
+    data_api::{Account as _, WalletRead},
+    keys::UnifiedAddressRequest,
+};
 
 use crate::components::{json_rpc::server::LegacyCode, wallet::WalletConnection};
 
@@ -42,7 +45,7 @@ pub(crate) fn call(wallet: &WalletConnection) -> Response {
             .ok_or(RpcErrorCode::InternalError)?;
 
         let address = wallet
-            .get_current_address(account_id)
+            .get_last_generated_address_matching(account_id, UnifiedAddressRequest::ALLOW_ALL)
             .map_err(|_| RpcErrorCode::from(LegacyCode::Database))?
             // This would be a race condition between this and account deletion.
             .ok_or(RpcErrorCode::InternalError)?;
