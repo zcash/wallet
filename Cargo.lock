@@ -3642,6 +3642,7 @@ dependencies = [
  "tonic",
  "tower 0.4.13",
  "xdg",
+ "zcash_address",
  "zcash_client_backend",
  "zcash_client_sqlite",
  "zcash_primitives",
