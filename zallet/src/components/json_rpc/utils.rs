@@ -8,13 +8,24 @@ use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
 use zip32::DiversifierIndex;
 
-use crate::components::database::DbConnection;
+use crate::components::{database::DbConnection, keystore::KeyStore};
 
 use super::server::LegacyCode;
 
 /// The account identifier used for HD derivation of transparent and Sapling addresses via
 /// the legacy `getnewaddress` and `z_getnewaddress` code paths.
 const ZCASH_LEGACY_ACCOUNT: u32 = 0x7fff_ffff;
+
+pub(super) async fn ensure_wallet_is_unlocked(keystore: &KeyStore) -> RpcResult<()> {
+    // TODO: Consider returning some kind of unlock guard to ensure the caller doesn't
+    // need to race against the relock timeout.
+    if keystore.is_locked().await {
+        Err(LegacyCode::WalletUnlockNeeded
+            .with_static("Error: Please enter the wallet passphrase with walletpassphrase first."))
+    } else {
+        Ok(())
+    }
+}
 
 /// Parses the `account` parameter present in many wallet RPCs.
 pub(super) fn parse_account_parameter(
