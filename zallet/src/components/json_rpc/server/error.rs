@@ -1,6 +1,6 @@
 //! RPC error codes & their handling.
 
-use jsonrpsee::types::ErrorCode;
+use jsonrpsee::types::{ErrorCode, ErrorObjectOwned};
 
 /// Bitcoin RPC error codes
 ///
@@ -73,6 +73,18 @@ pub enum LegacyCode {
     WalletAlreadyUnlocked = -17,
     /// User must acknowledge backup of the mnemonic seed.
     WalletBackupRequired = -18,
+}
+
+impl LegacyCode {
+    /// Adds a message to this error.
+    pub fn with_message(self, message: impl Into<String>) -> ErrorObjectOwned {
+        ErrorObjectOwned::owned(self.into(), message, None::<()>)
+    }
+
+    /// Adds a message to this error that is a static string.
+    pub fn with_static(self, message: &'static str) -> ErrorObjectOwned {
+        ErrorObjectOwned::borrowed(self.into(), message, None)
+    }
 }
 
 impl From<LegacyCode> for ErrorCode {
