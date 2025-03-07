@@ -10,6 +10,7 @@ mod get_address_for_account;
 mod get_notes_count;
 mod get_wallet_info;
 mod list_accounts;
+mod list_addresses;
 mod list_unified_receivers;
 mod list_unspent;
 
@@ -45,6 +46,22 @@ pub(crate) trait Rpc {
         receiver_types: Option<Vec<String>>,
         diversifier_index: Option<u128>,
     ) -> get_address_for_account::Response;
+
+    /// Lists the addresses managed by this wallet by source, including those generated
+    /// from randomness by this wallet, Sapling addresses generated from the legacy HD
+    /// seed, imported watchonly transparent addresses, shielded addresses tracked using
+    /// imported viewing keys, and addresses derived from the wallet's mnemonic seed for
+    /// releases version 4.7.0 and above.
+    ///
+    /// In the case that a source does not have addresses for a value pool, the key
+    /// associated with that pool will be absent.
+    ///
+    /// REMINDER: It is recommended that you back up your wallet.dat file regularly. If
+    /// your wallet was created using zcashd version 4.7.0 or later and you have not
+    /// imported externally produced keys, it only necessary to have backed up the
+    /// wallet's emergency recovery phrase.
+    #[method(name = "listaddresses")]
+    async fn list_addresses(&self) -> list_addresses::Response;
 
     #[method(name = "z_listunifiedreceivers")]
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response;
@@ -109,6 +126,10 @@ impl RpcServer for RpcImpl {
             receiver_types,
             diversifier_index,
         )
+    }
+
+    async fn list_addresses(&self) -> list_addresses::Response {
+        list_addresses::call(self.wallet().await?.as_ref())
     }
 
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response {

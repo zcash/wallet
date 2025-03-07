@@ -116,6 +116,7 @@ zcash_client_sqlite = { workspace = true, features = [
     "orchard",
     "transparent-inputs",
 ] }
+zcash_keys.workspace = true
 zcash_primitives.workspace = true
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
 zip32.workspace = true

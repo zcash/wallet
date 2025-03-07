@@ -6,6 +6,7 @@ use std::sync::{Arc, RwLock};
 use secrecy::SecretVec;
 use shardtree::{error::ShardTreeError, ShardTree};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
+use zcash_client_backend::data_api::AddressInfo;
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
@@ -169,6 +170,10 @@ impl WalletRead for DbConnection {
         ufvk: &UnifiedFullViewingKey,
     ) -> Result<Option<Self::Account>, Self::Error> {
         self.with(|db_data| db_data.get_account_for_ufvk(ufvk))
+    }
+
+    fn list_addresses(&self, account: Self::AccountId) -> Result<Vec<AddressInfo>, Self::Error> {
+        self.with(|db_data| db_data.list_addresses(account))
     }
 
     fn get_last_generated_address_matching(
