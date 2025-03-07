@@ -10,6 +10,7 @@ use zcash_protocol::value::{Zatoshis, COIN};
 
 pub(crate) mod methods;
 pub(crate) mod server;
+mod utils;
 
 // TODO: https://github.com/zcash/wallet/issues/15
 fn value_from_zatoshis(value: Zatoshis) -> f64 {
