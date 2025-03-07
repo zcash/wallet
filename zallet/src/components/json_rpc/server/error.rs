@@ -1,6 +1,6 @@
 //! RPC error codes & their handling.
 
-use jsonrpsee::types::ErrorCode;
+use jsonrpsee::types::{ErrorCode, ErrorObjectOwned};
 
 /// Bitcoin RPC error codes
 ///
@@ -51,6 +51,40 @@ pub enum LegacyCode {
     ClientNodeNotConnected = -29,
     /// Invalid IP/Subnet
     ClientInvalidIpOrSubnet = -30,
+
+    // Wallet errors
+    /// Unspecified problem with wallet (key not found etc.)
+    Wallet = -4,
+    /// Not enough funds in wallet or account
+    WalletInsufficientFunds = -6,
+    /// Accounts are unsupported
+    WalletAccountsUnsupported = -11,
+    /// Keypool ran out, call keypoolrefill first
+    WalletKeypoolRanOut = -12,
+    /// Enter the wallet passphrase with walletpassphrase first
+    WalletUnlockNeeded = -13,
+    /// The wallet passphrase entered was incorrect
+    WalletPassphraseIncorrect = -14,
+    /// Command given in wrong wallet encryption state (encrypting an encrypted wallet etc.)
+    WalletWrongEncState = -15,
+    /// Failed to encrypt the wallet
+    WalletEncryptionFailed = -16,
+    /// Wallet is already unlocked
+    WalletAlreadyUnlocked = -17,
+    /// User must acknowledge backup of the mnemonic seed.
+    WalletBackupRequired = -18,
+}
+
+impl LegacyCode {
+    /// Adds a message to this error.
+    pub fn with_message(self, message: impl Into<String>) -> ErrorObjectOwned {
+        ErrorObjectOwned::owned(self.into(), message, None::<()>)
+    }
+
+    /// Adds a message to this error that is a static string.
+    pub fn with_static(self, message: &'static str) -> ErrorObjectOwned {
+        ErrorObjectOwned::borrowed(self.into(), message, None)
+    }
 }
 
 impl From<LegacyCode> for ErrorCode {
