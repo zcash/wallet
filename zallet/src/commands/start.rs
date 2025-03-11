@@ -1,35 +1,31 @@
 //! `start` subcommand
 
-use abscissa_core::{config, tracing::Instrument, FrameworkError, Runnable, Shutdown};
+use abscissa_core::{config, tracing::Instrument, Component, FrameworkError, Runnable, Shutdown};
 use tokio::{pin, select};
 
 use crate::{
+    application::ZalletApp,
     cli::StartCmd,
-    components::{json_rpc, wallet::Wallet},
+    components::{database::Database, json_rpc, sync::WalletSync},
     config::ZalletConfig,
     error::{Error, ErrorKind},
     prelude::*,
 };
 
 impl StartCmd {
+    pub(crate) fn register_components(&self, components: &mut Vec<Box<dyn Component<ZalletApp>>>) {
+        components.push(Box::new(Database::default()));
+        components.push(Box::new(WalletSync::new(self.lwd_server.clone())));
+    }
+
     async fn start(&self) -> Result<(), Error> {
         let config = APP.config();
 
-        // Open the wallet.
-        let wallet = {
-            let path = config
-                .wallet_db
-                .as_ref()
-                .ok_or_else(|| ErrorKind::Init.context("wallet_db must be set (for now)"))?;
-            if path.is_relative() {
-                return Err(ErrorKind::Init
-                    .context("wallet_db must be an absolute path (for now)")
-                    .into());
-            }
+        let mut components = APP.state().components_mut();
 
-            info!("Opening wallet");
-            Wallet::open(path, config.network(), self.lwd_server.clone()).await?
-        };
+        let db = components
+            .get_downcast_ref::<Database>()
+            .expect("Database component is registered");
 
         // Launch RPC server.
         let rpc_task_handle = if !config.rpc.bind.is_empty() {
@@ -40,15 +36,19 @@ impl StartCmd {
             }
             info!("Spawning RPC server");
             info!("Trying to open RPC endpoint at {}...", config.rpc.bind[0]);
-            json_rpc::server::spawn(config.rpc.clone(), wallet.clone()).await?
+            json_rpc::server::spawn(config.rpc.clone(), db.clone()).await?
         } else {
             warn!("Configure `rpc.bind` to start the RPC server");
             // Emulate a normally-operating ongoing task to simplify subsequent logic.
             tokio::spawn(std::future::pending().in_current_span())
         };
 
-        // Start the wallet sync process.
-        let wallet_sync_task_handle = wallet.spawn_sync().await?;
+        let wallet_sync_task_handle = components
+            .get_downcast_mut::<WalletSync>()
+            .expect("Sync component is registered")
+            .sync_task
+            .take()
+            .expect("TokioComponent initialized");
 
         info!("Spawned Zallet tasks");
 

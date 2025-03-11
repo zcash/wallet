@@ -5,7 +5,7 @@ use zcash_client_backend::{
     keys::UnifiedAddressRequest,
 };
 
-use crate::components::{json_rpc::server::LegacyCode, wallet::WalletConnection};
+use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `z_listaccounts` RPC request.
 pub(crate) type Response = RpcResult<Vec<Account>>;
@@ -31,7 +31,7 @@ struct Address {
     ua: String,
 }
 
-pub(crate) fn call(wallet: &WalletConnection) -> Response {
+pub(crate) fn call(wallet: &DbConnection) -> Response {
     let mut accounts = vec![];
 
     for account_id in wallet
