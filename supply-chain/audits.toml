@@ -1,7 +1,15 @@
 
 # cargo-vet audits file
 
-[audits]
+[[audits.abscissa_core]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.8.1 -> 0.8.2"
+
+[[audits.abscissa_derive]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.8.0 -> 0.8.2"
 
 [[trusted.equihash]]
 criteria = "safe-to-deploy"
