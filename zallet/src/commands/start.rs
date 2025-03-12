@@ -1,54 +1,42 @@
 //! `start` subcommand
 
-use abscissa_core::{config, tracing::Instrument, Component, FrameworkError, Runnable, Shutdown};
+use abscissa_core::{config, Component, FrameworkError, Runnable, Shutdown};
 use tokio::{pin, select};
 
 use crate::{
     application::ZalletApp,
     cli::StartCmd,
-    components::{database::Database, json_rpc, sync::WalletSync},
+    components::{database::Database, json_rpc::JsonRpc, sync::WalletSync},
     config::ZalletConfig,
-    error::{Error, ErrorKind},
+    error::Error,
     prelude::*,
 };
 
 impl StartCmd {
     pub(crate) fn register_components(&self, components: &mut Vec<Box<dyn Component<ZalletApp>>>) {
         components.push(Box::new(Database::default()));
+        components.push(Box::new(JsonRpc::default()));
         components.push(Box::new(WalletSync::new(self.lwd_server.clone())));
     }
 
     async fn start(&self) -> Result<(), Error> {
-        let config = APP.config();
-
-        let mut components = APP.state().components_mut();
-
-        let db = components
-            .get_downcast_ref::<Database>()
-            .expect("Database component is registered");
-
-        // Launch RPC server.
-        let rpc_task_handle = if !config.rpc.bind.is_empty() {
-            if config.rpc.bind.len() > 1 {
-                return Err(ErrorKind::Init
-                    .context("Only one RPC bind address is supported (for now)")
-                    .into());
-            }
-            info!("Spawning RPC server");
-            info!("Trying to open RPC endpoint at {}...", config.rpc.bind[0]);
-            json_rpc::server::spawn(config.rpc.clone(), db.clone()).await?
-        } else {
-            warn!("Configure `rpc.bind` to start the RPC server");
-            // Emulate a normally-operating ongoing task to simplify subsequent logic.
-            tokio::spawn(std::future::pending().in_current_span())
+        let (rpc_task_handle, wallet_sync_task_handle) = {
+            let mut components = APP.state().components_mut();
+            (
+                components
+                    .get_downcast_mut::<JsonRpc>()
+                    .expect("JsonRpc component is registered")
+                    .rpc_task
+                    .take()
+                    .expect("TokioComponent initialized"),
+                components
+                    .get_downcast_mut::<WalletSync>()
+                    .expect("WalletSync component is registered")
+                    .sync_task
+                    .take()
+                    .expect("TokioComponent initialized"),
+            )
         };
-
-        let wallet_sync_task_handle = components
-            .get_downcast_mut::<WalletSync>()
-            .expect("Sync component is registered")
-            .sync_task
-            .take()
-            .expect("TokioComponent initialized");
 
         info!("Spawned Zallet tasks");
 
