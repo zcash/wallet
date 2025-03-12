@@ -75,7 +75,9 @@ assets = [
 [dependencies]
 abscissa_core.workspace = true
 abscissa_tokio.workspace = true
+age.workspace = true
 async-trait.workspace = true
+bip0039.workspace = true
 clap = { workspace = true, features = ["string", "unstable-styles"] }
 deadpool.workspace = true
 deadpool-sqlite.workspace = true
@@ -95,6 +97,7 @@ rusqlite.workspace = true
 rust-embed.workspace = true
 sapling.workspace = true
 schemerz.workspace = true
+schemerz-rusqlite.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -104,6 +107,7 @@ toml.workspace = true
 tonic.workspace = true
 tower = { workspace = true, features = ["timeout"] }
 transparent.workspace = true
+uuid.workspace = true
 xdg.workspace = true
 zcash_address.workspace = true
 zcash_client_backend = { workspace = true, features = [
@@ -133,6 +137,7 @@ rust-embed.workspace = true
 [dev-dependencies]
 abscissa_core = { workspace = true, features = ["testing"] }
 once_cell = "1.2"
+regex = "1.4"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(outside_buildscript)'] }

@@ -54,6 +54,9 @@ pub struct ZalletConfig {
     /// Settings that affect transactions created by Zallet.
     pub builder: BuilderSection,
 
+    /// Settings for the key store.
+    pub keystore: KeyStoreSection,
+
     /// Configurable limits on wallet operation (to prevent e.g. memory exhaustion).
     pub limits: LimitsSection,
 
@@ -72,6 +75,7 @@ impl Default for ZalletConfig {
             require_backup: None,
             wallet_db: None,
             builder: Default::default(),
+            keystore: Default::default(),
             limits: Default::default(),
             rpc: Default::default(),
         }
@@ -136,6 +140,15 @@ impl BuilderSection {
     pub fn tx_expiry_delta(&self) -> u16 {
         self.tx_expiry_delta.unwrap_or(40)
     }
+}
+
+/// Key store configuration section.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct KeyStoreSection {
+    /// Path to the age identity file that encrypts key material.
+    // TODO: Change this to `PathBuf` once `age::IdentityFile::from_file` supports it.
+    pub identity: String,
 }
 
 /// Limits configuration section.
