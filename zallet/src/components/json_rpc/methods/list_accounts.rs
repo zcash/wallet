@@ -36,17 +36,17 @@ pub(crate) fn call(wallet: &WalletConnection) -> Response {
 
     for account_id in wallet
         .get_account_ids()
-        .map_err(|_| RpcErrorCode::from(LegacyCode::Database))?
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
     {
         let account = wallet
             .get_account(account_id)
-            .map_err(|_| RpcErrorCode::from(LegacyCode::Database))?
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
             // This would be a race condition between this and account deletion.
             .ok_or(RpcErrorCode::InternalError)?;
 
         let address = wallet
             .get_last_generated_address_matching(account_id, UnifiedAddressRequest::ALLOW_ALL)
-            .map_err(|_| RpcErrorCode::from(LegacyCode::Database))?
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
             // This would be a race condition between this and account deletion.
             .ok_or(RpcErrorCode::InternalError)?;
 

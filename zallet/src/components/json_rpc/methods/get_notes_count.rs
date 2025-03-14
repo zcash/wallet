@@ -1,7 +1,4 @@
-use jsonrpsee::{
-    core::RpcResult,
-    types::{ErrorCode as RpcErrorCode, ErrorObjectOwned as RpcError},
-};
+use jsonrpsee::core::RpcResult;
 use serde::{Deserialize, Serialize};
 use zcash_client_backend::data_api::{InputSource, NoteFilter, WalletRead};
 use zcash_protocol::{value::Zatoshis, ShieldedProtocol};
@@ -32,11 +29,8 @@ pub(crate) fn call(
 ) -> Response {
     // TODO: Switch to an approach that can respect `minconf` and `as_of_height`.
     if minconf.is_some() || as_of_height.is_some() {
-        return Err(RpcError::borrowed(
-            LegacyCode::InvalidParameter.into(),
-            "minconf and as_of_height parameters are not yet supported",
-            None,
-        ));
+        return Err(LegacyCode::InvalidParameter
+            .with_static("minconf and as_of_height parameters are not yet supported"));
     }
 
     let selector = NoteFilter::ExceedsMinValue(Zatoshis::ZERO);
@@ -45,11 +39,11 @@ pub(crate) fn call(
     let mut orchard = 0;
     for account_id in wallet
         .get_account_ids()
-        .map_err(|_| RpcErrorCode::from(LegacyCode::Database))?
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
     {
         let account_metadata = wallet
             .get_account_metadata(account_id, &selector, &[])
-            .map_err(|_| RpcErrorCode::from(LegacyCode::Database))?;
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
 
         if let Some(note_count) = account_metadata.note_count(ShieldedProtocol::Sapling) {
             sapling += note_count as u32;

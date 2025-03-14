@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 use secrecy::SecretVec;
 use shardtree::{error::ShardTreeError, ShardTree};
@@ -37,6 +38,10 @@ pub(super) type WalletPool = deadpool::managed::Pool<WalletManager>;
 
 pub(crate) struct WalletManager {
     inner: deadpool_sqlite::Manager,
+    /// Connection pools are thread-safe, but SQLite does not reliably follow the busy
+    /// handler (configured by `rusqlite` to a timeout after 5s), so we explicitly guard
+    /// against SQLite `DatabaseBusy` errors.
+    lock: Arc<RwLock<()>>,
     params: Network,
 }
 
@@ -47,6 +52,7 @@ impl WalletManager {
     pub fn from_config(config: &deadpool_sqlite::Config, params: Network) -> Self {
         Self {
             inner: deadpool_sqlite::Manager::from_config(config, deadpool_sqlite::Runtime::Tokio1),
+            lock: Arc::new(RwLock::new(())),
             params,
         }
     }
@@ -64,6 +70,7 @@ impl deadpool::managed::Manager for WalletManager {
             .map_err(|_| rusqlite::Error::UnwindingPanic)??;
         Ok(WalletConnection {
             inner,
+            lock: self.lock.clone(),
             params: self.params,
         })
     }
@@ -79,6 +86,7 @@ impl deadpool::managed::Manager for WalletManager {
 
 pub(crate) struct WalletConnection {
     inner: deadpool_sync::SyncWrapper<rusqlite::Connection>,
+    lock: Arc<RwLock<()>>,
     params: Network,
 }
 
@@ -92,6 +100,7 @@ impl WalletConnection {
         f: impl FnOnce(WalletDb<&rusqlite::Connection, Network, SystemClock>) -> T,
     ) -> T {
         tokio::task::block_in_place(|| {
+            let _guard = self.lock.read().unwrap();
             f(WalletDb::from_connection(
                 self.inner.lock().unwrap().as_ref(),
                 self.params,
@@ -105,6 +114,7 @@ impl WalletConnection {
         f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network, SystemClock>) -> T,
     ) -> T {
         tokio::task::block_in_place(|| {
+            let _guard = self.lock.write().unwrap();
             f(WalletDb::from_connection(
                 self.inner.lock().unwrap().as_mut(),
                 self.params,
