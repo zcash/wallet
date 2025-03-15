@@ -8,7 +8,7 @@
 
 use abscissa_core::tracing::{info, warn};
 use jsonrpsee::tracing::Instrument;
-use zcash_protocol::value::{COIN, Zatoshis};
+use zcash_protocol::value::{ZatBalance, Zatoshis, COIN};
 
 use crate::{
     config::ZalletConfig,
@@ -18,6 +18,7 @@ use crate::{
 use super::{TaskHandle, chain_view::ChainView, database::Database, keystore::KeyStore};
 
 mod asyncop;
+mod balance;
 pub(crate) mod methods;
 pub(crate) mod server;
 mod utils;
@@ -25,6 +26,11 @@ mod utils;
 // TODO: https://github.com/zcash/wallet/issues/15
 fn value_from_zatoshis(value: Zatoshis) -> f64 {
     (u64::from(value) as f64) / (COIN as f64)
+}
+
+// TODO: https://github.com/zcash/wallet/issues/15
+fn value_from_zat_balance(value: ZatBalance) -> f64 {
+    (i64::from(value) as f64) / (COIN as f64)
 }
 
 #[derive(Debug)]
