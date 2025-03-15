@@ -2,9 +2,10 @@
 
 use std::path::PathBuf;
 
-use abscissa_core::{config::Override, Configurable, FrameworkError, Runnable};
+use abscissa_core::{config::Override, Component, Configurable, FrameworkError, Runnable};
 
 use crate::{
+    application::ZalletApp,
     cli::{EntryPoint, ZalletCmd},
     config::ZalletConfig,
 };
@@ -43,6 +44,15 @@ impl Configurable<ZalletConfig> for EntryPoint {
         match &self.cmd {
             ZalletCmd::Start(cmd) => cmd.override_config(config),
             _ => Ok(config),
+        }
+    }
+}
+
+impl EntryPoint {
+    pub(crate) fn register_components(&self, components: &mut Vec<Box<dyn Component<ZalletApp>>>) {
+        match &self.cmd {
+            ZalletCmd::Start(cmd) => cmd.register_components(components),
+            ZalletCmd::MigrateZcashdConf(_) => (),
         }
     }
 }

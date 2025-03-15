@@ -4,10 +4,9 @@ use jsonrpsee::{
     server::{RpcServiceBuilder, Server},
     tracing::info,
 };
-use tokio::task::JoinHandle;
 
 use crate::{
-    components::wallet::Wallet,
+    components::database::Database,
     config::RpcSection,
     error::{Error, ErrorKind},
 };
@@ -20,9 +19,7 @@ pub(crate) use error::LegacyCode;
 mod http_request_compatibility;
 mod rpc_call_compatibility;
 
-type ServerTask = JoinHandle<Result<(), Error>>;
-
-pub(crate) async fn spawn(config: RpcSection, wallet: Wallet) -> Result<ServerTask, Error> {
+pub(crate) async fn start(config: RpcSection, wallet: Database) -> Result<(), Error> {
     // Caller should make sure `bind` only contains a single address (for now).
     assert_eq!(config.bind.len(), 1);
     let listen_addr = config.bind[0];
@@ -54,10 +51,7 @@ pub(crate) async fn spawn(config: RpcSection, wallet: Wallet) -> Result<ServerTa
 
     let rpc_module = rpc_impl.into_rpc();
 
-    let server_task = tokio::spawn(async move {
-        server_instance.start(rpc_module).stopped().await;
-        Ok(())
-    });
+    server_instance.start(rpc_module).stopped().await;
 
-    Ok(server_task)
+    Ok(())
 }

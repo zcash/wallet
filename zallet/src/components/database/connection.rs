@@ -59,7 +59,7 @@ impl WalletManager {
 }
 
 impl deadpool::managed::Manager for WalletManager {
-    type Type = WalletConnection;
+    type Type = DbConnection;
     type Error = rusqlite::Error;
 
     async fn create(&self) -> Result<Self::Type, Self::Error> {
@@ -68,7 +68,7 @@ impl deadpool::managed::Manager for WalletManager {
             .interact(|conn| rusqlite::vtab::array::load_module(conn))
             .await
             .map_err(|_| rusqlite::Error::UnwindingPanic)??;
-        Ok(WalletConnection {
+        Ok(DbConnection {
             inner,
             lock: self.lock.clone(),
             params: self.params,
@@ -84,13 +84,13 @@ impl deadpool::managed::Manager for WalletManager {
     }
 }
 
-pub(crate) struct WalletConnection {
+pub(crate) struct DbConnection {
     inner: deadpool_sync::SyncWrapper<rusqlite::Connection>,
     lock: Arc<RwLock<()>>,
     params: Network,
 }
 
-impl WalletConnection {
+impl DbConnection {
     pub(crate) fn params(&self) -> &Network {
         &self.params
     }
@@ -124,7 +124,7 @@ impl WalletConnection {
     }
 }
 
-impl WalletRead for WalletConnection {
+impl WalletRead for DbConnection {
     type Error = <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletRead>::Error;
     type AccountId =
         <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletRead>::AccountId;
@@ -330,7 +330,7 @@ impl WalletRead for WalletConnection {
     }
 }
 
-impl InputSource for WalletConnection {
+impl InputSource for DbConnection {
     type Error = <WalletDb<rusqlite::Connection, Network, SystemClock> as InputSource>::Error;
     type AccountId =
         <WalletDb<rusqlite::Connection, Network, SystemClock> as InputSource>::AccountId;
@@ -386,7 +386,7 @@ impl InputSource for WalletConnection {
     }
 }
 
-impl WalletWrite for WalletConnection {
+impl WalletWrite for DbConnection {
     type UtxoRef = <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletWrite>::UtxoRef;
 
     fn create_account(
@@ -500,7 +500,7 @@ impl WalletWrite for WalletConnection {
     }
 }
 
-impl WalletCommitmentTrees for WalletConnection {
+impl WalletCommitmentTrees for DbConnection {
     type Error =
         <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletCommitmentTrees>::Error;
     type SaplingShardStore<'a> =

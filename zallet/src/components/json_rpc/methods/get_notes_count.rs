@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use zcash_client_backend::data_api::{InputSource, NoteFilter, WalletRead};
 use zcash_protocol::{value::Zatoshis, ShieldedProtocol};
 
-use crate::components::{json_rpc::server::LegacyCode, wallet::WalletConnection};
+use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `z_getnotescount` RPC request.
 pub(crate) type Response = RpcResult<GetNotesCount>;
@@ -23,7 +23,7 @@ pub(crate) struct GetNotesCount {
 }
 
 pub(crate) fn call(
-    wallet: &WalletConnection,
+    wallet: &DbConnection,
     minconf: Option<u32>,
     as_of_height: Option<i32>,
 ) -> Response {

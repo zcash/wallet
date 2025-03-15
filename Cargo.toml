@@ -76,6 +76,8 @@ zip32 = "0.2"
 tonic = "0.12"
 
 [patch.crates-io]
+abscissa_core = { git = "https://github.com/str4d/abscissa.git", rev = "8da8e10cad02aa4a93099cb4942b48fbdc54eb89" }
+abscissa_tokio = { git = "https://github.com/str4d/abscissa.git", rev = "8da8e10cad02aa4a93099cb4942b48fbdc54eb89" }
 transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "4a8cd251ef5cc7779d23ee02d8c60feb56520eaa" }
 zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "4a8cd251ef5cc7779d23ee02d8c60feb56520eaa" }
 zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "4a8cd251ef5cc7779d23ee02d8c60feb56520eaa" }

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
-use crate::components::wallet::{Wallet, WalletHandle};
+use crate::components::database::{Database, DbHandle};
 
 mod get_notes_count;
 mod get_wallet_info;
@@ -41,16 +41,16 @@ pub(crate) trait Rpc {
 }
 
 pub(crate) struct RpcImpl {
-    wallet: Wallet,
+    wallet: Database,
 }
 
 impl RpcImpl {
     /// Creates a new instance of the RPC handler.
-    pub(crate) fn new(wallet: Wallet) -> Self {
+    pub(crate) fn new(wallet: Database) -> Self {
         Self { wallet }
     }
 
-    async fn wallet(&self) -> RpcResult<WalletHandle> {
+    async fn wallet(&self) -> RpcResult<DbHandle> {
         self.wallet
             .handle()
             .await

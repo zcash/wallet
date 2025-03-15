@@ -19,8 +19,8 @@ use zcash_protocol::{
 use zip32::Scope;
 
 use crate::components::{
+    database::DbConnection,
     json_rpc::{server::LegacyCode, value_from_zatoshis},
-    wallet::WalletConnection,
 };
 
 /// Response to a `z_listunspent` RPC request.
@@ -73,7 +73,7 @@ pub(crate) struct UnspentNote {
     change: Option<bool>,
 }
 
-pub(crate) fn call(wallet: &WalletConnection) -> Response {
+pub(crate) fn call(wallet: &DbConnection) -> Response {
     // Use the height of the maximum scanned block as the anchor height, to emulate a
     // zero-conf transaction in order to select every note in the wallet.
     let anchor_height = match wallet.block_max_scanned().map_err(|e| {
