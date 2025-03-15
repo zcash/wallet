@@ -6087,6 +6087,7 @@ dependencies = [
  "zcash_primitives",
  "zcash_protocol 0.5.1",
  "zcash_transparent",
+ "zebra-chain",
  "zip32",
 ]
 

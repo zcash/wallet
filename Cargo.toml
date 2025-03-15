@@ -68,6 +68,9 @@ zcash_primitives = "0.22"
 
 # Zcash chain state
 zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "b84847ab381ea897480053486b2f7a04898d9f61" }
+# - We do not use branch dependencies in general because they are brittle, but are forced
+#   to do so here because Zaino does.
+zebra-chain = { git = "https://github.com/ZcashFoundation/zebra.git", branch = "main" }
 
 # Zcash wallet
 deadpool = "0.12"

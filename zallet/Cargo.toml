@@ -125,6 +125,7 @@ zcash_client_sqlite = { workspace = true, features = [
 zcash_keys.workspace = true
 zcash_primitives.workspace = true
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
+zebra-chain.workspace = true
 zip32.workspace = true
 
 [build-dependencies]
