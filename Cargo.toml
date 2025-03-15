@@ -62,6 +62,9 @@ transparent = { package = "zcash_transparent", version = "0.2" }
 zcash_keys = "0.8"
 zcash_primitives = "0.22"
 
+# Zcash chain state
+zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "b84847ab381ea897480053486b2f7a04898d9f61" }
+
 # Zcash wallet
 deadpool = "0.12"
 deadpool-sqlite = "0.9"
