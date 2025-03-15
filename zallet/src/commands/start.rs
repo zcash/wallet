@@ -5,7 +5,10 @@ use tokio::{pin, select};
 
 use crate::{
     cli::StartCmd,
-    components::{database::Database, json_rpc::JsonRpc, keystore::KeyStore, sync::WalletSync},
+    components::{
+        chain_view::ChainView, database::Database, json_rpc::JsonRpc, keystore::KeyStore,
+        sync::WalletSync,
+    },
     config::ZalletConfig,
     error::Error,
     prelude::*,
@@ -18,6 +21,9 @@ impl StartCmd {
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db.clone())?;
 
+        // Start monitoring the chain.
+        let (chain_view, chain_indexer_task_handle) = ChainView::new(&config).await?;
+
         // Launch RPC server.
         let rpc_task_handle = JsonRpc::spawn(&config, db.clone(), keystore).await?;
 
@@ -27,6 +33,7 @@ impl StartCmd {
         info!("Spawned Zallet tasks");
 
         // ongoing tasks.
+        pin!(chain_indexer_task_handle);
         pin!(rpc_task_handle);
         pin!(wallet_sync_task_handle);
 
@@ -35,6 +42,13 @@ impl StartCmd {
             let exit_when_task_finishes = true;
 
             let result = select! {
+                chain_indexer_join_result = &mut chain_indexer_task_handle => {
+                    let chain_indexer_result = chain_indexer_join_result
+                        .expect("unexpected panic in the chain indexer task");
+                    info!(?chain_indexer_result, "Chain indexer task exited");
+                    Ok(())
+                }
+
                 rpc_join_result = &mut rpc_task_handle => {
                     let rpc_server_result = rpc_join_result
                         .expect("unexpected panic in the RPC task");
@@ -62,6 +76,7 @@ impl StartCmd {
         info!("Exiting Zallet because an ongoing task exited; asking other tasks to stop");
 
         // ongoing tasks
+        chain_indexer_task_handle.abort();
         rpc_task_handle.abort();
         wallet_sync_task_handle.abort();
 
