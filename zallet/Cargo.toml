@@ -105,6 +105,7 @@ tonic.workspace = true
 tower = { workspace = true, features = ["timeout"] }
 transparent.workspace = true
 xdg.workspace = true
+zaino-state.workspace = true
 zcash_client_backend = { workspace = true, features = [
     "lightwalletd-tonic-tls-webpki-roots",
     "orchard",
@@ -117,6 +118,7 @@ zcash_client_sqlite = { workspace = true, features = [
 ] }
 zcash_primitives.workspace = true
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
+zebra-chain.workspace = true
 zip32.workspace = true
 
 [build-dependencies]
