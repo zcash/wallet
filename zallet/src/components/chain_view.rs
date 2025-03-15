@@ -5,8 +5,8 @@ use jsonrpsee::tracing::info;
 use tokio::{sync::RwLock, task::JoinHandle};
 use zaino_state::{
     config::FetchServiceConfig,
-    fetch::FetchService,
-    indexer::{IndexerService, ZcashService},
+    fetch::{FetchService, FetchServiceSubscriber},
+    indexer::{IndexerService, IndexerSubscriber, ZcashService},
     status::StatusType,
 };
 
@@ -110,5 +110,18 @@ impl ChainView {
         });
 
         Ok((chain_view, task))
+    }
+
+    pub(crate) async fn subscribe(
+        &self,
+    ) -> Result<IndexerSubscriber<FetchServiceSubscriber>, Error> {
+        Ok(self
+            .indexer
+            .read()
+            .await
+            .as_ref()
+            .ok_or_else(|| ErrorKind::Generic.context("ChainState indexer is not running"))?
+            .inner_ref()
+            .get_subscriber())
     }
 }

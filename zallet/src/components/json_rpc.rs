@@ -16,7 +16,7 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-use super::{database::Database, keystore::KeyStore};
+use super::{chain_view::ChainView, database::Database, keystore::KeyStore};
 
 pub(crate) mod methods;
 pub(crate) mod server;
@@ -35,6 +35,7 @@ impl JsonRpc {
         config: &ZalletConfig,
         db: Database,
         keystore: KeyStore,
+        chain_view: ChainView,
     ) -> Result<JoinHandle<Result<(), Error>>, Error> {
         let rpc = config.rpc.clone();
 
@@ -46,7 +47,7 @@ impl JsonRpc {
             }
             info!("Spawning RPC server");
             info!("Trying to open RPC endpoint at {}...", rpc.bind[0]);
-            server::spawn(rpc, db, keystore).await
+            server::spawn(rpc, db, keystore, chain_view).await
         } else {
             warn!("Configure `rpc.bind` to start the RPC server");
             // Emulate a normally-operating ongoing task to simplify subsequent logic.

@@ -25,7 +25,7 @@ impl StartCmd {
         let (chain_view, chain_indexer_task_handle) = ChainView::new(&config).await?;
 
         // Launch RPC server.
-        let rpc_task_handle = JsonRpc::spawn(&config, db.clone(), keystore).await?;
+        let rpc_task_handle = JsonRpc::spawn(&config, db.clone(), keystore, chain_view).await?;
 
         // Start the wallet sync process.
         let wallet_sync_task_handle = WalletSync::spawn(&config, db, self.lwd_server.clone()).await;
