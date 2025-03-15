@@ -6,7 +6,7 @@ use jsonrpsee::{
 };
 
 use crate::{
-    components::database::Database,
+    components::{database::Database, keystore::KeyStore},
     config::RpcSection,
     error::{Error, ErrorKind},
 };
@@ -19,13 +19,17 @@ pub(crate) use error::LegacyCode;
 mod http_request_compatibility;
 mod rpc_call_compatibility;
 
-pub(crate) async fn start(config: RpcSection, wallet: Database) -> Result<(), Error> {
+pub(crate) async fn start(
+    config: RpcSection,
+    wallet: Database,
+    keystore: KeyStore,
+) -> Result<(), Error> {
     // Caller should make sure `bind` only contains a single address (for now).
     assert_eq!(config.bind.len(), 1);
     let listen_addr = config.bind[0];
 
     // Initialize the RPC methods.
-    let rpc_impl = RpcImpl::new(wallet);
+    let rpc_impl = RpcImpl::new(wallet, keystore);
 
     let http_middleware_layer = http_request_compatibility::HttpRequestMiddlewareLayer::new();
 

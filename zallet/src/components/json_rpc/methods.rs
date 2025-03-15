@@ -4,7 +4,10 @@ use jsonrpsee::{
     proc_macros::rpc,
 };
 
-use crate::components::database::{Database, DbHandle};
+use crate::components::{
+    database::{Database, DbHandle},
+    keystore::KeyStore,
+};
 
 mod get_address_for_account;
 mod get_notes_count;
@@ -96,12 +99,13 @@ pub(crate) trait Rpc {
 
 pub(crate) struct RpcImpl {
     wallet: Database,
+    keystore: KeyStore,
 }
 
 impl RpcImpl {
     /// Creates a new instance of the RPC handler.
-    pub(crate) fn new(wallet: Database) -> Self {
-        Self { wallet }
+    pub(crate) fn new(wallet: Database, keystore: KeyStore) -> Self {
+        Self { wallet, keystore }
     }
 
     async fn wallet(&self) -> RpcResult<DbHandle> {
