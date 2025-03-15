@@ -74,6 +74,10 @@ zip32 = "0.2"
 
 # lightwalletd (temporary)
 tonic = "0.12"
+clap_complete = "4"
+clap_mangen = "0.2"
+flate2 = "1"
+once_cell = "1.2"
 
 [patch.crates-io]
 abscissa_core = { git = "https://github.com/str4d/abscissa.git", rev = "8da8e10cad02aa4a93099cb4942b48fbdc54eb89" }
