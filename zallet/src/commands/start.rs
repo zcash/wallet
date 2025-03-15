@@ -6,7 +6,7 @@ use tokio::{pin, select};
 use crate::{
     application::ZalletApp,
     cli::StartCmd,
-    components::{database::Database, json_rpc::JsonRpc, sync::WalletSync},
+    components::{chain_view::ChainView, database::Database, json_rpc::JsonRpc, sync::WalletSync},
     config::ZalletConfig,
     error::Error,
     prelude::*,
@@ -14,15 +14,24 @@ use crate::{
 
 impl StartCmd {
     pub(crate) fn register_components(&self, components: &mut Vec<Box<dyn Component<ZalletApp>>>) {
-        components.push(Box::new(Database::default()));
+        // Order these so that dependencies are pushed after the components that use them,
+        // to work around a bug: https://github.com/iqlusioninc/abscissa/issues/989
         components.push(Box::new(JsonRpc::default()));
         components.push(Box::new(WalletSync::new(self.lwd_server.clone())));
+        components.push(Box::new(ChainView::default()));
+        components.push(Box::new(Database::default()));
     }
 
     async fn start(&self) -> Result<(), Error> {
-        let (rpc_task_handle, wallet_sync_task_handle) = {
+        let (chain_indexer_task_handle, rpc_task_handle, wallet_sync_task_handle) = {
             let mut components = APP.state().components_mut();
             (
+                components
+                    .get_downcast_mut::<ChainView>()
+                    .expect("ChainView component is registered")
+                    .serve_task
+                    .take()
+                    .expect("TokioComponent initialized"),
                 components
                     .get_downcast_mut::<JsonRpc>()
                     .expect("JsonRpc component is registered")
@@ -41,6 +50,7 @@ impl StartCmd {
         info!("Spawned Zallet tasks");
 
         // ongoing tasks.
+        pin!(chain_indexer_task_handle);
         pin!(rpc_task_handle);
         pin!(wallet_sync_task_handle);
 
@@ -49,6 +59,13 @@ impl StartCmd {
             let exit_when_task_finishes = true;
 
             let result = select! {
+                chain_indexer_join_result = &mut chain_indexer_task_handle => {
+                    let chain_indexer_result = chain_indexer_join_result
+                        .expect("unexpected panic in the chain indexer task");
+                    info!(?chain_indexer_result, "Chain indexer task exited");
+                    Ok(())
+                }
+
                 rpc_join_result = &mut rpc_task_handle => {
                     let rpc_server_result = rpc_join_result
                         .expect("unexpected panic in the RPC task");
@@ -76,6 +93,7 @@ impl StartCmd {
         info!("Exiting Zallet because an ongoing task exited; asking other tasks to stop");
 
         // ongoing tasks
+        chain_indexer_task_handle.abort();
         rpc_task_handle.abort();
         wallet_sync_task_handle.abort();
 

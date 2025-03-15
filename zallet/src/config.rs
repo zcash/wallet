@@ -54,6 +54,9 @@ pub struct ZalletConfig {
     /// Settings that affect transactions created by Zallet.
     pub builder: BuilderSection,
 
+    /// Settings for the Zaino chain indexer.
+    pub indexer: IndexerSection,
+
     /// Configurable limits on wallet operation (to prevent e.g. memory exhaustion).
     pub limits: LimitsSection,
 
@@ -72,6 +75,7 @@ impl Default for ZalletConfig {
             require_backup: None,
             wallet_db: None,
             builder: Default::default(),
+            indexer: Default::default(),
             limits: Default::default(),
             rpc: Default::default(),
         }
@@ -136,6 +140,45 @@ impl BuilderSection {
     pub fn tx_expiry_delta(&self) -> u16 {
         self.tx_expiry_delta.unwrap_or(40)
     }
+}
+
+/// Indexer configuration section.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IndexerSection {
+    /// Full node / validator listen port.
+    pub validator_listen_address: Option<SocketAddr>,
+
+    /// Enable validator rpc cookie authentification.
+    pub validator_cookie_auth: Option<bool>,
+
+    /// Path to the validator cookie file.
+    pub validator_cookie_path: Option<String>,
+
+    /// Full node / validator Username.
+    pub validator_user: Option<String>,
+
+    /// Full node / validator Password.
+    pub validator_password: Option<String>,
+
+    /// Capacity of the Dashmaps used for the Mempool.
+    /// Also use by the BlockCache::NonFinalisedState when using the FetchService.
+    pub map_capacity: Option<usize>,
+
+    /// Number of shard used in the DashMap used for the Mempool.
+    /// Also use by the BlockCache::NonFinalisedState when using the FetchService.
+    ///
+    /// shard_amount should greater than 0 and be a power of two.
+    /// If a shard_amount which is not a power of two is provided, the function will panic.
+    pub map_shard_amount: Option<usize>,
+
+    /// Block Cache database file path.
+    ///
+    /// This is Zaino's Compact Block Cache db if using the FetchService or Zebra's RocksDB if using the StateService.
+    pub db_path: Option<PathBuf>,
+
+    /// Block Cache database maximum size in GB.
+    pub db_size: Option<usize>,
 }
 
 /// Limits configuration section.
