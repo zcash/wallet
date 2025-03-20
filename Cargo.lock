@@ -5733,6 +5733,7 @@ dependencies = [
  "tonic",
  "tower 0.4.13",
  "xdg",
+ "zaino-fetch",
  "zaino-state",
  "zcash_address 0.7.0",
  "zcash_client_backend",
@@ -5742,6 +5743,7 @@ dependencies = [
  "zcash_protocol 0.5.1",
  "zcash_transparent",
  "zebra-chain",
+ "zebra-rpc",
  "zip32 0.2.0",
 ]
 

@@ -17,7 +17,7 @@ impl StartCmd {
         // Order these so that dependencies are pushed after the components that use them,
         // to work around a bug: https://github.com/iqlusioninc/abscissa/issues/989
         components.push(Box::new(JsonRpc::default()));
-        components.push(Box::new(WalletSync::new(self.lwd_server.clone())));
+        components.push(Box::new(WalletSync::default()));
         components.push(Box::new(ChainView::default()));
         components.push(Box::new(Database::default()));
     }

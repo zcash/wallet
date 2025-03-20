@@ -4,11 +4,14 @@ use std::sync::Arc;
 use abscissa_core::{component::Injectable, Component, FrameworkError, FrameworkErrorKind};
 use abscissa_tokio::TokioComponent;
 use jsonrpsee::tracing::info;
-use tokio::{sync::RwLock, task::JoinHandle};
+use tokio::{
+    sync::{watch, RwLock},
+    task::JoinHandle,
+};
 use zaino_state::{
     config::FetchServiceConfig,
-    fetch::FetchService,
-    indexer::{IndexerService, ZcashService},
+    fetch::{FetchService, FetchServiceSubscriber},
+    indexer::{IndexerService, IndexerSubscriber, ZcashService},
     status::StatusType,
 };
 
@@ -18,13 +21,28 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-#[derive(Default, Injectable)]
+#[derive(Injectable)]
 #[component(inject = "init_tokio(abscissa_tokio::TokioComponent)")]
 pub(crate) struct ChainView {
     config: Option<FetchServiceConfig>,
     // TODO: Migrate to `StateService`.
     indexer: Arc<RwLock<Option<IndexerService<FetchService>>>>,
+    started_tx: Option<watch::Sender<bool>>,
+    started_rx: watch::Receiver<bool>,
     pub(crate) serve_task: Option<JoinHandle<Result<(), Error>>>,
+}
+
+impl Default for ChainView {
+    fn default() -> Self {
+        let (started_tx, started_rx) = watch::channel(false);
+        Self {
+            config: Default::default(),
+            indexer: Default::default(),
+            started_tx: Some(started_tx),
+            started_rx,
+            serve_task: Default::default(),
+        }
+    }
 }
 
 impl Clone for ChainView {
@@ -34,6 +52,8 @@ impl Clone for ChainView {
         Self {
             config: None,
             indexer: self.indexer.clone(),
+            started_tx: None,
+            started_rx: self.started_rx.clone(),
             serve_task: None,
         }
     }
@@ -96,12 +116,14 @@ impl ChainView {
 
         info!("Starting Zaino indexer");
         let indexer = self.indexer.clone();
+        let started_tx = self.started_tx.take().expect("init_tokio only called once");
         runtime.block_on(async {
             *indexer.write().await = Some(
                 IndexerService::spawn(config)
                     .await
                     .map_err(|e| FrameworkErrorKind::ComponentError.context(e))?,
             );
+            started_tx.send_modify(|started| *started = true);
             Ok::<_, FrameworkError>(())
         })?;
 
@@ -137,5 +159,27 @@ impl ChainView {
         self.serve_task = Some(task);
 
         Ok(())
+    }
+
+    pub(crate) async fn subscribe(
+        &mut self,
+    ) -> Result<IndexerSubscriber<FetchServiceSubscriber>, Error> {
+        // Subscribers block on the indexer starting.
+        let started = *self.started_rx.borrow_and_update();
+        if !started {
+            self.started_rx
+                .changed()
+                .await
+                .map_err(|_| ErrorKind::Generic.context("ChainState indexer is not running"))?;
+        }
+
+        Ok(self
+            .indexer
+            .read()
+            .await
+            .as_ref()
+            .ok_or_else(|| ErrorKind::Generic.context("ChainState indexer is not running"))?
+            .inner_ref()
+            .get_subscriber())
     }
 }
