@@ -6079,6 +6079,7 @@ dependencies = [
  "tower 0.4.13",
  "uuid",
  "xdg",
+ "zaino-fetch",
  "zaino-state",
  "zcash_address",
  "zcash_client_backend",
@@ -6088,6 +6089,7 @@ dependencies = [
  "zcash_protocol 0.5.1",
  "zcash_transparent",
  "zebra-chain",
+ "zebra-rpc",
  "zip32",
 ]
 

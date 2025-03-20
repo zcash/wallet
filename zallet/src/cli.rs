@@ -7,9 +7,6 @@ use abscissa_core::{Command, Runnable};
 
 use crate::fl;
 
-#[cfg(outside_buildscript)]
-use crate::remote::Servers;
-
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 #[command(author, about, version)]
@@ -55,12 +52,7 @@ pub(crate) enum ZalletCmd {
 /// `start` subcommand
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
-pub(crate) struct StartCmd {
-    /// The lightwalletd server to sync with (default is \"ecc\")
-    #[arg(long)]
-    #[arg(default_value = "ecc", value_parser = Servers::parse)]
-    pub(crate) lwd_server: Servers,
-}
+pub(crate) struct StartCmd {}
 
 /// `migrate-zcash-conf` subcommand
 #[derive(Debug, Parser)]
@@ -105,16 +97,3 @@ pub(crate) struct InitWalletEncryptionCmd {}
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct GenerateMnemonicCmd {}
-
-// Below are temporary types included here so manpage building works.
-
-#[cfg(not(outside_buildscript))]
-#[derive(Clone, Debug)]
-pub(crate) struct Servers;
-
-#[cfg(not(outside_buildscript))]
-impl Servers {
-    pub(crate) fn parse(_: &str) -> Result<Self, &'static str> {
-        Err("Mocked for buildscript")
-    }
-}
