@@ -110,6 +110,7 @@ tower = { workspace = true, features = ["timeout"] }
 transparent.workspace = true
 uuid.workspace = true
 xdg.workspace = true
+zaino-fetch.workspace = true
 zaino-state.workspace = true
 zcash_address.workspace = true
 zcash_client_backend = { workspace = true, features = [
@@ -126,6 +127,7 @@ zcash_keys.workspace = true
 zcash_primitives.workspace = true
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
 zebra-chain.workspace = true
+zebra-rpc.workspace = true
 zip32.workspace = true
 
 [build-dependencies]

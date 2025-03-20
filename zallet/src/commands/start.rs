@@ -25,17 +25,20 @@ impl StartCmd {
         let (chain_view, chain_indexer_task_handle) = ChainView::new(&config).await?;
 
         // Launch RPC server.
-        let rpc_task_handle = JsonRpc::spawn(&config, db.clone(), keystore, chain_view).await?;
+        let rpc_task_handle =
+            JsonRpc::spawn(&config, db.clone(), keystore, chain_view.clone()).await?;
 
         // Start the wallet sync process.
-        let wallet_sync_task_handle = WalletSync::spawn(&config, db, self.lwd_server.clone()).await;
+        let (wallet_sync_steady_state_task_handle, wallet_sync_recover_history_task_handle) =
+            WalletSync::spawn(&config, db, chain_view).await?;
 
         info!("Spawned Zallet tasks");
 
         // ongoing tasks.
         pin!(chain_indexer_task_handle);
         pin!(rpc_task_handle);
-        pin!(wallet_sync_task_handle);
+        pin!(wallet_sync_steady_state_task_handle);
+        pin!(wallet_sync_recover_history_task_handle);
 
         // Wait for tasks to finish.
         let res = loop {
@@ -56,10 +59,17 @@ impl StartCmd {
                     Ok(())
                 }
 
-                wallet_sync_join_result = &mut wallet_sync_task_handle => {
+                wallet_sync_join_result = &mut wallet_sync_steady_state_task_handle => {
                     let wallet_sync_result = wallet_sync_join_result
-                        .expect("unexpected panic in the wallet sync task");
-                    info!(?wallet_sync_result, "Wallet sync task exited");
+                        .expect("unexpected panic in the wallet steady-state sync task");
+                    info!(?wallet_sync_result, "Wallet steady-state sync task exited");
+                    Ok(())
+                }
+
+                wallet_sync_join_result = &mut wallet_sync_recover_history_task_handle => {
+                    let wallet_sync_result = wallet_sync_join_result
+                        .expect("unexpected panic in the wallet recover-history sync task");
+                    info!(?wallet_sync_result, "Wallet recover-history sync task exited");
                     Ok(())
                 }
             };
@@ -78,7 +88,8 @@ impl StartCmd {
         // ongoing tasks
         chain_indexer_task_handle.abort();
         rpc_task_handle.abort();
-        wallet_sync_task_handle.abort();
+        wallet_sync_steady_state_task_handle.abort();
+        wallet_sync_recover_history_task_handle.abort();
 
         info!("All tasks have been asked to stop, waiting for remaining tasks to finish");
 
