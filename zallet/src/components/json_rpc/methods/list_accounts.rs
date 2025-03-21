@@ -13,7 +13,7 @@ pub(crate) type Response = RpcResult<Vec<Account>>;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Account {
     /// The account's UUID within this Zallet instance.
-    uuid: String,
+    account_uuid: String,
 
     /// The ZIP 32 account ID.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -58,7 +58,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
             .map(|derivation| u32::from(derivation.account_index()).into());
 
         accounts.push(Account {
-            uuid: account_id.expose_uuid().to_string(),
+            account_uuid: account_id.expose_uuid().to_string(),
             account,
             addresses: vec![Address {
                 // TODO: Expose the real diversifier index.

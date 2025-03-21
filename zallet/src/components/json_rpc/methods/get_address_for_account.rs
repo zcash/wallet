@@ -24,7 +24,7 @@ pub(crate) type Response = RpcResult<Address>;
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct Address {
     /// The account's UUID within this Zallet instance.
-    uuid: String,
+    account_uuid: String,
 
     /// The ZIP 32 account ID.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -136,7 +136,7 @@ pub(crate) fn call(
     };
 
     Ok(Address {
-        uuid: account_id.expose_uuid().to_string(),
+        account_uuid: account_id.expose_uuid().to_string(),
         account,
         diversifier_index: diversifier_index.into(),
         receiver_types,
@@ -176,7 +176,7 @@ fn map_sqlite_error(e: SqliteClientError, account: &JsonValue) -> ErrorObjectOwn
                 ))
             },
             AddressGenerationError::KeyNotAvailable(typecode) => LegacyCode::Wallet.with_message(format!(
-                "Error: account {} does not have a receiver component with type {:?}.",
+                "Error: account {} cannot generate a receiver component with type {:?}.",
                 account,
                 typecode,
             )),
