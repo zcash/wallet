@@ -1,4 +1,8 @@
-use jsonrpsee::{core::RpcResult, tracing::error, types::ErrorCode as RpcErrorCode};
+use jsonrpsee::{
+    core::RpcResult,
+    tracing::{error, warn},
+    types::ErrorCode as RpcErrorCode,
+};
 use serde::Serialize;
 use transparent::keys::TransparentKeyScope;
 use zcash_address::unified;
@@ -19,8 +23,15 @@ pub(crate) type Response = RpcResult<Vec<AddressSource>>;
 pub(crate) struct AddressSource {
     source: &'static str,
 
+    /// This object contains transparent addresses for which we have no derivation
+    /// information.
     #[serde(skip_serializing_if = "Option::is_none")]
     transparent: Option<TransparentAddresses>,
+
+    /// Each element in this list represents a set of transparent addresses derived from a
+    /// single BIP 44 account index.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    derived_transparent: Vec<DerivedTransparentAddresses>,
 
     /// Each element in this list represents a set of diversified addresses derived from a
     /// single IVK.
@@ -38,13 +49,17 @@ impl AddressSource {
         Self {
             source,
             transparent: None,
+            derived_transparent: vec![],
             sapling: vec![],
             unified: vec![],
         }
     }
 
     fn has_data(&self) -> bool {
-        self.transparent.is_some() || !self.sapling.is_empty() || !self.unified.is_empty()
+        self.transparent.is_some()
+            || !self.derived_transparent.is_empty()
+            || !self.sapling.is_empty()
+            || !self.unified.is_empty()
     }
 }
 
@@ -56,6 +71,25 @@ struct TransparentAddresses {
     #[serde(rename = "changeAddresses")]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     change_addresses: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct DerivedTransparentAddresses {
+    seedfp: String,
+
+    /// The BIP 44 account index.
+    account: u32,
+
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    addresses: Vec<String>,
+
+    #[serde(rename = "changeAddresses")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    change_addresses: Vec<String>,
+
+    #[serde(rename = "ephemeralAddresses")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ephemeral_addresses: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -168,15 +202,37 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                 .map(|d| seedfp_to_hex(d.seed_fingerprint()));
             let account = derivation.as_ref().map(|d| d.account_index().into());
 
-            if !(transparent_addresses.is_empty() && transparent_change_addresses.is_empty()) {
-                let transparent = source.transparent.get_or_insert(TransparentAddresses {
-                    addresses: vec![],
-                    change_addresses: vec![],
-                });
-                transparent.addresses.append(&mut transparent_addresses);
-                transparent
-                    .change_addresses
-                    .append(&mut transparent_change_addresses);
+            if !(transparent_addresses.is_empty()
+                && transparent_change_addresses.is_empty()
+                && transparent_ephemeral_addresses.is_empty())
+            {
+                if let Some((seedfp, account)) = seedfp.clone().zip(account) {
+                    source
+                        .derived_transparent
+                        .push(DerivedTransparentAddresses {
+                            seedfp,
+                            account,
+                            addresses: transparent_addresses,
+                            change_addresses: transparent_change_addresses,
+                            ephemeral_addresses: transparent_ephemeral_addresses,
+                        });
+                } else {
+                    if !transparent_ephemeral_addresses.is_empty() {
+                        warn!(
+                            "Account {} has used transparent ephemeral addresses, but no derivation information",
+                            account_id.expose_uuid(),
+                        );
+                    }
+
+                    let transparent = source.transparent.get_or_insert(TransparentAddresses {
+                        addresses: vec![],
+                        change_addresses: vec![],
+                    });
+                    transparent.addresses.append(&mut transparent_addresses);
+                    transparent
+                        .change_addresses
+                        .append(&mut transparent_change_addresses);
+                }
             }
 
             if !sapling_addresses.is_empty() {
