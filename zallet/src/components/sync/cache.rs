@@ -12,7 +12,7 @@ use zcash_client_backend::{
 };
 use zcash_protocol::consensus::BlockHeight;
 
-use crate::error::Error;
+use super::SyncError;
 
 #[derive(Debug)]
 pub(super) struct MemoryCache {
@@ -29,7 +29,7 @@ impl MemoryCache {
 }
 
 impl BlockSource for MemoryCache {
-    type Error = Error;
+    type Error = SyncError;
 
     fn with_blocks<F, WalletErrT>(
         &self,

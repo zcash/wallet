@@ -23,7 +23,6 @@ mod error;
 mod i18n;
 pub mod network;
 mod prelude;
-mod remote;
 
 /// A macro to obtain localized Zallet messages and optionally their attributes, and check
 /// the `message_id`, `attribute_id` and arguments at compile time.

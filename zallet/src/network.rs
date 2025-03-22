@@ -53,6 +53,23 @@ impl Network {
             }
         }
     }
+
+    pub(crate) fn to_zebra(self) -> zebra_chain::parameters::Network {
+        match self {
+            Network::Consensus(network) => match network {
+                consensus::Network::MainNetwork => zebra_chain::parameters::Network::Mainnet,
+                consensus::Network::TestNetwork => {
+                    zebra_chain::parameters::Network::new_default_testnet()
+                }
+            },
+            // TODO: This does not create a compatible regtest network because Zebra does
+            // not have the necessary flexibility.
+            Network::RegTest(local_network) => zebra_chain::parameters::Network::new_regtest(
+                local_network.nu5.map(|h| h.into()),
+                local_network.nu6.map(|h| h.into()),
+            ),
+        }
+    }
 }
 
 impl consensus::Parameters for Network {

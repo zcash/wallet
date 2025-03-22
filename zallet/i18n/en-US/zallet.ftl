@@ -68,6 +68,7 @@ migrate-config-written = {-zallet} config written to {$conf}
 
 err-kind-generic = Error
 err-kind-init = Failed to initialize {-zallet}
+err-kind-sync = Failed to synchronize {-zallet}
 
 err-migrate-allow-warnings = To allow a migration with warnings, use '{-allow-warnings}'
 err-migrate-duplicate-zcashd-option =
