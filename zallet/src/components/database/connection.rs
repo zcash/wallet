@@ -3,6 +3,7 @@ use std::ops::Range;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
+use rand::rngs::OsRng;
 use secrecy::SecretVec;
 use shardtree::{error::ShardTreeError, ShardTree};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
@@ -98,7 +99,7 @@ impl DbConnection {
 
     fn with<T>(
         &self,
-        f: impl FnOnce(WalletDb<&rusqlite::Connection, Network, SystemClock>) -> T,
+        f: impl FnOnce(WalletDb<&rusqlite::Connection, Network, SystemClock, OsRng>) -> T,
     ) -> T {
         tokio::task::block_in_place(|| {
             let _guard = self.lock.read().unwrap();
@@ -106,13 +107,14 @@ impl DbConnection {
                 self.inner.lock().unwrap().as_ref(),
                 self.params,
                 SystemClock,
+                OsRng,
             ))
         })
     }
 
     pub(crate) fn with_mut<T>(
         &self,
-        f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network, SystemClock>) -> T,
+        f: impl FnOnce(WalletDb<&mut rusqlite::Connection, Network, SystemClock, OsRng>) -> T,
     ) -> T {
         tokio::task::block_in_place(|| {
             let _guard = self.lock.write().unwrap();
@@ -120,16 +122,18 @@ impl DbConnection {
                 self.inner.lock().unwrap().as_mut(),
                 self.params,
                 SystemClock,
+                OsRng,
             ))
         })
     }
 }
 
 impl WalletRead for DbConnection {
-    type Error = <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletRead>::Error;
+    type Error = <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as WalletRead>::Error;
     type AccountId =
-        <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletRead>::AccountId;
-    type Account = <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletRead>::Account;
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as WalletRead>::AccountId;
+    type Account =
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as WalletRead>::Account;
 
     fn get_account_ids(&self) -> Result<Vec<Self::AccountId>, Self::Error> {
         self.with(|db_data| db_data.get_account_ids())
@@ -336,10 +340,12 @@ impl WalletRead for DbConnection {
 }
 
 impl InputSource for DbConnection {
-    type Error = <WalletDb<rusqlite::Connection, Network, SystemClock> as InputSource>::Error;
+    type Error =
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as InputSource>::Error;
     type AccountId =
-        <WalletDb<rusqlite::Connection, Network, SystemClock> as InputSource>::AccountId;
-    type NoteRef = <WalletDb<rusqlite::Connection, Network, SystemClock> as InputSource>::NoteRef;
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as InputSource>::AccountId;
+    type NoteRef =
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as InputSource>::NoteRef;
 
     fn get_spendable_note(
         &self,
@@ -392,7 +398,8 @@ impl InputSource for DbConnection {
 }
 
 impl WalletWrite for DbConnection {
-    type UtxoRef = <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletWrite>::UtxoRef;
+    type UtxoRef =
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as WalletWrite>::UtxoRef;
 
     fn create_account(
         &mut self,
@@ -507,9 +514,9 @@ impl WalletWrite for DbConnection {
 
 impl WalletCommitmentTrees for DbConnection {
     type Error =
-        <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletCommitmentTrees>::Error;
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as WalletCommitmentTrees>::Error;
     type SaplingShardStore<'a> =
-        <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletCommitmentTrees>::SaplingShardStore<'a>;
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as WalletCommitmentTrees>::SaplingShardStore<'a>;
 
     fn with_sapling_tree_mut<F, A, E>(&mut self, callback: F) -> Result<A, E>
     where
@@ -534,7 +541,7 @@ impl WalletCommitmentTrees for DbConnection {
     }
 
     type OrchardShardStore<'a> =
-        <WalletDb<rusqlite::Connection, Network, SystemClock> as WalletCommitmentTrees>::OrchardShardStore<'a>;
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as WalletCommitmentTrees>::OrchardShardStore<'a>;
 
     fn with_orchard_tree_mut<F, A, E>(&mut self, callback: F) -> Result<A, E>
     where

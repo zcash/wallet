@@ -59,7 +59,7 @@ zcash_protocol = "0.5"
 orchard = "0.11"
 sapling = { package = "sapling-crypto", version = "0.5" }
 transparent = { package = "zcash_transparent", version = "0.2" }
-zcash_keys = "0.7"
+zcash_keys = "0.8"
 zcash_primitives = "0.22"
 
 # Zcash wallet
@@ -70,8 +70,8 @@ rusqlite = "0.32"
 schemerz = "0.2"
 secrecy = "0.8"
 shardtree = "0.6"
-zcash_client_backend = "0.17"
-zcash_client_sqlite = "0.15"
+zcash_client_backend = "0.18"
+zcash_client_sqlite = "0.16"
 zip32 = "0.2"
 
 # lightwalletd (temporary)
@@ -80,10 +80,3 @@ tonic = "0.12"
 [patch.crates-io]
 abscissa_core = { git = "https://github.com/str4d/abscissa.git", rev = "8da8e10cad02aa4a93099cb4942b48fbdc54eb89" }
 abscissa_tokio = { git = "https://github.com/str4d/abscissa.git", rev = "8da8e10cad02aa4a93099cb4942b48fbdc54eb89" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "698dbf134bd59d921e6c37258e9001f90cda8504" }
-zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "698dbf134bd59d921e6c37258e9001f90cda8504" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "698dbf134bd59d921e6c37258e9001f90cda8504" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "698dbf134bd59d921e6c37258e9001f90cda8504" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "698dbf134bd59d921e6c37258e9001f90cda8504" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "698dbf134bd59d921e6c37258e9001f90cda8504" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "698dbf134bd59d921e6c37258e9001f90cda8504" }
