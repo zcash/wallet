@@ -230,7 +230,7 @@ async fn fetch_full_block_inner(
 ) -> Result<Block, SyncError> {
     match chain.z_get_block(hash_or_height, Some(0)).await? {
         GetBlock::Raw(bytes) => {
-            let block = Block::zcash_deserialize(&bytes.as_ref()[..])
+            let block = Block::zcash_deserialize(bytes.as_ref())
                 .map_err(|e| SyncError::from(FetchServiceError::SerializationError(e)))?;
             Ok(block)
         }
@@ -317,15 +317,10 @@ pub(super) async fn fetch_chain_state(
         .into_parts();
 
     Ok(ChainState::new(
-        BlockHeight::from_u32(
-            height
-                .0
-                .try_into()
-                .expect("blocks in main chain never have height -1"),
-        ),
+        BlockHeight::from_u32(height.0),
         {
             let mut block_hash = [0; 32];
-            hex::decode_to_slice(&hash.0, &mut block_hash).map_err(|e| {
+            hex::decode_to_slice(hash.0, &mut block_hash).map_err(|e| {
                 FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::JsonRpcClientError(
                     format!("Invalid block hash: {}", e),
                 ))
