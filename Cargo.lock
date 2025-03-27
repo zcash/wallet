@@ -5734,6 +5734,7 @@ dependencies = [
  "tower 0.4.13",
  "xdg",
  "zaino-fetch",
+ "zaino-proto",
  "zaino-state",
  "zcash_address 0.7.0",
  "zcash_client_backend",
@@ -5744,6 +5745,7 @@ dependencies = [
  "zcash_transparent",
  "zebra-chain",
  "zebra-rpc",
+ "zebra-state",
  "zip32 0.2.0",
 ]
 

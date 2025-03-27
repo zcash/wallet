@@ -1,7 +1,11 @@
 use jsonrpsee::tracing::info;
 use orchard::tree::MerkleHashOrchard;
-use zaino_fetch::jsonrpc::{error::JsonRpcConnectorError, response::GetBlockResponse};
-use zaino_state::fetch::FetchServiceSubscriber;
+use zaino_fetch::jsonrpc::error::JsonRpcConnectorError;
+use zaino_state::{
+    error::FetchServiceError,
+    fetch::FetchServiceSubscriber,
+    indexer::{LightWalletIndexer as _, ZcashIndexer as _},
+};
 use zcash_client_backend::{
     data_api::{
         chain::{ChainState, CommitmentTreeRoot},
@@ -15,12 +19,18 @@ use zcash_client_backend::{
 };
 use zcash_primitives::{block::BlockHash, merkle_tree::read_frontier_v0};
 use zcash_protocol::consensus::BlockHeight;
+use zebra_chain::{
+    block::Block, serialization::ZcashDeserialize as _, subtree::NoteCommitmentSubtreeIndex,
+};
+use zebra_rpc::methods::GetBlock;
+use zebra_state::HashOrHeight;
 
 use crate::components::database::DbConnection;
 
 use super::SyncError;
 
 // TODO: This type, or something similar, should be part of Zaino or Zebra.
+// TODO: https://github.com/zingolabs/zaino/issues/249
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ChainBlock {
     pub(super) height: BlockHeight,
@@ -48,29 +58,53 @@ impl ChainBlock {
     }
 
     pub(super) async fn tip(chain: &FetchServiceSubscriber) -> Result<Self, SyncError> {
-        Self::resolve_inner(chain, "-1".into()).await
+        let block_id = chain.get_latest_block().await?;
+
+        let compact_block = chain.get_block(block_id).await?;
+
+        Ok(Self {
+            height: BlockHeight::from_u32(compact_block.height.try_into().map_err(
+                |e: std::num::TryFromIntError| {
+                    SyncError::from(FetchServiceError::SerializationError(e.into()))
+                },
+            )?),
+            hash: BlockHash::try_from_slice(compact_block.hash.as_slice())
+                .expect("block hash missing"),
+            prev_hash: BlockHash::try_from_slice(compact_block.prev_hash.as_slice()),
+        })
     }
 
     async fn resolve_inner(
         chain: &FetchServiceSubscriber,
         hash_or_height: String,
     ) -> Result<Self, SyncError> {
-        // TODO: https://github.com/zingolabs/zaino/issues/249
-        match chain.fetcher.get_block(hash_or_height, None).await? {
-            GetBlockResponse::Raw(_) => unreachable!("We requested verbosity 1"),
-            GetBlockResponse::Object {
-                hash,
-                height,
-                previous_block_hash,
-                ..
-            } => Ok(Self {
-                height: height
-                    .map(|h| BlockHeight::from_u32(h.0))
-                    .unwrap_or_else(|| todo!()),
-                hash: BlockHash(hash.0 .0),
-                prev_hash: previous_block_hash.map(|h| BlockHash(h.0 .0)),
-            }),
-        }
+        let hash_or_height: HashOrHeight = hash_or_height
+            .parse()
+            .map_err(|e| SyncError::from(FetchServiceError::SerializationError(e)))?;
+
+        let block_id = match hash_or_height {
+            HashOrHeight::Hash(hash) => zaino_proto::proto::service::BlockId {
+                height: 0,
+                hash: hash.0.to_vec(),
+            },
+            HashOrHeight::Height(height) => zaino_proto::proto::service::BlockId {
+                height: height.0 as u64,
+                hash: Vec::new(),
+            },
+        };
+
+        let compact_block = chain.get_block(block_id).await?;
+
+        Ok(Self {
+            height: BlockHeight::from_u32(compact_block.height.try_into().map_err(
+                |e: std::num::TryFromIntError| {
+                    SyncError::from(FetchServiceError::SerializationError(e.into()))
+                },
+            )?),
+            hash: BlockHash::try_from_slice(compact_block.hash.as_slice())
+                .expect("block hash missing"),
+            prev_hash: BlockHash::try_from_slice(compact_block.prev_hash.as_slice()),
+        })
     }
 }
 
@@ -79,15 +113,16 @@ pub(super) async fn update_subtree_roots(
     db_data: &mut DbConnection,
 ) -> Result<(), SyncError> {
     let sapling_roots = chain
-        .fetcher
-        .get_subtrees_by_index("sapling".into(), 0, None)
+        .z_get_subtrees_by_index("sapling".into(), NoteCommitmentSubtreeIndex(0), None)
         .await?
         .subtrees
         .into_iter()
         .map(|subtree| {
             let mut root_hash = [0; 32];
             hex::decode_to_slice(&subtree.root, &mut root_hash).map_err(|e| {
-                JsonRpcConnectorError::JsonRpcClientError(format!("Invalid subtree root: {}", e))
+                FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::JsonRpcClientError(
+                    format!("Invalid subtree root: {}", e),
+                ))
             })?;
             Ok(CommitmentTreeRoot::from_parts(
                 BlockHeight::from_u32(subtree.end_height.0),
@@ -100,15 +135,16 @@ pub(super) async fn update_subtree_roots(
     db_data.put_sapling_subtree_roots(0, &sapling_roots)?;
 
     let orchard_roots = chain
-        .fetcher
-        .get_subtrees_by_index("orchard".into(), 0, None)
+        .z_get_subtrees_by_index("orchard".into(), NoteCommitmentSubtreeIndex(0), None)
         .await?
         .subtrees
         .into_iter()
         .map(|subtree| {
             let mut root_hash = [0; 32];
             hex::decode_to_slice(&subtree.root, &mut root_hash).map_err(|e| {
-                JsonRpcConnectorError::JsonRpcClientError(format!("Invalid subtree root: {}", e))
+                FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::JsonRpcClientError(
+                    format!("Invalid subtree root: {}", e),
+                ))
             })?;
             Ok(CommitmentTreeRoot::from_parts(
                 BlockHeight::from_u32(subtree.end_height.0),
@@ -173,7 +209,7 @@ pub(super) async fn fetch_blocks(
     let mut blocks = Vec::with_capacity(scan_range.len());
     for height in u32::from(scan_range.block_range().start)..u32::from(scan_range.block_range().end)
     {
-        blocks.push(fetch_block_inner(chain, height.to_string()).await?);
+        blocks.push(fetch_compact_block_inner(chain, height.to_string()).await?);
     }
 
     Ok(blocks)
@@ -184,15 +220,45 @@ pub(super) async fn fetch_block(
     hash: BlockHash,
 ) -> Result<CompactBlock, SyncError> {
     info!("Fetching block {}", hash);
-    fetch_block_inner(chain, hash.to_string()).await
+    fetch_compact_block_inner(chain, hash.to_string()).await
+}
+
+#[allow(dead_code)]
+async fn fetch_full_block_inner(
+    chain: &FetchServiceSubscriber,
+    hash_or_height: String,
+) -> Result<Block, SyncError> {
+    match chain.z_get_block(hash_or_height, Some(0)).await? {
+        GetBlock::Raw(bytes) => {
+            let block = Block::zcash_deserialize(&bytes.as_ref()[..])
+                .map_err(|e| SyncError::from(FetchServiceError::SerializationError(e)))?;
+            Ok(block)
+        }
+        GetBlock::Object { .. } => unreachable!("We requested verbosity 0"),
+    }
 }
 
 // TODO: Switch to fetching full blocks.
-async fn fetch_block_inner(
+async fn fetch_compact_block_inner(
     chain: &FetchServiceSubscriber,
     hash_or_height: String,
 ) -> Result<CompactBlock, SyncError> {
-    let compact_block = chain.block_cache.get_compact_block(hash_or_height).await?;
+    let hash_or_height: HashOrHeight = hash_or_height
+        .parse()
+        .map_err(|e| SyncError::from(FetchServiceError::SerializationError(e)))?;
+
+    let block_id = match hash_or_height {
+        HashOrHeight::Hash(hash) => zaino_proto::proto::service::BlockId {
+            height: 0,
+            hash: hash.0.to_vec(),
+        },
+        HashOrHeight::Height(height) => zaino_proto::proto::service::BlockId {
+            height: height.0 as u64,
+            hash: Vec::new(),
+        },
+    };
+
+    let compact_block = chain.get_block(block_id).await?;
 
     Ok(CompactBlock {
         proto_version: compact_block.proto_version,
@@ -245,43 +311,66 @@ pub(super) async fn fetch_chain_state(
     chain: &FetchServiceSubscriber,
     height: BlockHeight,
 ) -> Result<ChainState, SyncError> {
-    let tree_state = chain.fetcher.get_treestate(height.to_string()).await?;
+    let (hash, height, _time, sapling, orchard) = chain
+        .z_get_treestate(height.to_string())
+        .await?
+        .into_parts();
 
     Ok(ChainState::new(
         BlockHeight::from_u32(
-            tree_state
-                .height
+            height
+                .0
                 .try_into()
                 .expect("blocks in main chain never have height -1"),
         ),
         {
             let mut block_hash = [0; 32];
-            hex::decode_to_slice(&tree_state.hash, &mut block_hash).map_err(|e| {
-                JsonRpcConnectorError::JsonRpcClientError(format!("Invalid block hash: {}", e))
+            hex::decode_to_slice(&hash.0, &mut block_hash).map_err(|e| {
+                FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::JsonRpcClientError(
+                    format!("Invalid block hash: {}", e),
+                ))
             })?;
             BlockHash(block_hash)
         },
-        read_frontier_v0(
-            hex::decode(tree_state.sapling.inner().inner())
+        {
+            read_frontier_v0(
+                hex::decode(sapling.ok_or_else(|| {
+                    FetchServiceError::JsonRpcConnectorError(
+                        JsonRpcConnectorError::JsonRpcClientError(
+                            "Missing sapling tree state".into(),
+                        ),
+                    )
+                })?)
                 .map_err(|e| {
-                    JsonRpcConnectorError::JsonRpcClientError(format!(
-                        "Invalid Sapling tree state: {}",
-                        e
+                    FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::IoError(
+                        std::io::Error::new(std::io::ErrorKind::Other, e),
                     ))
                 })?
                 .as_slice(),
-        )
-        .map_err(JsonRpcConnectorError::IoError)?,
-        read_frontier_v0(
-            hex::decode(tree_state.orchard.inner().inner())
+            )
+            .map_err(|e| {
+                FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::IoError(e))
+            })?
+        },
+        {
+            read_frontier_v0(
+                hex::decode(orchard.ok_or_else(|| {
+                    FetchServiceError::JsonRpcConnectorError(
+                        JsonRpcConnectorError::JsonRpcClientError(
+                            "Missing orchard tree state".into(),
+                        ),
+                    )
+                })?)
                 .map_err(|e| {
-                    JsonRpcConnectorError::JsonRpcClientError(format!(
-                        "Invalid Orchard tree state: {}",
-                        e
+                    FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::IoError(
+                        std::io::Error::new(std::io::ErrorKind::Other, e),
                     ))
                 })?
                 .as_slice(),
-        )
-        .map_err(JsonRpcConnectorError::IoError)?,
+            )
+            .map_err(|e| {
+                FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::IoError(e))
+            })?
+        },
     ))
 }
