@@ -1,5 +1,9 @@
+use std::time::UNIX_EPOCH;
+
 use jsonrpsee::{core::RpcResult, tracing::warn};
 use serde::{Deserialize, Serialize};
+
+use crate::components::keystore::KeyStore;
 
 /// Response to a `getwalletinfo` RPC request.
 pub(crate) type Response = RpcResult<GetWalletInfo>;
@@ -40,14 +44,27 @@ pub(crate) struct GetWalletInfo {
 
     /// The timestamp in seconds since epoch (midnight Jan 1 1970 GMT) that the wallet is
     /// unlocked for transfers, or 0 if the wallet is locked.
-    unlocked_until: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unlocked_until: Option<u64>,
 
     /// The BLAKE2b-256 hash of the HD seed derived from the wallet's emergency recovery phrase.
     mnemonic_seedfp: String,
 }
 
-pub(crate) fn call() -> Response {
+pub(crate) async fn call(keystore: &KeyStore) -> Response {
     warn!("TODO: Implement getwalletinfo");
+
+    let unlocked_until = if keystore.is_crypted() {
+        Some(
+            keystore
+                .unlocked_until()
+                .await
+                .map(|i| i.duration_since(UNIX_EPOCH).expect("valid").as_secs())
+                .unwrap_or(0),
+        )
+    } else {
+        None
+    };
 
     Ok(GetWalletInfo {
         walletversion: 0,
@@ -59,7 +76,7 @@ pub(crate) fn call() -> Response {
         txcount: 0,
         keypoololdest: 0,
         keypoolsize: 0,
-        unlocked_until: 0,
+        unlocked_until,
         mnemonic_seedfp: "TODO".into(),
     })
 }

@@ -16,11 +16,34 @@ mod list_accounts;
 mod list_addresses;
 mod list_unified_receivers;
 mod list_unspent;
+mod lock_wallet;
+mod unlock_wallet;
 
 #[rpc(server)]
 pub(crate) trait Rpc {
     #[method(name = "getwalletinfo")]
-    fn get_wallet_info(&self) -> get_wallet_info::Response;
+    async fn get_wallet_info(&self) -> get_wallet_info::Response;
+
+    /// Stores the wallet decryption key in memory for `timeout` seconds.
+    ///
+    /// If the wallet is locked, this API must be invoked prior to performing operations
+    /// that require the availability of private keys, such as sending funds.
+    ///
+    /// Issuing the `walletpassphrase` command while the wallet is already unlocked will
+    /// set a new unlock time that overrides the old one.
+    #[method(name = "walletpassphrase")]
+    async fn unlock_wallet(
+        &self,
+        passphrase: age::secrecy::SecretString,
+        timeout: u64,
+    ) -> unlock_wallet::Response;
+
+    /// Removes the wallet encryption key from memory, locking the wallet.
+    ///
+    /// After calling this method, you will need to call `walletpassphrase` again before
+    /// being able to call any methods which require the wallet to be unlocked.
+    #[method(name = "walletlock")]
+    async fn lock_wallet(&self) -> lock_wallet::Response;
 
     #[method(name = "z_listaccounts")]
     async fn list_accounts(&self) -> list_accounts::Response;
@@ -118,8 +141,20 @@ impl RpcImpl {
 
 #[async_trait]
 impl RpcServer for RpcImpl {
-    fn get_wallet_info(&self) -> get_wallet_info::Response {
-        get_wallet_info::call()
+    async fn get_wallet_info(&self) -> get_wallet_info::Response {
+        get_wallet_info::call(&self.keystore).await
+    }
+
+    async fn unlock_wallet(
+        &self,
+        passphrase: age::secrecy::SecretString,
+        timeout: u64,
+    ) -> unlock_wallet::Response {
+        unlock_wallet::call(&self.keystore, passphrase, timeout).await
+    }
+
+    async fn lock_wallet(&self) -> lock_wallet::Response {
+        lock_wallet::call(&self.keystore).await
     }
 
     async fn list_accounts(&self) -> list_accounts::Response {

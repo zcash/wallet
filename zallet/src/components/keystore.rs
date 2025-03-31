@@ -113,13 +113,18 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use abscissa_core::{component::Injectable, Component, FrameworkError, FrameworkErrorKind};
 use abscissa_tokio::TokioComponent;
 use bip0039::{English, Mnemonic};
 use rusqlite::named_params;
 use secrecy::{ExposeSecret, SecretString, SecretVec, Zeroize};
-use tokio::sync::RwLock;
+use tokio::{
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+    time,
+};
 use zip32::fingerprint::SeedFingerprint;
 
 use crate::{
@@ -131,6 +136,8 @@ use crate::{
 use super::database::Database;
 
 pub(super) mod db;
+
+type RelockTask = (SystemTime, JoinHandle<()>);
 
 #[derive(Clone, Default, Injectable)]
 #[component(inject = "init_db(zallet::components::database::Database)")]
@@ -144,6 +151,9 @@ pub(crate) struct KeyStore {
 
     /// The in-memory cache of age identities for decrypting key material.
     identities: Arc<RwLock<Vec<Box<dyn age::Identity + Send + Sync>>>>,
+
+    /// Task that will re-lock the keystore if it has been temporarily unlocked.
+    relock_task: Arc<Mutex<Option<RelockTask>>>,
 }
 
 impl fmt::Debug for KeyStore {
@@ -212,7 +222,7 @@ impl KeyStore {
     }
 
     /// Returns `true` if the keystore's age identities are runtime-encrypted.
-    pub(crate) async fn is_crypted(&self) -> bool {
+    pub(crate) fn is_crypted(&self) -> bool {
         self.encrypted_identities.is_some()
     }
 
@@ -220,6 +230,117 @@ impl KeyStore {
     /// key material.
     pub(crate) async fn is_locked(&self) -> bool {
         self.identities.read().await.is_empty()
+    }
+
+    /// Returns the [`SystemTime`] at which the wallet will re-lock, if currently unlocked.
+    pub(crate) async fn unlocked_until(&self) -> Option<SystemTime> {
+        let relock_task = self.relock_task.lock().await;
+        relock_task.as_ref().map(|(deadline, _)| *deadline)
+    }
+
+    /// Decrypts the keystore's [`age::IdentityFile`] using the given passphrase.
+    pub(crate) async fn decrypt_identity_file<C: age::Callbacks>(
+        &self,
+        callbacks: C,
+    ) -> Result<Option<age::IdentityFile<age::NoCallbacks>>, Error> {
+        let encrypted_identities = match &self.encrypted_identities {
+            Some(data) => data,
+            // If the keystore isn't encrypted, we don't need to do anything.
+            None => return Ok(None),
+        };
+
+        let decryptor = age::Decryptor::new_buffered(age::armor::ArmoredReader::new(
+            encrypted_identities.as_slice(),
+        ))
+        .expect("validated on start");
+
+        let encrypted_identity = age::encrypted::EncryptedIdentity::new(decryptor, callbacks, None)
+            .expect("validated on start");
+
+        encrypted_identity
+            .decrypt(None)
+            .map(|identity_file| Some(identity_file.with_callbacks(age::NoCallbacks)))
+            .map_err(|e| ErrorKind::Generic.context(e).into())
+    }
+
+    /// Unlocks the keystore using the given passphrase.
+    ///
+    /// The keystore will be re-locked after `timeout` seconds. Calling this method again
+    /// before the existing timeout expires will reset the timeout.
+    pub(crate) async fn unlock(
+        &self,
+        passphrase: age::secrecy::SecretString,
+        timeout: u64,
+    ) -> bool {
+        // Prepare a callback that only responds to passphrase requests.
+        #[derive(Clone)]
+        struct PassphraseCallbacks(age::secrecy::SecretString);
+        impl age::Callbacks for PassphraseCallbacks {
+            fn display_message(&self, _: &str) {}
+            fn confirm(&self, _: &str, _: &str, _: Option<&str>) -> Option<bool> {
+                unreachable!()
+            }
+            fn request_public_string(&self, _: &str) -> Option<String> {
+                unreachable!()
+            }
+            fn request_passphrase(&self, _: &str) -> Option<age::secrecy::SecretString> {
+                Some(self.0.clone())
+            }
+        }
+
+        let identity_file = match self
+            .decrypt_identity_file(PassphraseCallbacks(passphrase))
+            .await
+        {
+            Ok(Some(identity_file)) => identity_file,
+            _ => return false,
+        };
+
+        let decrypted_identities = match identity_file.into_identities() {
+            Ok(identities) => identities,
+            Err(_) => return false,
+        };
+
+        // If there is an existing relock task, abort it so we don't race while writing
+        // the decrypted identities.
+        let mut relock_task = self.relock_task.lock().await;
+        if let Some((_, existing_timeout)) = relock_task.take() {
+            existing_timeout.abort();
+            // Wait for the task to either finish or abort, to ensure there's zero
+            // possibility of the `decrypted_identities` write below being cleared.
+            let _ = existing_timeout.await;
+        }
+
+        *self.identities.write().await = decrypted_identities;
+
+        // Start a task to relock the keystore after the given timeout.
+        let duration = Duration::from_secs(timeout);
+        let identities = self.identities.clone();
+        *relock_task = Some((
+            SystemTime::now() + duration,
+            tokio::spawn(async move {
+                time::sleep(duration).await;
+                identities.write().await.clear();
+            }),
+        ));
+
+        true
+    }
+
+    /// Clears the in-memory cache of age identities, locking the wallet.
+    pub(crate) async fn lock(&self) {
+        // If the keystore isn't encrypted, we don't want to clear the cached identities.
+        if !self.is_crypted() {
+            return;
+        }
+
+        // Any existing relock task is now unnecessary.
+        let mut relock_task = self.relock_task.lock().await;
+        if let Some((_, existing_timeout)) = relock_task.take() {
+            existing_timeout.abort();
+        }
+
+        self.identities.write().await.clear();
     }
 
     async fn with_db<T>(
