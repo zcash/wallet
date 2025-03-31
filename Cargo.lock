@@ -6080,6 +6080,7 @@ dependencies = [
  "uuid",
  "xdg",
  "zaino-fetch",
+ "zaino-proto",
  "zaino-state",
  "zcash_address",
  "zcash_client_backend",
@@ -6090,6 +6091,7 @@ dependencies = [
  "zcash_transparent",
  "zebra-chain",
  "zebra-rpc",
+ "zebra-state",
  "zip32",
 ]
 

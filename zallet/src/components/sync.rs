@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use jsonrpsee::tracing::{self, debug, info};
+use futures::StreamExt as _;
+use jsonrpsee::tracing::{self, debug, info, warn};
 use tokio::{task::JoinHandle, time};
-use zaino_state::fetch::FetchServiceSubscriber;
+use zaino_state::{fetch::FetchServiceSubscriber, indexer::LightWalletIndexer as _};
 use zcash_client_backend::data_api::{
     WalletRead, WalletWrite,
     chain::{BlockCache, scan_cached_blocks},
@@ -11,6 +12,7 @@ use zcash_client_backend::data_api::{
 };
 use zcash_primitives::transaction::Transaction;
 use zcash_protocol::consensus::{self, BlockHeight};
+use zebra_chain::transaction::SerializedTransaction;
 
 use super::{
     chain_view::ChainView,
@@ -45,7 +47,7 @@ impl WalletSync {
         // Spawn the ongoing sync tasks.
         let chain = chain_view.subscribe().await?.inner();
         let steady_state_task = tokio::spawn(async move {
-            steady_state(chain, &params, db_data.as_mut(), starting_tip).await?;
+            steady_state(&chain, &params, db_data.as_mut(), starting_tip).await?;
             Ok(())
         });
 
@@ -129,13 +131,13 @@ async fn initialize(
 /// Keeps the wallet state up-to-date with the chain tip, and handles the mempool.
 #[tracing::instrument(skip_all)]
 async fn steady_state(
-    mut chain: FetchServiceSubscriber,
+    chain: &FetchServiceSubscriber,
     params: &Network,
     db_data: &mut DbConnection,
     mut prev_tip: ChainBlock,
 ) -> Result<(), SyncError> {
     info!("Steady-state sync task started");
-    let mut current_tip = steps::get_chain_tip(&chain).await?;
+    let mut current_tip = steps::get_chain_tip(chain).await?;
 
     // TODO: Remove this once we've made `zcash_client_sqlite` changes to support scanning
     // regular blocks.
@@ -145,7 +147,7 @@ async fn steady_state(
         info!("New chain tip: {} {}", current_tip.height, current_tip.hash);
 
         // Figure out the diff between the previous and current chain tips.
-        let fork_point = steps::find_fork(&chain, prev_tip, current_tip).await?;
+        let fork_point = steps::find_fork(chain, prev_tip, current_tip).await?;
         assert!(fork_point.height <= current_tip.height);
 
         // Fetch blocks that need to be applied to the wallet.
@@ -154,9 +156,9 @@ async fn steady_state(
         {
             let mut current_block = current_tip;
             while current_block != fork_point {
-                block_stack.push(steps::fetch_block(&chain, current_block.hash).await?);
+                block_stack.push(steps::fetch_block(chain, current_block.hash).await?);
                 current_block = ChainBlock::resolve(
-                    &chain,
+                    chain,
                     current_block.prev_hash.expect("present by invariant"),
                 )
                 .await?;
@@ -187,8 +189,7 @@ async fn steady_state(
             let scan_range = ScanRange::from_parts(from_height..end_height, ScanPriority::ChainTip);
             db_cache.insert(block_stack).await?;
 
-            let from_state =
-                steps::fetch_chain_state(&chain, from_height.saturating_sub(1)).await?;
+            let from_state = steps::fetch_chain_state(chain, from_height.saturating_sub(1)).await?;
 
             tokio::task::block_in_place(|| {
                 info!("Scanning {}", scan_range);
@@ -207,7 +208,7 @@ async fn steady_state(
 
         // Now that we're done applying the chain diff, update our chain pointers.
         prev_tip = current_tip;
-        current_tip = steps::get_chain_tip(&chain).await?;
+        current_tip = steps::get_chain_tip(chain).await?;
 
         // If the chain tip no longer matches, we have more to do before consuming mempool
         // updates.
@@ -219,22 +220,27 @@ async fn steady_state(
         info!("Reached chain tip, streaming mempool");
         let mempool_height = current_tip.height + 1;
         let consensus_branch_id = consensus::BranchId::for_height(params, mempool_height);
-        // TODO: https://github.com/zingolabs/zaino/issues/249
-        let (mut mempool, _task) = chain.mempool.get_mempool_stream().await?;
-        while let Some(res) = mempool.recv().await {
-            let (mempool_key, mempool_value) = res?;
-            info!("Scanning mempool tx {}", mempool_key.0);
-            let tx_bytes = match mempool_value.0 {
-                zebra_rpc::methods::GetRawTransaction::Raw(tx_bytes) => tx_bytes,
-                zebra_rpc::methods::GetRawTransaction::Object(tx) => tx.hex,
-            };
-            let tx = Transaction::read(tx_bytes.as_ref(), consensus_branch_id)
-                .expect("Zaino should only provide valid transactions");
-            decrypt_and_store_transaction(params, db_data, &tx, None)?;
+        let mut mempool_stream = chain.get_mempool_stream().await?;
+        while let Some(result) = mempool_stream.next().await {
+            match result {
+                Ok(raw_tx) => {
+                    let tx = Transaction::read(
+                        SerializedTransaction::from(raw_tx.data).as_ref(),
+                        consensus_branch_id,
+                    )
+                    .expect("Zaino should only provide valid transactions");
+                    info!("Scanning mempool tx {}", tx.txid());
+                    decrypt_and_store_transaction(params, db_data, &tx, None)?;
+                }
+                Err(e) => {
+                    warn!("Error receiving transaction: {}", e);
+                    // return error here?
+                }
+            }
         }
 
         // Mempool stream ended, signalling that the chain tip has changed.
-        current_tip = steps::get_chain_tip(&chain).await?;
+        current_tip = steps::get_chain_tip(chain).await?;
     }
 }
 
