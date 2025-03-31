@@ -359,6 +359,47 @@ impl KeyStore {
         db.handle().await?.with_raw_mut(f)
     }
 
+    /// Sets the age recipients for this keystore.
+    ///
+    /// It is the caller's responsibility to ensure that the corresponding age identities
+    /// are known.
+    pub(crate) async fn initialize_recipients(
+        &self,
+        recipient_strings: Vec<String>,
+    ) -> Result<(), Error> {
+        // If the wallet has any existing recipients, fail (we would instead need to
+        // re-encrypt the wallet).
+        if !self.recipients().await?.is_empty() {
+            return Err(ErrorKind::Generic
+                .context("Keystore age recipients already initialized")
+                .into());
+        }
+
+        let now = ::time::OffsetDateTime::now_utc();
+
+        self.with_db_mut(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "INSERT INTO ext_zallet_keystore_age_recipients
+                    VALUES (:recipient, :added)",
+                )
+                .map_err(|e| ErrorKind::Generic.context(e))?;
+
+            for recipient in recipient_strings {
+                stmt.execute(named_params! {
+                    ":recipient": recipient,
+                    ":added": now,
+                })
+                .map_err(|e| ErrorKind::Generic.context(e))?;
+            }
+
+            Ok(())
+        })
+        .await?;
+
+        Ok(())
+    }
+
     /// Fetches the age recipients for this wallet from the database.
     async fn recipients(&self) -> Result<Vec<Box<dyn age::Recipient + Send>>, Error> {
         self.with_db(|conn| {

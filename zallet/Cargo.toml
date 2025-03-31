@@ -102,6 +102,7 @@ secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shardtree.workspace = true
+time.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "rt-multi-thread"] }
 toml.workspace = true
 tonic.workspace = true
