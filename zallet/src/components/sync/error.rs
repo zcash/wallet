@@ -1,17 +1,13 @@
 use std::fmt;
 
 use shardtree::error::ShardTreeError;
-use zaino_fetch::jsonrpc::error::JsonRpcConnectorError;
-use zaino_state::error::{BlockCacheError, MempoolError, StatusError};
+use zaino_state::error::FetchServiceError;
 use zcash_client_backend::scanning::ScanError;
 use zcash_client_sqlite::error::SqliteClientError;
 
 #[derive(Debug)]
 pub(crate) enum SyncError {
-    BlockCache(BlockCacheError),
-    Indexer(StatusError),
-    Mempool(MempoolError),
-    Node(JsonRpcConnectorError),
+    Indexer(FetchServiceError),
     Scan(ScanError),
     Tree(ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>),
     Other(SqliteClientError),
@@ -20,10 +16,7 @@ pub(crate) enum SyncError {
 impl fmt::Display for SyncError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SyncError::BlockCache(e) => write!(f, "{e}"),
             SyncError::Indexer(e) => write!(f, "{e}"),
-            SyncError::Mempool(e) => write!(f, "{e}"),
-            SyncError::Node(e) => write!(f, "{e}"),
             SyncError::Scan(e) => write!(f, "{e}"),
             SyncError::Tree(e) => write!(f, "{e}"),
             SyncError::Other(e) => write!(f, "{e}"),
@@ -32,24 +25,6 @@ impl fmt::Display for SyncError {
 }
 
 impl std::error::Error for SyncError {}
-
-impl From<BlockCacheError> for SyncError {
-    fn from(e: BlockCacheError) -> Self {
-        Self::BlockCache(e)
-    }
-}
-
-impl From<JsonRpcConnectorError> for SyncError {
-    fn from(e: JsonRpcConnectorError) -> Self {
-        Self::Node(e)
-    }
-}
-
-impl From<MempoolError> for SyncError {
-    fn from(e: MempoolError) -> Self {
-        Self::Mempool(e)
-    }
-}
 
 impl From<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>> for SyncError {
     fn from(e: ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>) -> Self {
@@ -63,8 +38,8 @@ impl From<SqliteClientError> for SyncError {
     }
 }
 
-impl From<StatusError> for SyncError {
-    fn from(e: StatusError) -> Self {
+impl From<FetchServiceError> for SyncError {
+    fn from(e: FetchServiceError) -> Self {
         Self::Indexer(e)
     }
 }
