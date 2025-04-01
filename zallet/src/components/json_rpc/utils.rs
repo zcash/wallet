@@ -26,7 +26,7 @@ pub(super) fn parse_account_parameter(
         JsonValue::Number(n) => {
             let zip32_account_index = n
                 .as_u64()
-                .filter(|n| n < &ZCASH_LEGACY_ACCOUNT.into())
+                .filter(|n| n < &u64::from(ZCASH_LEGACY_ACCOUNT))
                 .ok_or_else(|| {
                     LegacyCode::InvalidParameter
                         .with_static("Invalid account number, must be 0 <= account <= (2^31)-2.")
