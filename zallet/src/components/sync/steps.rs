@@ -1,6 +1,6 @@
 use jsonrpsee::tracing::info;
 use orchard::tree::MerkleHashOrchard;
-use zaino_fetch::jsonrpc::error::JsonRpcConnectorError;
+use zaino_fetch::jsonrpsee::error::JsonRpSeeConnectorError;
 use zaino_state::{
     error::FetchServiceError,
     fetch::FetchServiceSubscriber,
@@ -58,7 +58,10 @@ impl ChainBlock {
     }
 
     pub(super) async fn tip(chain: &FetchServiceSubscriber) -> Result<Self, SyncError> {
-        let block_id = chain.get_latest_block().await?;
+        let mut block_id = chain.get_latest_block().await?;
+        // TODO: TEMPORARILY work around a bug in Zaino.
+        //       https://github.com/zingolabs/zaino/issues/256
+        block_id.hash.reverse();
 
         let compact_block = chain.get_block(block_id).await?;
 
@@ -107,9 +110,12 @@ pub(super) async fn update_subtree_roots(
         .map(|subtree| {
             let mut root_hash = [0; 32];
             hex::decode_to_slice(&subtree.root, &mut root_hash).map_err(|e| {
-                FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::JsonRpcClientError(
-                    format!("Invalid subtree root: {}", e),
-                ))
+                FetchServiceError::JsonRpcConnectorError(
+                    JsonRpSeeConnectorError::JsonRpSeeClientError(format!(
+                        "Invalid subtree root: {}",
+                        e
+                    )),
+                )
             })?;
             Ok(CommitmentTreeRoot::from_parts(
                 BlockHeight::from_u32(subtree.end_height.0),
@@ -129,9 +135,12 @@ pub(super) async fn update_subtree_roots(
         .map(|subtree| {
             let mut root_hash = [0; 32];
             hex::decode_to_slice(&subtree.root, &mut root_hash).map_err(|e| {
-                FetchServiceError::JsonRpcConnectorError(JsonRpcConnectorError::JsonRpcClientError(
-                    format!("Invalid subtree root: {}", e),
-                ))
+                FetchServiceError::JsonRpcConnectorError(
+                    JsonRpSeeConnectorError::JsonRpSeeClientError(format!(
+                        "Invalid subtree root: {}",
+                        e
+                    )),
+                )
             })?;
             Ok(CommitmentTreeRoot::from_parts(
                 BlockHeight::from_u32(subtree.end_height.0),
@@ -310,27 +319,27 @@ pub(super) async fn fetch_chain_state(
             sapling
                 .ok_or_else(|| {
                     FetchServiceError::JsonRpcConnectorError(
-                        JsonRpcConnectorError::JsonRpcClientError(
+                        JsonRpSeeConnectorError::JsonRpSeeClientError(
                             "Missing Sapling tree state".into(),
                         ),
                     )
                 })?
                 .as_slice(),
         )
-        .map_err(JsonRpcConnectorError::IoError)
+        .map_err(JsonRpSeeConnectorError::IoError)
         .map_err(FetchServiceError::JsonRpcConnectorError)?,
         read_frontier_v0(
             orchard
                 .ok_or_else(|| {
                     FetchServiceError::JsonRpcConnectorError(
-                        JsonRpcConnectorError::JsonRpcClientError(
+                        JsonRpSeeConnectorError::JsonRpSeeClientError(
                             "Missing Orchard tree state".into(),
                         ),
                     )
                 })?
                 .as_slice(),
         )
-        .map_err(JsonRpcConnectorError::IoError)
+        .map_err(JsonRpSeeConnectorError::IoError)
         .map_err(FetchServiceError::JsonRpcConnectorError)?,
     ))
 }

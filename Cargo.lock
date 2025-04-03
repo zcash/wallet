@@ -2463,21 +2463,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jsonrpc-core"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14f7f76aef2d054868398427f6c54943cf3d1caa9a7ec7d0c38d69df97a965eb"
-dependencies = [
- "futures",
- "futures-executor",
- "futures-util",
- "log",
- "serde",
- "serde_derive",
- "serde_json",
-]
-
-[[package]]
 name = "jsonrpsee"
 version = "0.24.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5965,7 +5950,7 @@ dependencies = [
 [[package]]
 name = "zaino-fetch"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=b84847ab381ea897480053486b2f7a04898d9f61#b84847ab381ea897480053486b2f7a04898d9f61"
+source = "git+https://github.com/zingolabs/zaino.git?rev=2b2ebb4725d771724c724587e2dfe44af7b46377#2b2ebb4725d771724c724587e2dfe44af7b46377"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -5993,7 +5978,7 @@ dependencies = [
 [[package]]
 name = "zaino-proto"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=b84847ab381ea897480053486b2f7a04898d9f61#b84847ab381ea897480053486b2f7a04898d9f61"
+source = "git+https://github.com/zingolabs/zaino.git?rev=2b2ebb4725d771724c724587e2dfe44af7b46377#2b2ebb4725d771724c724587e2dfe44af7b46377"
 dependencies = [
  "prost",
  "tonic 0.12.3",
@@ -6004,7 +5989,7 @@ dependencies = [
 [[package]]
 name = "zaino-state"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=b84847ab381ea897480053486b2f7a04898d9f61#b84847ab381ea897480053486b2f7a04898d9f61"
+source = "git+https://github.com/zingolabs/zaino.git?rev=2b2ebb4725d771724c724587e2dfe44af7b46377#2b2ebb4725d771724c724587e2dfe44af7b46377"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6013,7 +5998,7 @@ dependencies = [
  "hex",
  "http",
  "indexmap 2.9.0",
- "jsonrpc-core",
+ "jsonrpsee-core",
  "lazy-regex",
  "lmdb",
  "prost",
