@@ -5,7 +5,8 @@ version = 3
 [[package]]
 name = "abscissa_core"
 version = "0.8.2"
-source = "git+https://github.com/str4d/abscissa.git?rev=8da8e10cad02aa4a93099cb4942b48fbdc54eb89#8da8e10cad02aa4a93099cb4942b48fbdc54eb89"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3083187ad864402d6bde86c5b51767b921edf4d02bf03b8ba40172dbd2a9773b"
 dependencies = [
  "abscissa_derive",
  "arc-swap",
@@ -30,7 +31,8 @@ dependencies = [
 [[package]]
 name = "abscissa_derive"
 version = "0.8.2"
-source = "git+https://github.com/str4d/abscissa.git?rev=8da8e10cad02aa4a93099cb4942b48fbdc54eb89#8da8e10cad02aa4a93099cb4942b48fbdc54eb89"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d914621d2ef4da433fe01907e323ee3f2807738d392d5a34c287b381f87fe2"
 dependencies = [
  "ident_case",
  "proc-macro2",
@@ -42,7 +44,8 @@ dependencies = [
 [[package]]
 name = "abscissa_tokio"
 version = "0.8.0"
-source = "git+https://github.com/str4d/abscissa.git?rev=8da8e10cad02aa4a93099cb4942b48fbdc54eb89#8da8e10cad02aa4a93099cb4942b48fbdc54eb89"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbfe75534601ac38dd9119c552c97b91814b079c065efdbfcabd7a1eb998c23e"
 dependencies = [
  "abscissa_core",
  "tokio",

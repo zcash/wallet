@@ -1,7 +1,6 @@
-use abscissa_core::{Component, Runnable, Shutdown};
+use abscissa_core::{Runnable, Shutdown};
 
 use crate::{
-    application::ZalletApp,
     cli::InitWalletEncryptionCmd,
     components::{database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
@@ -9,21 +8,11 @@ use crate::{
 };
 
 impl InitWalletEncryptionCmd {
-    pub(crate) fn register_components(&self, components: &mut Vec<Box<dyn Component<ZalletApp>>>) {
-        // Order these so that dependencies are pushed after the components that use them,
-        // to work around a bug: https://github.com/iqlusioninc/abscissa/issues/989
-        components.push(Box::new(KeyStore::default()));
-        components.push(Box::new(Database::default()));
-    }
-
     async fn start(&self) -> Result<(), Error> {
         let config = APP.config();
-        let keystore = APP
-            .state()
-            .components()
-            .get_downcast_ref::<KeyStore>()
-            .expect("KeyStore component is registered")
-            .clone();
+
+        let db = Database::open(&config).await?;
+        let keystore = KeyStore::new(&config, db)?;
 
         // TODO: The following logic does not support plugin recipients, which can only be
         // derived from identities by the plugins themselves.
