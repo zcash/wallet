@@ -7,7 +7,7 @@ use rand::rngs::OsRng;
 use secrecy::SecretVec;
 use shardtree::{ShardTree, error::ShardTreeError};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
-use zcash_client_backend::data_api::{AddressInfo, TargetValue};
+use zcash_client_backend::data_api::{AddressInfo, TargetValue, Zip32Derivation};
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
@@ -20,7 +20,7 @@ use zcash_client_backend::{
 use zcash_client_sqlite::{WalletDb, util::SystemClock};
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
 use zcash_protocol::{ShieldedProtocol, consensus::BlockHeight, value::Zatoshis};
-use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
+use zip32::DiversifierIndex;
 
 use crate::{
     error::{Error, ErrorKind},
@@ -162,10 +162,9 @@ impl WalletRead for DbConnection {
 
     fn get_derived_account(
         &self,
-        seed: &SeedFingerprint,
-        account_id: zip32::AccountId,
+        derivation: &Zip32Derivation,
     ) -> Result<Option<Self::Account>, Self::Error> {
-        self.with(|db_data| db_data.get_derived_account(seed, account_id))
+        self.with(|db_data| db_data.get_derived_account(derivation))
     }
 
     fn validate_seed(
@@ -307,8 +306,11 @@ impl WalletRead for DbConnection {
         &self,
         account: Self::AccountId,
         include_change: bool,
+        include_standalone: bool,
     ) -> Result<HashMap<TransparentAddress, Option<TransparentAddressMetadata>>, Self::Error> {
-        self.with(|db_data| db_data.get_transparent_receivers(account, include_change))
+        self.with(|db_data| {
+            db_data.get_transparent_receivers(account, include_change, include_standalone)
+        })
     }
 
     fn get_transparent_balances(
@@ -453,6 +455,14 @@ impl WalletWrite for DbConnection {
         })
     }
 
+    fn import_standalone_transparent_pubkey(
+        &mut self,
+        account: Self::AccountId,
+        pubkey: secp256k1::PublicKey,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.import_standalone_transparent_pubkey(account, pubkey))
+    }
+
     fn get_next_available_address(
         &mut self,
         account: Self::AccountId,
@@ -523,6 +533,14 @@ impl WalletWrite for DbConnection {
         status: zcash_client_backend::data_api::TransactionStatus,
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.set_transaction_status(txid, status))
+    }
+
+    fn notify_address_checked(
+        &mut self,
+        request: zcash_client_backend::data_api::TransactionsInvolvingAddress,
+        as_of_height: BlockHeight,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.notify_address_checked(request, as_of_height))
     }
 }
 
