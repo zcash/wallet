@@ -91,7 +91,7 @@ http-body-util.workspace = true
 hyper.workspace = true
 i18n-embed = { workspace = true, features = ["desktop-requester"] }
 i18n-embed-fl.workspace = true
-incrementalmerkletree.workspace = true
+incrementalmerkletree = { workspace = true, features = ["legacy-api"] }
 jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 nix = { workspace = true, features = ["signal"] }
@@ -133,13 +133,15 @@ zcash_client_backend = { workspace = true, features = [
     "sync",
     "transparent-inputs",
     "transparent-key-import",
+    "zcashd-compat",
 ] }
 zcash_client_sqlite = { workspace = true, features = [
     "orchard",
     "transparent-inputs",
     "transparent-key-import",
+    "zcashd-compat",
 ] }
-zcash_keys.workspace = true
+zcash_keys = { workspace = true, features = ["zcashd-compat", "unstable"] }
 zcash_note_encryption.workspace = true
 zcash_primitives.workspace = true
 zcash_proofs = { workspace = true, features = ["bundled-prover"] }
@@ -148,6 +150,9 @@ zebra-chain.workspace = true
 zebra-rpc.workspace = true
 zebra-state.workspace = true
 zip32.workspace = true
+zewif.workspace = true
+zewif-zcashd.workspace = true
+anyhow.workspace = true
 
 console-subscriber = { workspace = true, optional = true }
 jsonrpsee-http-client = { workspace = true, optional = true }

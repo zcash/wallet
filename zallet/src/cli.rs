@@ -54,6 +54,10 @@ pub(crate) enum ZalletCmd {
     #[cfg(zallet_build = "wallet")]
     MigrateZcashConf(MigrateZcashConfCmd),
 
+    /// Add the keys and transactions of a zcashd wallet.dat file to the wallet database.
+    #[cfg(zallet_build = "wallet")]
+    MigrateZcashdWallet(MigrateZcashdWalletCmd),
+
     /// Initialize wallet encryption.
     #[cfg(zallet_build = "wallet")]
     InitWalletEncryption(InitWalletEncryptionCmd),
@@ -107,13 +111,13 @@ pub(crate) struct ExampleConfigCmd {
 pub(crate) struct MigrateZcashConfCmd {
     /// Specify `zcashd` configuration file.
     ///
-    /// Relative paths will be prefixed by `datadir` location.
+    /// Relative paths will be prefixed by `zcashd_datadir` location.
     #[arg(long, default_value = "zcash.conf")]
     pub(crate) conf: PathBuf,
 
     /// Specify `zcashd` data directory (this path cannot use '~').
     #[arg(long)]
-    pub(crate) datadir: Option<PathBuf>,
+    pub(crate) zcashd_datadir: Option<PathBuf>,
 
     /// Allow a migration when warnings are present.
     #[arg(long)]
@@ -133,6 +137,27 @@ pub(crate) struct MigrateZcashConfCmd {
     /// Temporary flag ensuring any alpha users are aware the migration is not stable.
     #[arg(long)]
     pub(crate) this_is_alpha_code_and_you_will_need_to_redo_the_migration_later: bool,
+}
+
+/// `migrate-zcashd-wallet` subcommand
+#[cfg(zallet_build = "wallet")]
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct MigrateZcashdWalletCmd {
+    /// Specify location of the `zcashd` `wallet.dat` file.
+    ///
+    /// Relative paths will be prefixed by `zcashd_datadir` location.
+    #[arg(long, default_value = "wallet.dat")]
+    pub(crate) path: PathBuf,
+
+    /// Specify `zcashd` data directory (this path cannot use '~').
+    #[arg(long)]
+    pub(crate) zcashd_datadir: Option<PathBuf>,
+
+    /// Allow a migration when warnings are present. If set to `false`, any warning will be treated
+    /// as an error and cause the migration to abort.
+    #[arg(long)]
+    pub(crate) allow_warnings: bool,
 }
 
 /// `init-wallet-encryption` subcommand

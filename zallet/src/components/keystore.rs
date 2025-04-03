@@ -117,6 +117,7 @@ use std::time::{Duration, SystemTime};
 
 use bip0039::{English, Mnemonic};
 use rusqlite::named_params;
+use sapling::zip32::{DiversifiableFullViewingKey, ExtendedSpendingKey};
 use secrecy::{ExposeSecret, SecretString, SecretVec, Zeroize};
 use tokio::{
     sync::{Mutex, RwLock},
@@ -497,18 +498,15 @@ impl KeyStore {
 
     pub(crate) async fn encrypt_and_store_mnemonic(
         &self,
-        mnemonic: &SecretString,
+        mnemonic: Mnemonic,
     ) -> Result<SeedFingerprint, Error> {
         let recipients = self.recipients().await?;
 
-        let seed_bytes = SecretVec::new(
-            Mnemonic::<English>::from_phrase(mnemonic.expose_secret())
-                .map_err(|e| ErrorKind::Generic.context(e))?
-                .to_seed("")
-                .to_vec(),
-        );
+        let seed_bytes = SecretVec::new(mnemonic.to_seed("").to_vec());
         let seed_fp = SeedFingerprint::from_seed(seed_bytes.expose_secret()).expect("valid length");
 
+        // Take ownership of the memory of the mnemonic to ensure it will be correctly zeroized on drop
+        let mnemonic = SecretString::new(mnemonic.into_phrase());
         let encrypted_mnemonic = encrypt_string(&recipients, mnemonic.expose_secret())
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
@@ -559,6 +557,62 @@ impl KeyStore {
         .await?;
 
         Ok(legacy_seed_fp)
+    }
+
+    pub(crate) async fn encrypt_and_store_standalone_sapling_key(
+        &self,
+        sapling_key: &ExtendedSpendingKey,
+    ) -> Result<DiversifiableFullViewingKey, Error> {
+        let recipients = self.recipients().await?;
+
+        let dfvk = sapling_key.to_diversifiable_full_viewing_key();
+        let encrypted_sapling_extsk = encrypt_standalone_sapling_key(&recipients, sapling_key)
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+
+        self.with_db_mut(|conn, _| {
+            conn.execute(
+                "INSERT INTO ext_zallet_keystore_standalone_sapling_keys
+                VALUES (:dfvk, :encrypted_sapling_extsk)
+                ON CONFLICT (dfvk) DO NOTHING ",
+                named_params! {
+                    ":dfvk": &dfvk.to_bytes(),
+                    ":encrypted_sapling_extsk": encrypted_sapling_extsk,
+                },
+            )
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+            Ok(())
+        })
+        .await?;
+
+        Ok(dfvk)
+    }
+
+    pub(crate) async fn encrypt_and_store_standalone_transparent_key(
+        &self,
+        key: &zcash_keys::keys::transparent::Key,
+    ) -> Result<(), Error> {
+        let recipients = self.recipients().await?;
+
+        let encrypted_transparent_key =
+            encrypt_standalone_transparent_privkey(&recipients, key.secret())
+                .map_err(|e| ErrorKind::Generic.context(e))?;
+
+        self.with_db_mut(|conn, _| {
+            conn.execute(
+                "INSERT INTO ext_zallet_keystore_standalone_transparent_keys
+                VALUES (:pubkey, :encrypted_key_bytes)
+                ON CONFLICT (pubkey) DO NOTHING ",
+                named_params! {
+                    ":pubkey": &key.pubkey().serialize(),
+                    ":encrypted_key_bytes": encrypted_transparent_key,
+                },
+            )
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+            Ok(())
+        })
+        .await?;
+
+        Ok(())
     }
 
     /// Decrypts the mnemonic phrase corresponding to the given seed fingerprint.
@@ -620,18 +674,41 @@ fn encrypt_string(
     Ok(ciphertext)
 }
 
+fn encrypt_secret(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    secret: &SecretVec<u8>,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let encryptor = age::Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref() as _))?;
+
+    let mut ciphertext = Vec::with_capacity(secret.expose_secret().len());
+    let mut writer = encryptor.wrap_output(&mut ciphertext)?;
+    writer.write_all(secret.expose_secret())?;
+    writer.finish()?;
+
+    Ok(ciphertext)
+}
+
 fn encrypt_legacy_seed_bytes(
     recipients: &[Box<dyn age::Recipient + Send>],
     seed: &SecretVec<u8>,
 ) -> Result<Vec<u8>, age::EncryptError> {
-    let encryptor = age::Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref() as _))?;
+    encrypt_secret(recipients, seed)
+}
 
-    let mut ciphertext = Vec::with_capacity(seed.expose_secret().len());
-    let mut writer = encryptor.wrap_output(&mut ciphertext)?;
-    writer.write_all(seed.expose_secret())?;
-    writer.finish()?;
+fn encrypt_standalone_sapling_key(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    key: &ExtendedSpendingKey,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let secret = SecretVec::new(key.to_bytes().to_vec());
+    encrypt_secret(recipients, &secret)
+}
 
-    Ok(ciphertext)
+fn encrypt_standalone_transparent_privkey(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    key: &secp256k1::SecretKey,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let secret = SecretVec::new(key.secret_bytes().to_vec());
+    encrypt_secret(recipients, &secret)
 }
 
 fn decrypt_string(

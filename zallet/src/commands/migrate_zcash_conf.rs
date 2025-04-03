@@ -22,10 +22,10 @@ use crate::{
 impl AsyncRunnable for MigrateZcashConfCmd {
     async fn run(&self) -> Result<(), Error> {
         let conf = if self.conf.is_relative() {
-            if let Some(datadir) = self.datadir.as_ref() {
+            if let Some(datadir) = self.zcashd_datadir.as_ref() {
                 datadir.join(&self.conf)
             } else {
-                default_data_dir()
+                zcashd_default_data_dir()
                     .ok_or(ErrorKind::Generic)?
                     .join(&self.conf)
             }
@@ -178,7 +178,7 @@ impl Runnable for MigrateZcashConfCmd {
     }
 }
 
-fn default_data_dir() -> Option<PathBuf> {
+pub(crate) fn zcashd_default_data_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     {
         use known_folders::{KnownFolder, get_known_folder_path};

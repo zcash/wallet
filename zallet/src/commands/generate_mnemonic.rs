@@ -1,7 +1,6 @@
 use abscissa_core::Runnable;
 use bip0039::{Count, English, Mnemonic};
 use rand::{RngCore, rngs::OsRng};
-use secrecy::SecretString;
 
 use crate::{
     cli::GenerateMnemonicCmd,
@@ -30,9 +29,7 @@ impl AsyncRunnable for GenerateMnemonicCmd {
         let mnemonic = Mnemonic::<English>::from_entropy(entropy)
             .expect("valid entropy length won't fail to generate the mnemonic");
 
-        keystore
-            .encrypt_and_store_mnemonic(&SecretString::new(mnemonic.into_phrase()))
-            .await?;
+        keystore.encrypt_and_store_mnemonic(mnemonic).await?;
 
         Ok(())
     }

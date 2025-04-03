@@ -57,6 +57,8 @@ fn verify_schema() {
             keystore::db::TABLE_LEGACY_SEEDS,
             #[cfg(zallet_build = "wallet")]
             keystore::db::TABLE_MNEMONICS,
+            keystore::db::TABLE_STANDALONE_SAPLING_KEYS,
+            keystore::db::TABLE_STANDALONE_TRANSPARENT_KEYS,
         ],
     );
 

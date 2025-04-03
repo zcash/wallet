@@ -25,6 +25,7 @@ mod error;
 mod i18n;
 pub mod network;
 mod prelude;
+mod rosetta;
 mod task;
 
 // Needed for the `Component` derive to work.
