@@ -179,21 +179,37 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                     }
                 }
                 Address::Sapling(_) => sapling_addresses.push(addr.encode(wallet.params())),
-                Address::Unified(addr) => unified_addresses.push(UnifiedAddress {
-                    diversifier_index: address_info.diversifier_index().into(),
-                    receiver_types: addr
-                        .receiver_types()
-                        .into_iter()
-                        .map(|r| match r {
-                            unified::Typecode::P2pkh => "p2pkh".into(),
-                            unified::Typecode::P2sh => "p2sh".into(),
-                            unified::Typecode::Sapling => "sapling".into(),
-                            unified::Typecode::Orchard => "orchard".into(),
-                            unified::Typecode::Unknown(typecode) => format!("unknown({typecode})"),
-                        })
-                        .collect(),
-                    address: addr.encode(wallet.params()),
-                }),
+                Address::Unified(addr) => {
+                    let address = addr.encode(wallet.params());
+                    unified_addresses.push(UnifiedAddress {
+                        diversifier_index: match address_info.source() {
+                            zcash_client_backend::data_api::AddressSource::Derived {
+                                diversifier_index,
+                            } => diversifier_index.into(),
+                            zcash_client_backend::data_api::AddressSource::Imported => {
+                                error!(
+                                    "Unified address {} lacks HD derivation information.",
+                                    address
+                                );
+                                return Err(RpcErrorCode::InternalError.into());
+                            }
+                        },
+                        receiver_types: addr
+                            .receiver_types()
+                            .into_iter()
+                            .map(|r| match r {
+                                unified::Typecode::P2pkh => "p2pkh".into(),
+                                unified::Typecode::P2sh => "p2sh".into(),
+                                unified::Typecode::Sapling => "sapling".into(),
+                                unified::Typecode::Orchard => "orchard".into(),
+                                unified::Typecode::Unknown(typecode) => {
+                                    format!("unknown({typecode})")
+                                }
+                            })
+                            .collect(),
+                        address,
+                    })
+                }
             }
         }
 

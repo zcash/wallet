@@ -432,7 +432,7 @@ async fn poll_transparent(
         let addresses = db_data
             .get_account_ids()?
             .into_iter()
-            .map(|account| db_data.get_transparent_receivers(account, true))
+            .map(|account| db_data.get_transparent_receivers(account, true, true))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flat_map(|m| m.into_keys().map(|addr| addr.encode(params)))
