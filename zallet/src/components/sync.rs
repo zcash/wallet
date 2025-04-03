@@ -581,6 +581,18 @@ async fn data_requests(
                     }
                 }
                 TransactionDataRequest::TransactionsInvolvingAddress(req) => {
+                    // nb: Zallet is a full node wallet with an index; we can safely look up
+                    // information immediately without exposing correlations between addresses to
+                    // untrusted parties, so we can ignore the `request_at` field.
+
+                    // TODO: we're making the *large* assumption that the chain data doesn't update
+                    // between the multiple chain calls in this method. Ideally, Zaino will give us
+                    // a "transactional" API so that we can ensure internal consistency; for now,
+                    // we pick the chain height as of the start of evaluation as the "evaluated-at"
+                    // height for this data request, in order to not overstate the height for which
+                    // all observations are valid.
+                    let chain_tip = chain.chain_height().await?;
+
                     let address = req.address().encode(params);
                     debug!(
                         tx_status_filter = ?req.tx_status_filter(),
@@ -682,6 +694,8 @@ async fn data_requests(
 
                         decrypt_and_store_transaction(params, db_data, &tx, mined_height)?;
                     }
+
+                    db_data.notify_address_checked(req, chain_tip.into())?;
                 }
             }
         }
