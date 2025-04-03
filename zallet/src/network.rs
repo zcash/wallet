@@ -123,7 +123,7 @@ pub(crate) mod kind {
         deserializer: D,
     ) -> Result<NetworkType, D::Error> {
         struct NetworkTypeVisitor;
-        impl<'de> Visitor<'de> for NetworkTypeVisitor {
+        impl Visitor<'_> for NetworkTypeVisitor {
             type Value = NetworkType;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

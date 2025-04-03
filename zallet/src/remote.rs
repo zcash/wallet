@@ -121,7 +121,7 @@ impl Server<'static> {
     }
 }
 
-impl<'a> Server<'a> {
+impl Server<'_> {
     fn custom(host: String, port: u16) -> Self {
         Self {
             host: Cow::Owned(host),
