@@ -497,7 +497,10 @@ pub(crate) async fn call(
                             account_uuid,
                             Some(address.encode(wallet.params())),
                             wallet_scope.is_none(),
-                            matches!(wallet_scope, Some(TransparentKeyScope::INTERNAL)),
+                            // The outer `Some` indicates that we have address metadata; the inner
+                            // `Option` is `None` for addresses associated with imported transparent
+                            // spending keys.
+                            wallet_scope == Some(Some(TransparentKeyScope::INTERNAL)),
                         )
                     }
                 };

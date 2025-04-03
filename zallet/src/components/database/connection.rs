@@ -307,8 +307,11 @@ impl WalletRead for DbConnection {
         &self,
         account: Self::AccountId,
         include_change: bool,
+        include_standalone: bool,
     ) -> Result<HashMap<TransparentAddress, Option<TransparentAddressMetadata>>, Self::Error> {
-        self.with(|db_data| db_data.get_transparent_receivers(account, include_change))
+        self.with(|db_data| {
+            db_data.get_transparent_receivers(account, include_change, include_standalone)
+        })
     }
 
     fn get_transparent_balances(
@@ -472,6 +475,14 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| {
             db_data.import_account_ufvk(account_name, unified_key, birthday, purpose, key_source)
         })
+    }
+
+    fn import_standalone_transparent_pubkey(
+        &mut self,
+        account: Self::AccountId,
+        pubkey: secp256k1::PublicKey,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.import_standalone_transparent_pubkey(account, pubkey))
     }
 
     fn get_next_available_address(

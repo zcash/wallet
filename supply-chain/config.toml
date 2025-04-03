@@ -22,6 +22,15 @@ url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 [imports.zcash]
 url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
 
+[policy.abscissa_core]
+audit-as-crates-io = true
+
+[policy.abscissa_derive]
+audit-as-crates-io = true
+
+[policy.abscissa_tokio]
+audit-as-crates-io = true
+
 [policy.age]
 audit-as-crates-io = true
 
@@ -104,15 +113,15 @@ audit-as-crates-io = true
 audit-as-crates-io = true
 
 [[exemptions.abscissa_core]]
-version = "0.8.1"
+version = "0.8.2@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
 criteria = "safe-to-deploy"
 
 [[exemptions.abscissa_derive]]
-version = "0.8.0"
+version = "0.8.2@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
 criteria = "safe-to-deploy"
 
 [[exemptions.abscissa_tokio]]
-version = "0.8.0"
+version = "0.8.0@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
 criteria = "safe-to-deploy"
 
 [[exemptions.addr2line]]
@@ -141,10 +150,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.aho-corasick]]
 version = "1.1.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.allocator-api2]]
-version = "0.2.21"
 criteria = "safe-to-deploy"
 
 [[exemptions.anstream]]
@@ -552,7 +557,7 @@ version = "0.7.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.equihash]]
-version = "0.2.2@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.2.2@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.eyre]]
@@ -560,7 +565,7 @@ version = "0.6.12"
 criteria = "safe-to-deploy"
 
 [[exemptions.f4jumble]]
-version = "0.1.1@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.1.1@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.fallible-iterator]]
@@ -1784,43 +1789,43 @@ version = "0.1.2@git:1004733f3303b1c48b6df6db610c54401554683c"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_address]]
-version = "0.9.0@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.9.0@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_client_backend]]
-version = "0.19.1@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.19.1@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_client_sqlite]]
-version = "0.17.3@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.17.3@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_encoding]]
-version = "0.3.0@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.3.0@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_history]]
-version = "0.4.0@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.4.0@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_keys]]
-version = "0.10.1@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.10.1@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_primitives]]
-version = "0.24.0@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.24.1@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_proofs]]
-version = "0.24.0@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.24.0@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_protocol]]
-version = "0.6.1@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.6.1@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_transparent]]
-version = "0.4.0@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.4.0@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-chain]]
@@ -1868,5 +1873,5 @@ version = "0.8.24"
 criteria = "safe-to-deploy"
 
 [[exemptions.zip321]]
-version = "0.5.0@git:8be259c579762f1b0f569453a20c0d0dbeae6c07"
+version = "0.5.0@git:10caf455e3f52744b5392af226a408b05721f70f"
 criteria = "safe-to-deploy"

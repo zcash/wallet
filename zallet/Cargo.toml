@@ -106,6 +106,7 @@ sapling.workspace = true
 schemars.workspace = true
 schemerz.workspace = true
 schemerz-rusqlite.workspace = true
+secp256k1.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -131,10 +132,12 @@ zcash_client_backend = { workspace = true, features = [
     "orchard",
     "sync",
     "transparent-inputs",
+    "transparent-key-import",
 ] }
 zcash_client_sqlite = { workspace = true, features = [
     "orchard",
     "transparent-inputs",
+    "transparent-key-import",
 ] }
 zcash_keys.workspace = true
 zcash_note_encryption.workspace = true

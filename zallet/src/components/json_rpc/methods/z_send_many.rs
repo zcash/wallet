@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
 use std::num::NonZeroU32;
 
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use zaino_state::FetchServiceSubscriber;
 use zcash_address::{ZcashAddress, unified};
+use zcash_client_backend::data_api::wallet::SpendingKeys;
 use zcash_client_backend::{
     data_api::{
         Account,
@@ -390,7 +391,8 @@ async fn run(
             &params,
             &prover,
             &prover,
-            &usk,
+            // TODO: Look up spending keys for imported transparent addresses used in the proposal.
+            &SpendingKeys::new(usk, HashMap::new()),
             OvkPolicy::Sender,
             &proposal,
         )
