@@ -27,9 +27,7 @@ impl ImportMnemonicCmd {
         let mnemonic = Mnemonic::<English>::from_phrase(phrase.expose_secret())
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
-        let seedfp = keystore
-            .encrypt_and_store_mnemonic(&SecretString::new(mnemonic.into_phrase()))
-            .await?;
+        let seedfp = keystore.encrypt_and_store_mnemonic(&mnemonic).await?;
 
         println!("Seed fingerprint: {}", encode_seedfp_parameter(&seedfp));
 
