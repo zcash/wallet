@@ -54,6 +54,8 @@ fn verify_schema() {
             keystore::db::TABLE_AGE_RECIPIENTS,
             keystore::db::TABLE_LEGACY_SEEDS,
             keystore::db::TABLE_MNEMONICS,
+            keystore::db::TABLE_STANDALONE_SAPLING_KEYS,
+            keystore::db::TABLE_STANDALONE_TRANSPARENT_KEYS,
         ],
     );
 
