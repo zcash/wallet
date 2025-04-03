@@ -1,6 +1,4 @@
 use std::fmt;
-use std::path::PathBuf;
-use std::sync::Arc;
 
 use abscissa_core::tracing::info;
 use tokio::fs;
@@ -23,15 +21,12 @@ pub(crate) type DbHandle = deadpool::managed::Object<connection::WalletManager>;
 
 #[derive(Clone)]
 pub(crate) struct Database {
-    path: Arc<PathBuf>,
     db_data_pool: connection::WalletPool,
 }
 
 impl fmt::Debug for Database {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Database")
-            .field("path", &self.path)
-            .finish_non_exhaustive()
+        f.debug_struct("Database").finish_non_exhaustive()
     }
 }
 
@@ -53,10 +48,7 @@ impl Database {
 
         let db_data_pool = connection::pool(&path, config.network())?;
 
-        let database = Self {
-            path: Arc::new(path),
-            db_data_pool,
-        };
+        let database = Self { db_data_pool };
 
         // Initialize the database before we go any further.
         if db_exists {
