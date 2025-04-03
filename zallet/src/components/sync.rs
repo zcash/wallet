@@ -574,39 +574,44 @@ async fn data_requests(
                             .set_transaction_status(txid, TransactionStatus::TxidNotRecognized)?;
                     }
                 }
-                TransactionDataRequest::TransactionsInvolvingAddress {
-                    address,
-                    block_range_start,
-                    block_range_end,
-                    request_at,
-                    tx_status_filter,
-                    output_status_filter,
-                } => {
-                    let address = address.encode(params);
+                TransactionDataRequest::TransactionsInvolvingAddress(req) => {
+                    info!(
+                        "Checking for new UTXOs at address {}",
+                        req.address().encode(params)
+                    );
+
+                    // nb: Zallet is a full node wallet with an index; we can safely look up
+                    // information immediately without exposing correlations between addresses to
+                    // untrusted parties, so we can ignore the `request_at` field.
+
+                    // TODO: we're making the *large* assumption that the chain data doesn't update
+                    // between the multiple chain calls in this method. Ideally, Zaino will give us
+                    // a "transactional" API so that we can ensure internal consistency; for now,
+                    // we pick the chain height as of the start of evaluation as the "evaluated-at"
+                    // height for this data request, in order to not overstate the height for which
+                    // all observations are valid.
+                    let chain_tip = chain.chain_height().await?;
+
+                    let address = req.address().encode(params);
                     debug!(
-                        tx_status_filter = ?tx_status_filter,
-                        output_status_filter = ?output_status_filter,
+                        tx_status_filter = ?req.tx_status_filter(),
+                        output_status_filter = ?req.output_status_filter(),
                         "Fetching transactions involving {address} in range {}..{}",
-                        block_range_start,
-                        block_range_end.map(|h| h.to_string()).unwrap_or_default(),
+                        req.block_range_start(),
+                        req.block_range_end().map(|h| h.to_string()).unwrap_or_default(),
                     );
 
                     let request = GetAddressTxIdsRequest::from_parts(
                         vec![address.clone()],
-                        block_range_start.into(),
-                        block_range_end.map(u32::from).unwrap_or(0),
+                        req.block_range_start().into(),
+                        req.block_range_end().map(u32::from).unwrap_or(0),
                     );
 
-                    // Zallet is a full node wallet with an index; we can safely look up
-                    // information immediately without exposing correlations between
-                    // addresses to untrusted parties.
-                    let _ = request_at;
-
-                    let txs_with_unspent_outputs = match output_status_filter {
+                    let txs_with_unspent_outputs = match req.output_status_filter() {
                         OutputStatusFilter::Unspent => {
                             let request = GetAddressUtxosArg {
                                 addresses: vec![address],
-                                start_height: block_range_start.into(),
+                                start_height: req.block_range_start().into(),
                                 max_entries: 0,
                             };
                             Some(
@@ -640,7 +645,7 @@ async fn data_requests(
                         let mined_height = tx.height.map(BlockHeight::from_u32);
 
                         // Ignore transactions that don't match the status filter.
-                        match (&tx_status_filter, mined_height) {
+                        match (&req.tx_status_filter(), mined_height) {
                             (TransactionStatusFilter::Mined, None)
                             | (TransactionStatusFilter::Mempool, Some(_)) => continue,
                             _ => (),
@@ -684,6 +689,8 @@ async fn data_requests(
 
                         decrypt_and_store_transaction(params, db_data, &tx, mined_height)?;
                     }
+
+                    db_data.notify_address_checked(req, chain_tip.into())?;
                 }
             }
         }

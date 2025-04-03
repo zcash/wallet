@@ -20,7 +20,8 @@ use zcash_client_backend::{
 use zcash_client_sqlite::{WalletDb, util::SystemClock};
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
 use zcash_protocol::{ShieldedProtocol, consensus::BlockHeight, value::Zatoshis};
-use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
+use zip32::DiversifierIndex;
+use zip32::fingerprint::SeedFingerprint;
 
 use crate::{
     error::{Error, ErrorKind},
@@ -523,6 +524,14 @@ impl WalletWrite for DbConnection {
         status: zcash_client_backend::data_api::TransactionStatus,
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.set_transaction_status(txid, status))
+    }
+
+    fn notify_address_checked(
+        &mut self,
+        request: zcash_client_backend::data_api::TransactionsInvolvingAddress,
+        as_of_height: BlockHeight,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.notify_address_checked(request, as_of_height))
     }
 }
 
