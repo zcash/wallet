@@ -54,7 +54,7 @@ pub(crate) struct GetWalletInfo {
 pub(crate) async fn call(keystore: &KeyStore) -> Response {
     warn!("TODO: Implement getwalletinfo");
 
-    let unlocked_until = if keystore.is_crypted() {
+    let unlocked_until = if keystore.uses_encrypted_identities() {
         Some(
             keystore
                 .unlocked_until()

@@ -16,8 +16,8 @@
 //! Zallet uses [`age`] to encrypt key material. age is built around the concept of
 //! "encryption recipients" and "decryption identities", and provides several features:
 //!
-//! - Once the wallet has been initialized for an identity file, key material can be
-//!   securely added to the wallet at any time without requiring the identity file.
+//! - Once the wallet has been initialized for an identity file, spending key material can
+//!   be securely added to the wallet at any time without requiring the identity file.
 //! - Key material can be encrypted to multiple recipients, which enables wallet operators
 //!   to add redundancy to their backup strategies.
 //!   - For example, an operator could configure Zallet with an online identity file used
@@ -146,7 +146,7 @@ pub(crate) struct KeyStore {
     db: Option<Database>,
 
     /// A ciphertext ostensibly containing encrypted age identities, or `None` if the
-    /// wallet is not using runtime-encrypted identities.
+    /// keystore is not using runtime-encrypted identities.
     encrypted_identities: Option<Vec<u8>>,
 
     /// The in-memory cache of age identities for decrypting key material.
@@ -186,7 +186,7 @@ impl Component<ZalletApp> for KeyStore {
                 return Err(FrameworkErrorKind::ComponentError
                     .context(
                         ErrorKind::Init
-                            .context("keystore.identity file is not encrypted with a passphrase"),
+                            .context(format!("{path} is not encrypted with a passphrase")),
                     )
                     .into());
             }
@@ -194,11 +194,11 @@ impl Component<ZalletApp> for KeyStore {
             self.encrypted_identities = Some(identity_data);
         } else {
             // Try parsing as multiple single-line age identities.
-            let identity_file =
-                age::IdentityFile::from_file(path)?.with_callbacks(age::cli_common::UiCallbacks);
+            let identity_file = age::IdentityFile::from_file(path.clone())?
+                .with_callbacks(age::cli_common::UiCallbacks);
             let identities = identity_file.into_identities().map_err(|e| {
                 FrameworkErrorKind::ComponentError.context(
-                    ErrorKind::Init.context(format!("keystore.identity file is not usable: {e}")),
+                    ErrorKind::Init.context(format!("Identity file at {path} is not usable: {e}")),
                 )
             })?;
 
@@ -222,20 +222,34 @@ impl KeyStore {
     }
 
     /// Returns `true` if the keystore's age identities are runtime-encrypted.
-    pub(crate) fn is_crypted(&self) -> bool {
+    ///
+    /// When this returns `true`, [`Self::is_locked`] must return `false` in order to have
+    /// access to spending key material.
+    pub(crate) fn uses_encrypted_identities(&self) -> bool {
         self.encrypted_identities.is_some()
     }
 
     /// Returns `true` if the keystore's age identities are not available for decrypting
     /// key material.
+    ///
+    /// - If [`Self::uses_encrypted_identities`] returns `false`, this always returns
+    ///   `true`.
+    /// - If [`Self::uses_encrypted_identities`] returns `true`, this returns `true` when
+    ///   [`Self::unlocked_until`] returns `None`.
     pub(crate) async fn is_locked(&self) -> bool {
         self.identities.read().await.is_empty()
     }
 
-    /// Returns the [`SystemTime`] at which the wallet will re-lock, if currently unlocked.
+    /// Returns the [`SystemTime`] at which the keystore will re-lock, if it is currently
+    /// unlocked.
+    ///
+    /// - To unlock the keystore or extend this time, use [`Self::unlock`].
+    /// - To re-lock the keystore before this time, use [`Self::lock`].
     pub(crate) async fn unlocked_until(&self) -> Option<SystemTime> {
         let relock_task = self.relock_task.lock().await;
-        relock_task.as_ref().map(|(deadline, _)| *deadline)
+        relock_task
+            .as_ref()
+            .and_then(|(deadline, task)| (!task.is_finished()).then_some(*deadline))
     }
 
     /// Decrypts the keystore's [`age::IdentityFile`] using the given passphrase.
@@ -327,10 +341,10 @@ impl KeyStore {
         true
     }
 
-    /// Clears the in-memory cache of age identities, locking the wallet.
+    /// Clears the in-memory cache of age identities, locking the keystore.
     pub(crate) async fn lock(&self) {
         // If the keystore isn't encrypted, we don't want to clear the cached identities.
-        if !self.is_crypted() {
+        if !self.uses_encrypted_identities() {
             return;
         }
 

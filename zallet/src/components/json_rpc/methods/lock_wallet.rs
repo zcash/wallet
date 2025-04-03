@@ -6,7 +6,7 @@ use crate::components::{json_rpc::server::LegacyCode, keystore::KeyStore};
 pub(crate) type Response = RpcResult<()>;
 
 pub(crate) async fn call(keystore: &KeyStore) -> Response {
-    if !keystore.is_crypted() {
+    if !keystore.uses_encrypted_identities() {
         return Err(LegacyCode::WalletWrongEncState
             .with_static("Error: running with an unencrypted wallet, but walletlock was called."));
     }
