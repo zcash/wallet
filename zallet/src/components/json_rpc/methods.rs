@@ -12,6 +12,7 @@ use crate::components::{
 };
 
 mod get_address_for_account;
+mod get_new_account;
 mod get_notes_count;
 mod get_wallet_info;
 mod list_accounts;
@@ -49,6 +50,24 @@ pub(crate) trait Rpc {
 
     #[method(name = "z_listaccounts")]
     async fn list_accounts(&self) -> list_accounts::Response;
+
+    /// Prepares and returns a new account.
+    ///
+    /// Accounts are numbered starting from zero; this RPC method selects the next
+    /// available sequential account number within the UA-compatible HD seed phrase.
+    ///
+    /// TODO: Update the previous paragraph, and this RPC method, to support wallets with
+    /// more than one seed phrase.
+    ///
+    /// TODO: Decide how the new `account_name` field should work / be positioned relative
+    /// to other parameters we may need for multiple seed phrase support.
+    ///
+    /// Each new account is a separate group of funds within the wallet, and adds an
+    /// additional performance cost to wallet scanning.
+    ///
+    /// Use the `z_getaddressforaccount` RPC method to obtain addresses for an account.
+    #[method(name = "z_getnewaccount")]
+    async fn get_new_account(&self, account_name: &str) -> get_new_account::Response;
 
     /// For the given account, derives a Unified Address in accordance with the remaining
     /// arguments:
@@ -174,6 +193,16 @@ impl RpcServer for RpcImpl {
 
     async fn list_accounts(&self) -> list_accounts::Response {
         list_accounts::call(self.wallet().await?.as_ref())
+    }
+
+    async fn get_new_account(&self, account_name: &str) -> get_new_account::Response {
+        get_new_account::call(
+            self.wallet().await?.as_mut(),
+            &self.keystore,
+            self.chain().await?,
+            account_name,
+        )
+        .await
     }
 
     async fn get_address_for_account(
