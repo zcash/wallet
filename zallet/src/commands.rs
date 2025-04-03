@@ -14,6 +14,7 @@ mod generate_mnemonic;
 mod import_mnemonic;
 mod init_wallet_encryption;
 mod migrate_zcash_conf;
+mod migrate_zcashd_wallet;
 mod start;
 
 #[cfg(feature = "rpc-cli")]
