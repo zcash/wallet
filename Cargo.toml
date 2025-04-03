@@ -79,9 +79,10 @@ zcash_protocol = "0.5"
 orchard = "0.11"
 sapling = { package = "sapling-crypto", version = "0.5" }
 transparent = { package = "zcash_transparent", version = "0.2" }
-zcash_keys = "0.8"
+zcash_keys = { version = "0.8", features = ["transparent-inputs", "sapling", "orchard", "transparent-key-encoding"] }
 zcash_primitives = "0.22"
 zcash_proofs = "0.22"
+secp256k1 = "0.29"
 
 # Zcash chain state
 zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "4827c1347d5657fc89c8d3a96ec231bd15f82450" }
@@ -95,7 +96,7 @@ zebra-state = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "8b9
 deadpool = "0.12"
 deadpool-sqlite = "0.9"
 deadpool-sync = "0.1"
-incrementalmerkletree = "0.8"
+incrementalmerkletree = "0.8.2"
 rusqlite = { version = "0.32", features = ["time"] }
 schemerz = "0.2"
 schemerz-rusqlite = "0.320.0"
@@ -107,23 +108,33 @@ zcash_client_backend = "0.18"
 zcash_client_sqlite = "0.16"
 zcash_note_encryption = "0.4"
 zip32 = "0.2"
+bip32 = "0.2"
+
+# Zcashd wallet migration
+zewif = { version = "0.1" }
+zewif-zcashd = { version = "0.1" }
+anyhow = "1.0"
 
 # lightwalletd (temporary)
 tonic = "0.13"
 
 [patch.crates-io]
 age = { git = "https://github.com/str4d/rage.git", rev = "84dc1e9f641994388f107ceebdbaa00126e30e16" }
-equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+equihash = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+transparent = { package = "zcash_transparent", git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_address = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_client_backend = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_client_sqlite = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_encoding = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_history = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_keys = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_primitives = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_proofs = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zcash_protocol = { git = "https://github.com/nuttycom/librustzcash.git", rev = "c201880c8e3ff203d27c0e2d5a5c9ac463cf233d" }
+zip32 = { git = "https://github.com/zcash/zip32", rev = "bbd4e9c24356837c4eeb2aa23ac93ba86984bc9f" }
+
+zewif = { git = "https://github.com/BlockchainCommons/zewif.git", rev = "8f005a6f5a189815dc08821f99cfe7e8af4e7f62" }
+zewif-zcashd = { git = "https://github.com/BlockchainCommons/zewif-zcashd.git", rev = "74cd5bc2a66a8ce63534c2c1c9ff2dedb2f9d9fd" }
 
 # Apply PRs on top of what Zaino depends on:
 # - https://github.com/ZcashFoundation/zebra/pull/9536
