@@ -25,7 +25,7 @@ impl AsyncRunnable for MigrateZcashConfCmd {
             if let Some(datadir) = self.datadir.as_ref() {
                 datadir.join(&self.conf)
             } else {
-                default_data_dir()
+                zcashd_data_dir()
                     .ok_or(ErrorKind::Generic)?
                     .join(&self.conf)
             }
@@ -178,7 +178,7 @@ impl Runnable for MigrateZcashConfCmd {
     }
 }
 
-fn default_data_dir() -> Option<PathBuf> {
+pub(crate) fn zcashd_data_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     {
         use known_folders::{KnownFolder, get_known_folder_path};

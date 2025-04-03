@@ -98,7 +98,7 @@ impl DbConnection {
         &self.params
     }
 
-    fn with<T>(
+    pub(crate) fn with<T>(
         &self,
         f: impl FnOnce(WalletDb<&rusqlite::Connection, Network, SystemClock, OsRng>) -> T,
     ) -> T {
