@@ -23,7 +23,7 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-use super::database::Database;
+use super::{database::Database, keystore::KeyStore};
 
 pub(crate) mod methods;
 pub(crate) mod server;
@@ -36,10 +36,12 @@ fn value_from_zatoshis(value: Zatoshis) -> f64 {
 
 #[derive(Default, Injectable)]
 #[component(inject = "init_db(zallet::components::database::Database)")]
+#[component(inject = "init_keystore(zallet::components::keystore::KeyStore)")]
 #[component(inject = "init_tokio(abscissa_tokio::TokioComponent)")]
 pub(crate) struct JsonRpc {
     rpc: Option<RpcSection>,
     db: Option<Database>,
+    keystore: Option<KeyStore>,
     pub(crate) rpc_task: Option<JoinHandle<Result<(), Error>>>,
 }
 
@@ -70,10 +72,17 @@ impl JsonRpc {
         Ok(())
     }
 
+    /// Called automatically after `KeyStore` is initialized
+    pub fn init_keystore(&mut self, keystore: &KeyStore) -> Result<(), FrameworkError> {
+        self.keystore = Some(keystore.clone());
+        Ok(())
+    }
+
     /// Called automatically after `TokioComponent` is initialized
     pub fn init_tokio(&mut self, tokio_cmp: &TokioComponent) -> Result<(), FrameworkError> {
         let rpc = self.rpc.clone().expect("configured");
         let db = self.db.clone().expect("Database initialized");
+        let keystore = self.keystore.clone().expect("KeyStore initialized");
 
         let runtime = tokio_cmp.runtime()?;
 
@@ -86,7 +95,7 @@ impl JsonRpc {
                 }
                 info!("Spawning RPC server");
                 info!("Trying to open RPC endpoint at {}...", rpc.bind[0]);
-                server::start(rpc.clone(), db.clone()).await
+                server::start(rpc, db, keystore).await
             } else {
                 warn!("Configure `rpc.bind` to start the RPC server");
                 Ok(())

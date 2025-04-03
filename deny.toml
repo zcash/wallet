@@ -20,6 +20,7 @@ allow = [
 ]
 exceptions = [
     { name = "arrayref", allow = ["BSD-2-Clause"] },
+    { name = "curve25519-dalek", allow = ["BSD-3-Clause"] },
     { name = "matchit", allow = ["BSD-3-Clause"] },
     { name = "ring", allow = ["LicenseRef-ring"] },
     { name = "rustls-webpki", allow = ["ISC"] },
@@ -30,6 +31,7 @@ exceptions = [
     { name = "unicode-ident", allow = ["Unicode-DFS-2016"] },
     { name = "untrusted", allow = ["ISC"] },
     { name = "webpki-roots", allow = ["MPL-2.0"] },
+    { name = "x25519-dalek", allow = ["BSD-3-Clause"] },
 ]
 
 [[licenses.clarify]]

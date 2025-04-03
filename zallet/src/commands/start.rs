@@ -6,7 +6,7 @@ use tokio::{pin, select};
 use crate::{
     application::ZalletApp,
     cli::StartCmd,
-    components::{database::Database, json_rpc::JsonRpc, sync::WalletSync},
+    components::{database::Database, json_rpc::JsonRpc, keystore::KeyStore, sync::WalletSync},
     config::ZalletConfig,
     error::Error,
     prelude::*,
@@ -14,9 +14,12 @@ use crate::{
 
 impl StartCmd {
     pub(crate) fn register_components(&self, components: &mut Vec<Box<dyn Component<ZalletApp>>>) {
-        components.push(Box::new(Database::default()));
+        // Order these so that dependencies are pushed after the components that use them,
+        // to work around a bug: https://github.com/iqlusioninc/abscissa/issues/989
         components.push(Box::new(JsonRpc::default()));
         components.push(Box::new(WalletSync::new(self.lwd_server.clone())));
+        components.push(Box::new(KeyStore::default()));
+        components.push(Box::new(Database::default()));
     }
 
     async fn start(&self) -> Result<(), Error> {

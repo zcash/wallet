@@ -44,6 +44,12 @@ pub(crate) enum ZalletCmd {
 
     /// Generate a `zallet.toml` config from an existing `zcashd.conf` file.
     MigrateZcashdConf(MigrateZcashConfCmd),
+
+    /// Initialize wallet encryption.
+    InitWalletEncryption(InitWalletEncryptionCmd),
+
+    /// Generate a BIP 39 mnemonic phrase and store it in the wallet.
+    GenerateMnemonic(GenerateMnemonicCmd),
 }
 
 /// `start` subcommand
@@ -89,6 +95,16 @@ pub(crate) struct MigrateZcashConfCmd {
     #[arg(long)]
     pub(crate) this_is_alpha_code_and_you_will_need_to_redo_the_migration_later: bool,
 }
+
+/// `init-wallet-encryption` subcommand
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct InitWalletEncryptionCmd {}
+
+/// `generate-mnemonic` subcommand
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct GenerateMnemonicCmd {}
 
 // Below are temporary types included here so manpage building works.
 

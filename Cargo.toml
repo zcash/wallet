@@ -26,6 +26,10 @@ home = "0.5"
 known-folders = "1"
 xdg = "2.5"
 
+# Key storage
+age = { version = "0.11", features = ["armor", "cli-common", "plugin"] }
+bip0039 = "0.12"
+
 # Localization
 i18n-embed = { version = "0.15", features = ["fluent-system"] }
 i18n-embed-fl = "0.9"
@@ -66,10 +70,13 @@ zcash_primitives = "0.22"
 deadpool = "0.12"
 deadpool-sqlite = "0.9"
 deadpool-sync = "0.1"
-rusqlite = "0.32"
+rusqlite = { version = "0.32", features = ["time"] }
 schemerz = "0.2"
+schemerz-rusqlite = "0.320.0"
 secrecy = "0.8"
 shardtree = "0.6"
+time = "0.3"
+uuid = "1"
 zcash_client_backend = "0.18"
 zcash_client_sqlite = "0.16"
 zip32 = "0.2"
@@ -80,3 +87,11 @@ tonic = "0.12"
 [patch.crates-io]
 abscissa_core = { git = "https://github.com/str4d/abscissa.git", rev = "8da8e10cad02aa4a93099cb4942b48fbdc54eb89" }
 abscissa_tokio = { git = "https://github.com/str4d/abscissa.git", rev = "8da8e10cad02aa4a93099cb4942b48fbdc54eb89" }
+age = { git = "https://github.com/str4d/rage.git", rev = "84dc1e9f641994388f107ceebdbaa00126e30e16" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "f0c542734ef0b71defd027a98d1ce58ede7e5c95" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "f0c542734ef0b71defd027a98d1ce58ede7e5c95" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "f0c542734ef0b71defd027a98d1ce58ede7e5c95" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "f0c542734ef0b71defd027a98d1ce58ede7e5c95" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "f0c542734ef0b71defd027a98d1ce58ede7e5c95" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "f0c542734ef0b71defd027a98d1ce58ede7e5c95" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "f0c542734ef0b71defd027a98d1ce58ede7e5c95" }

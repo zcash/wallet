@@ -10,6 +10,8 @@ use crate::{
     config::ZalletConfig,
 };
 
+mod generate_mnemonic;
+mod init_wallet_encryption;
 mod migrate_zcash_conf;
 mod start;
 
@@ -53,6 +55,8 @@ impl EntryPoint {
         match &self.cmd {
             ZalletCmd::Start(cmd) => cmd.register_components(components),
             ZalletCmd::MigrateZcashdConf(_) => (),
+            ZalletCmd::InitWalletEncryption(cmd) => cmd.register_components(components),
+            ZalletCmd::GenerateMnemonic(cmd) => cmd.register_components(components),
         }
     }
 }

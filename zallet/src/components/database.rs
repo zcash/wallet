@@ -1,12 +1,13 @@
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use abscissa_core::{
     component::Injectable, tracing::info, Component, FrameworkError, FrameworkErrorKind,
 };
 use abscissa_tokio::TokioComponent;
 use tokio::fs;
-use zcash_client_sqlite::wallet::init::{init_wallet_db, WalletMigrationError};
+use zcash_client_sqlite::wallet::init::{WalletMigrationError, WalletMigrator};
 
 use crate::{
     application::ZalletApp,
@@ -14,15 +15,20 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
+use super::keystore;
+
 mod connection;
 pub(crate) use connection::DbConnection;
+
+#[cfg(test)]
+mod tests;
 
 pub(crate) type DbHandle = deadpool::managed::Object<connection::WalletManager>;
 
 #[derive(Clone, Default, Injectable)]
 #[component(inject = "init_tokio(abscissa_tokio::TokioComponent)")]
 pub(crate) struct Database {
-    path: Option<PathBuf>,
+    path: Option<Arc<PathBuf>>,
     db_data_pool: Option<connection::WalletPool>,
 }
 
@@ -50,7 +56,7 @@ impl Component<ZalletApp> for Database {
             connection::pool(&path, config.network())
                 .map_err(|e| FrameworkErrorKind::ComponentError.context(e))?,
         );
-        self.path = Some(path);
+        self.path = Some(Arc::new(path));
 
         Ok(())
     }
@@ -66,7 +72,7 @@ impl Database {
             .block_on(async {
                 let path = self.path.as_ref().expect("configured");
 
-                let db_exists = fs::try_exists(path)
+                let db_exists = fs::try_exists(path.as_ref())
                     .await
                     .map_err(|e| ErrorKind::Init.context(e))?;
 
@@ -77,9 +83,16 @@ impl Database {
                 }
                 let handle = self.handle().await?;
                 handle.with_mut(|mut db_data| {
-                    match init_wallet_db(&mut db_data, None) {
+                    match WalletMigrator::new()
+                        .with_external_migrations(keystore::db::migrations::all())
+                        .init_or_migrate(&mut db_data)
+                    {
                         Ok(()) => Ok(()),
-                        // TODO: Support single-seed migrations once we have key storage.
+                        // TODO: KeyStore depends on Database, but we haven't finished
+                        // initializing both yet. We might need to write logic to either
+                        // defer initialization until later, or expose enough of the
+                        // keystore read logic to let us parse the keystore database here
+                        // before the KeyStore component is initialized.
                         //       https://github.com/zcash/wallet/issues/18
                         // TODO: Support multi-seed or seed-absent migrations.
                         //       https://github.com/zcash/librustzcash/issues/1284
