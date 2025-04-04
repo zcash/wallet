@@ -106,8 +106,8 @@ impl<S> HttpRequestMiddleware<S> {
             .expect("Failed to collect body data")
             .to_bytes();
 
-        let (version, bytes) =
-            if let Ok(request) = serde_json::from_slice::<'_, JsonRpcRequest>(bytes.as_ref()) {
+        let (version, bytes) = match serde_json::from_slice::<'_, JsonRpcRequest>(bytes.as_ref()) {
+            Ok(request) => {
                 let version = request.version();
                 if matches!(version, JsonRpcVersion::Unknown) {
                     (version, bytes)
@@ -117,9 +117,9 @@ impl<S> HttpRequestMiddleware<S> {
                         serde_json::to_vec(&request.into_2()).expect("valid").into(),
                     )
                 }
-            } else {
-                (JsonRpcVersion::Unknown, bytes)
-            };
+            }
+            _ => (JsonRpcVersion::Unknown, bytes),
+        };
 
         (
             version,
@@ -139,14 +139,12 @@ impl<S> HttpRequestMiddleware<S> {
             .expect("Failed to collect body data")
             .to_bytes();
 
-        let bytes =
-            if let Ok(response) = serde_json::from_slice::<'_, JsonRpcResponse>(bytes.as_ref()) {
-                serde_json::to_vec(&response.into_version(version))
-                    .expect("valid")
-                    .into()
-            } else {
-                bytes
-            };
+        let bytes = match serde_json::from_slice::<'_, JsonRpcResponse>(bytes.as_ref()) {
+            Ok(response) => serde_json::to_vec(&response.into_version(version))
+                .expect("valid")
+                .into(),
+            _ => bytes,
+        };
 
         HttpResponse::from_parts(parts, HttpBody::from(bytes.as_ref().to_vec()))
     }

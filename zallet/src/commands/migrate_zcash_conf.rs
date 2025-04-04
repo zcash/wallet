@@ -64,7 +64,7 @@ impl MigrateZcashConfCmd {
                             line = line,
                             conf = conf.display().to_string(),
                         ))
-                        .into())
+                        .into());
                 }
             };
             let value = rest
@@ -108,7 +108,7 @@ impl MigrateZcashConfCmd {
                 None => {
                     return Err(ErrorKind::Generic
                         .context(fl!("err-migrate-unknown-zcashd-option", option = option))
-                        .into())
+                        .into());
                 }
             }
         }
@@ -191,7 +191,7 @@ impl Runnable for MigrateZcashConfCmd {
 fn default_data_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     {
-        use known_folders::{get_known_folder_path, KnownFolder};
+        use known_folders::{KnownFolder, get_known_folder_path};
         get_known_folder_path(KnownFolder::RoamingAppData).map(|base| base.join("Zcash"))
     }
 

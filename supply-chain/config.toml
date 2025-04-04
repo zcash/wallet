@@ -107,14 +107,6 @@ criteria = "safe-to-deploy"
 version = "1.7.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.async-stream]]
-version = "0.3.6"
-criteria = "safe-to-deploy"
-
-[[exemptions.async-stream-impl]]
-version = "0.3.6"
-criteria = "safe-to-deploy"
-
 [[exemptions.async-trait]]
 version = "0.1.85"
 criteria = "safe-to-deploy"
@@ -124,11 +116,11 @@ version = "1.1.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.axum]]
-version = "0.7.9"
+version = "0.8.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.axum-core]]
-version = "0.4.5"
+version = "0.5.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.backtrace]]
@@ -317,6 +309,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.encode_unicode]]
 version = "1.0.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.env_home]]
+version = "0.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.eyre]]
@@ -572,7 +568,7 @@ version = "0.4.12"
 criteria = "safe-to-deploy"
 
 [[exemptions.matchit]]
-version = "0.7.3"
+version = "0.8.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.memchr]]
@@ -803,10 +799,6 @@ criteria = "safe-to-deploy"
 version = "0.23.21"
 criteria = "safe-to-deploy"
 
-[[exemptions.rustls-pemfile]]
-version = "2.2.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.rustls-pki-types]]
 version = "1.11.0"
 criteria = "safe-to-deploy"
@@ -955,10 +947,6 @@ criteria = "safe-to-deploy"
 version = "0.26.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.tokio-stream]]
-version = "0.1.17"
-criteria = "safe-to-deploy"
-
 [[exemptions.tokio-util]]
 version = "0.7.13"
 criteria = "safe-to-deploy"
@@ -980,7 +968,7 @@ version = "0.22.22"
 criteria = "safe-to-deploy"
 
 [[exemptions.tonic]]
-version = "0.12.3"
+version = "0.13.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.tonic-build]]
@@ -1077,6 +1065,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.which]]
 version = "4.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.which]]
+version = "7.0.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.winapi]]

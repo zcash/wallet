@@ -9,7 +9,7 @@
 use abscissa_core::tracing::{info, warn};
 use jsonrpsee::tracing::Instrument;
 use tokio::task::JoinHandle;
-use zcash_protocol::value::{Zatoshis, COIN};
+use zcash_protocol::value::{COIN, Zatoshis};
 
 use crate::{
     config::ZalletConfig,

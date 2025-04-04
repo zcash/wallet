@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use schemerz_rusqlite::RusqliteMigration;
 use uuid::Uuid;
-use zcash_client_sqlite::wallet::init::{migrations::V_0_15_0, WalletMigrationError};
+use zcash_client_sqlite::wallet::init::{WalletMigrationError, migrations::V_0_15_0};
 
 pub(super) const MIGRATION_ID: Uuid = Uuid::from_u128(0xadfd5ac7_927f_4288_9cca_55520c4b45d1);
 

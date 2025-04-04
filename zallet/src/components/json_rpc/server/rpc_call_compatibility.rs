@@ -5,10 +5,10 @@
 
 use futures::future::BoxFuture;
 use jsonrpsee::{
-    server::middleware::rpc::{layer::ResponseFuture, RpcService, RpcServiceT},
+    MethodResponse,
+    server::middleware::rpc::{RpcService, RpcServiceT, layer::ResponseFuture},
     tracing::debug,
     types::ErrorObject,
-    MethodResponse,
 };
 
 use crate::components::json_rpc::server::error::LegacyCode;

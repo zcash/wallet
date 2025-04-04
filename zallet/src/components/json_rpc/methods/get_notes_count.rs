@@ -1,7 +1,7 @@
 use jsonrpsee::core::RpcResult;
 use serde::{Deserialize, Serialize};
 use zcash_client_backend::data_api::{InputSource, NoteFilter, WalletRead};
-use zcash_protocol::{value::Zatoshis, ShieldedProtocol};
+use zcash_protocol::{ShieldedProtocol, value::Zatoshis};
 
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 

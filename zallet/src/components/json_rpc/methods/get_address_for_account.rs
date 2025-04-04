@@ -61,7 +61,7 @@ pub(crate) fn call(
                     "p2sh" => {
                         return Err(LegacyCode::Wallet.with_static(
                             "Error: P2SH addresses can not be created using this RPC method.",
-                        ))
+                        ));
                     }
                     "p2pkh" => p2pkh = ReceiverRequirement::Require,
                     _ => invalid_receivers.push(receiver_type),

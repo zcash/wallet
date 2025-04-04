@@ -1,6 +1,6 @@
 //! `start` subcommand
 
-use abscissa_core::{config, FrameworkError, Runnable, Shutdown};
+use abscissa_core::{FrameworkError, Runnable, Shutdown, config};
 use tokio::{pin, select};
 
 use crate::{

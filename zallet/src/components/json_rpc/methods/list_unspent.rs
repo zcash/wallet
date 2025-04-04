@@ -13,8 +13,8 @@ use zcash_client_backend::{
     wallet::NoteId,
 };
 use zcash_protocol::{
-    value::{Zatoshis, MAX_MONEY},
     ShieldedProtocol,
+    value::{MAX_MONEY, Zatoshis},
 };
 use zip32::Scope;
 

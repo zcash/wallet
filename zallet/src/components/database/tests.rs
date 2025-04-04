@@ -1,6 +1,6 @@
 use rand::rngs::OsRng;
 use rusqlite::Connection;
-use zcash_client_sqlite::{util::SystemClock, wallet::init::WalletMigrator, WalletDb};
+use zcash_client_sqlite::{WalletDb, util::SystemClock, wallet::init::WalletMigrator};
 use zcash_protocol::consensus;
 
 use crate::{components::keystore, network::Network};
