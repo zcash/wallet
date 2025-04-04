@@ -19,14 +19,15 @@ impl InitWalletEncryptionCmd {
 
         // If we have encrypted identities, it means the operator configured Zallet with
         // an encrypted identity file; obtain the recipients from it.
-        let identity_file = if let Some(identity_file) = keystore
+        let identity_file = match keystore
             .decrypt_identity_file(age::cli_common::UiCallbacks)
             .await?
         {
-            Ok(identity_file)
-        } else {
-            // Re-read the identity file from disk.
-            age::IdentityFile::from_file(config.keystore.identity.clone())
+            Some(identity_file) => Ok(identity_file),
+            _ => {
+                // Re-read the identity file from disk.
+                age::IdentityFile::from_file(config.keystore.identity.clone())
+            }
         }
         .map_err(|e| ErrorKind::Generic.context(e))?;
 

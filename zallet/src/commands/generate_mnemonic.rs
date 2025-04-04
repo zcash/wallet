@@ -1,6 +1,6 @@
 use abscissa_core::{Runnable, Shutdown};
 use bip0039::{Count, English, Mnemonic};
-use rand::{rngs::OsRng, RngCore};
+use rand::{RngCore, rngs::OsRng};
 use secrecy::SecretString;
 
 use crate::{

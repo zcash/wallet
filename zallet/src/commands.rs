@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use abscissa_core::{config::Override, Configurable, FrameworkError, Runnable};
+use abscissa_core::{Configurable, FrameworkError, Runnable, config::Override};
 
 use crate::{
     cli::{EntryPoint, ZalletCmd},

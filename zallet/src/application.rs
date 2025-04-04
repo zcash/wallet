@@ -3,9 +3,10 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use abscissa_core::{
+    Application, FrameworkError, StandardPaths,
     application::{self, AppCell},
     config::{self, CfgCell},
-    trace, Application, FrameworkError, StandardPaths,
+    trace,
 };
 use abscissa_tokio::TokioComponent;
 use i18n_embed::unic_langid::LanguageIdentifier;

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{builder::Styles, Parser};
+use clap::{Parser, builder::Styles};
 
 #[cfg(outside_buildscript)]
 use abscissa_core::{Command, Runnable};

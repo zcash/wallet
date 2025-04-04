@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 use zcash_client_backend::{
     data_api::{
-        chain::{error::Error as ChainError, BlockCache, BlockSource},
+        chain::{BlockCache, BlockSource, error::Error as ChainError},
         scanning::ScanRange,
     },
     proto::compact_formats::CompactBlock,

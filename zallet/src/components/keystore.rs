@@ -176,31 +176,35 @@ impl KeyStore {
                 .map_err(|e| ErrorKind::Init.context(e))?;
 
             // Try parsing as an encrypted age identity.
-            if let Ok(decryptor) = age::Decryptor::new_buffered(age::armor::ArmoredReader::new(
+            match age::Decryptor::new_buffered(age::armor::ArmoredReader::new(
                 identity_data.as_slice(),
             )) {
-                // Only passphrase-encrypted age identities are supported.
-                if age::encrypted::EncryptedIdentity::new(decryptor, age::NoCallbacks, None)
-                    .is_none()
-                {
-                    return Err(ErrorKind::Init
-                        .context(format!("{path} is not encrypted with a passphrase"))
-                        .into());
+                Ok(decryptor) => {
+                    // Only passphrase-encrypted age identities are supported.
+                    if age::encrypted::EncryptedIdentity::new(decryptor, age::NoCallbacks, None)
+                        .is_none()
+                    {
+                        return Err(ErrorKind::Init
+                            .context(format!("{path} is not encrypted with a passphrase"))
+                            .into());
+                    }
+
+                    (Some(identity_data), vec![])
                 }
+                _ => {
+                    identity_data.zeroize();
 
-                (Some(identity_data), vec![])
-            } else {
-                identity_data.zeroize();
+                    // Try parsing as multiple single-line age identities.
+                    let identity_file = age::IdentityFile::from_file(path.clone())
+                        .map_err(|e| ErrorKind::Init.context(e))?
+                        .with_callbacks(age::cli_common::UiCallbacks);
+                    let identities = identity_file.into_identities().map_err(|e| {
+                        ErrorKind::Init
+                            .context(format!("Identity file at {path} is not usable: {e}"))
+                    })?;
 
-                // Try parsing as multiple single-line age identities.
-                let identity_file = age::IdentityFile::from_file(path.clone())
-                    .map_err(|e| ErrorKind::Init.context(e))?
-                    .with_callbacks(age::cli_common::UiCallbacks);
-                let identities = identity_file.into_identities().map_err(|e| {
-                    ErrorKind::Init.context(format!("Identity file at {path} is not usable: {e}"))
-                })?;
-
-                (None, identities)
+                    (None, identities)
+                }
             }
         };
 

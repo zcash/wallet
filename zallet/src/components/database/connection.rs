@@ -5,22 +5,22 @@ use std::sync::{Arc, RwLock};
 
 use rand::rngs::OsRng;
 use secrecy::SecretVec;
-use shardtree::{error::ShardTreeError, ShardTree};
+use shardtree::{ShardTree, error::ShardTreeError};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
 use zcash_client_backend::data_api::AddressInfo;
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
-        AccountBirthday, AccountMeta, InputSource, NoteFilter, SpendableNotes,
-        WalletCommitmentTrees, WalletRead, WalletWrite, ORCHARD_SHARD_HEIGHT, SAPLING_SHARD_HEIGHT,
+        AccountBirthday, AccountMeta, InputSource, NoteFilter, ORCHARD_SHARD_HEIGHT,
+        SAPLING_SHARD_HEIGHT, SpendableNotes, WalletCommitmentTrees, WalletRead, WalletWrite,
     },
     keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
     wallet::{Note, ReceivedNote, TransparentAddressMetadata, WalletTransparentOutput},
 };
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::{WalletDb, util::SystemClock};
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
-use zcash_protocol::{consensus::BlockHeight, value::Zatoshis, ShieldedProtocol};
-use zip32::{fingerprint::SeedFingerprint, DiversifierIndex};
+use zcash_protocol::{ShieldedProtocol, consensus::BlockHeight, value::Zatoshis};
+use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
 
 use crate::{
     error::{Error, ErrorKind},

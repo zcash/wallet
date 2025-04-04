@@ -116,7 +116,7 @@ impl From<RegTestNuParam> for String {
 pub(crate) mod kind {
     use std::fmt;
 
-    use serde::{de::Visitor, Deserializer, Serializer};
+    use serde::{Deserializer, Serializer, de::Visitor};
     use zcash_protocol::consensus::NetworkType;
 
     pub(crate) fn deserialize<'de, D: Deserializer<'de>>(
