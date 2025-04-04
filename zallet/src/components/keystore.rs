@@ -115,8 +115,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use abscissa_core::{component::Injectable, Component, FrameworkError, FrameworkErrorKind};
-use abscissa_tokio::TokioComponent;
 use bip0039::{English, Mnemonic};
 use rusqlite::named_params;
 use secrecy::{ExposeSecret, SecretString, SecretVec, Zeroize};
@@ -128,7 +126,6 @@ use tokio::{
 use zip32::fingerprint::SeedFingerprint;
 
 use crate::{
-    application::ZalletApp,
     config::ZalletConfig,
     error::{Error, ErrorKind},
 };
@@ -139,11 +136,9 @@ pub(super) mod db;
 
 type RelockTask = (SystemTime, JoinHandle<()>);
 
-#[derive(Clone, Default, Injectable)]
-#[component(inject = "init_db(zallet::components::database::Database)")]
-#[component(inject = "init_tokio(abscissa_tokio::TokioComponent)")]
+#[derive(Clone)]
 pub(crate) struct KeyStore {
-    db: Option<Database>,
+    db: Database,
 
     /// A ciphertext ostensibly containing encrypted age identities, or `None` if the
     /// keystore is not using runtime-encrypted identities.
@@ -162,63 +157,59 @@ impl fmt::Debug for KeyStore {
     }
 }
 
-impl Component<ZalletApp> for KeyStore {
-    fn after_config(&mut self, config: &ZalletConfig) -> Result<(), FrameworkError> {
+impl KeyStore {
+    pub(crate) fn new(config: &ZalletConfig, db: Database) -> Result<Self, Error> {
         // TODO: Maybe support storing the identity in `zallet.toml` instead of as a
         // separate file on disk?
         let path = config.keystore.identity.clone();
         if Path::new(&path).is_relative() {
-            return Err(FrameworkErrorKind::ComponentError
-                .context(
-                    ErrorKind::Init.context("keystore.identity must be an absolute path (for now)"),
-                )
+            return Err(ErrorKind::Init
+                .context("keystore.identity must be an absolute path (for now)")
                 .into());
         }
 
-        // Try parsing as an encrypted age identity.
-        let mut identity_data = vec![];
-        File::open(&path)?.read_to_end(&mut identity_data)?;
-        if let Ok(decryptor) =
-            age::Decryptor::new_buffered(age::armor::ArmoredReader::new(identity_data.as_slice()))
-        {
-            // Only passphrase-encrypted age identities are supported.
-            if age::encrypted::EncryptedIdentity::new(decryptor, age::NoCallbacks, None).is_none() {
-                return Err(FrameworkErrorKind::ComponentError
-                    .context(
-                        ErrorKind::Init
-                            .context(format!("{path} is not encrypted with a passphrase")),
-                    )
-                    .into());
+        let (encrypted_identities, identities) = {
+            let mut identity_data = vec![];
+            File::open(&path)
+                .map_err(|e| ErrorKind::Init.context(e))?
+                .read_to_end(&mut identity_data)
+                .map_err(|e| ErrorKind::Init.context(e))?;
+
+            // Try parsing as an encrypted age identity.
+            if let Ok(decryptor) = age::Decryptor::new_buffered(age::armor::ArmoredReader::new(
+                identity_data.as_slice(),
+            )) {
+                // Only passphrase-encrypted age identities are supported.
+                if age::encrypted::EncryptedIdentity::new(decryptor, age::NoCallbacks, None)
+                    .is_none()
+                {
+                    return Err(ErrorKind::Init
+                        .context(format!("{path} is not encrypted with a passphrase"))
+                        .into());
+                }
+
+                (Some(identity_data), vec![])
+            } else {
+                identity_data.zeroize();
+
+                // Try parsing as multiple single-line age identities.
+                let identity_file = age::IdentityFile::from_file(path.clone())
+                    .map_err(|e| ErrorKind::Init.context(e))?
+                    .with_callbacks(age::cli_common::UiCallbacks);
+                let identities = identity_file.into_identities().map_err(|e| {
+                    ErrorKind::Init.context(format!("Identity file at {path} is not usable: {e}"))
+                })?;
+
+                (None, identities)
             }
+        };
 
-            self.encrypted_identities = Some(identity_data);
-        } else {
-            // Try parsing as multiple single-line age identities.
-            let identity_file = age::IdentityFile::from_file(path.clone())?
-                .with_callbacks(age::cli_common::UiCallbacks);
-            let identities = identity_file.into_identities().map_err(|e| {
-                FrameworkErrorKind::ComponentError.context(
-                    ErrorKind::Init.context(format!("Identity file at {path} is not usable: {e}")),
-                )
-            })?;
-
-            *self.identities.blocking_write() = identities;
-        }
-
-        Ok(())
-    }
-}
-
-impl KeyStore {
-    /// Called automatically after `Database` is initialized
-    pub fn init_db(&mut self, db: &Database) -> Result<(), FrameworkError> {
-        self.db = Some(db.clone());
-        Ok(())
-    }
-
-    /// Called automatically after `TokioComponent` is initialized
-    pub fn init_tokio(&mut self, _tokio_cmp: &TokioComponent) -> Result<(), FrameworkError> {
-        Ok(())
+        Ok(Self {
+            db,
+            encrypted_identities,
+            identities: Arc::new(RwLock::new(identities)),
+            relock_task: Arc::new(Mutex::new(None)),
+        })
     }
 
     /// Returns `true` if the keystore's age identities are runtime-encrypted.
@@ -361,16 +352,14 @@ impl KeyStore {
         &self,
         f: impl FnOnce(&rusqlite::Connection) -> Result<T, Error>,
     ) -> Result<T, Error> {
-        let db = self.db.as_ref().expect("configured");
-        db.handle().await?.with_raw(f)
+        self.db.handle().await?.with_raw(f)
     }
 
     async fn with_db_mut<T>(
         &self,
         f: impl FnOnce(&mut rusqlite::Connection) -> Result<T, Error>,
     ) -> Result<T, Error> {
-        let db = self.db.as_ref().expect("configured");
-        db.handle().await?.with_raw_mut(f)
+        self.db.handle().await?.with_raw_mut(f)
     }
 
     /// Sets the age recipients for this keystore.

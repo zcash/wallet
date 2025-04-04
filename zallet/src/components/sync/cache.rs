@@ -45,10 +45,10 @@ impl BlockSource for MemoryCache {
                 .blocks
                 .blocking_read()
                 .iter()
-                .skip_while(|(h, _)| from_height.map_or(false, |from_height| **h < from_height))
+                .skip_while(|(h, _)| from_height.is_some_and(|from_height| **h < from_height))
                 .enumerate()
             {
-                if limit.map_or(true, |limit| i < limit) {
+                if limit.is_none_or(|limit| i < limit) {
                     // The `BlockSource` trait does not guarantee sequential blocks.
                     with_block(block.clone())?;
                 } else {

@@ -1,13 +1,13 @@
 //! Documentation about the keystore database structure.
 //!
-//! The database structure is managed by [`Database::init_tokio`], which applies migrations
+//! The database structure is managed by [`Database::open`], which applies migrations
 //! (defined in [`migrations`]) that produce the current structure.
 //!
 //! The SQL code in this module's constants encodes the current database structure, as
 //! represented internally by SQLite. We do not use these constants at runtime; instead we
 //! check the output of the migrations in a test, to pin the expected database structure.
 //!
-//! [`Database::init_tokio`]: crate::components::database::Database::init_tokio
+//! [`Database::open`]: crate::components::database::Database::open
 
 // The constants in this module are only used in tests, but `#[cfg(test)]` prevents them
 // from showing up in `cargo doc --document-private-items`.

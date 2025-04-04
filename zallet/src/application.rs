@@ -64,7 +64,6 @@ impl Application for ZalletApp {
                 .build()
                 .expect("failed to build Tokio runtime"),
         )));
-        command.register_components(&mut components);
         self.state.components_mut().register(components)
     }
 

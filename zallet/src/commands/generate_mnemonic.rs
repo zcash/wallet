@@ -1,10 +1,9 @@
-use abscissa_core::{Component, Runnable, Shutdown};
+use abscissa_core::{Runnable, Shutdown};
 use bip0039::{Count, English, Mnemonic};
 use rand::{rngs::OsRng, RngCore};
 use secrecy::SecretString;
 
 use crate::{
-    application::ZalletApp,
     cli::GenerateMnemonicCmd,
     components::{database::Database, keystore::KeyStore},
     error::Error,
@@ -12,20 +11,11 @@ use crate::{
 };
 
 impl GenerateMnemonicCmd {
-    pub(crate) fn register_components(&self, components: &mut Vec<Box<dyn Component<ZalletApp>>>) {
-        // Order these so that dependencies are pushed after the components that use them,
-        // to work around a bug: https://github.com/iqlusioninc/abscissa/issues/989
-        components.push(Box::new(KeyStore::default()));
-        components.push(Box::new(Database::default()));
-    }
-
     async fn start(&self) -> Result<(), Error> {
-        let keystore = APP
-            .state()
-            .components()
-            .get_downcast_ref::<KeyStore>()
-            .expect("KeyStore component is registered")
-            .clone();
+        let config = APP.config();
+
+        let db = Database::open(&config).await?;
+        let keystore = KeyStore::new(&config, db)?;
 
         // Adapted from `Mnemonic::generate` so we can use `OsRng` directly.
         const BITS_PER_BYTE: usize = 8;
