@@ -67,9 +67,9 @@ zcash_keys = "0.8"
 zcash_primitives = "0.22"
 
 # Zcash chain state
-zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "2b2ebb4725d771724c724587e2dfe44af7b46377" }
-zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "2b2ebb4725d771724c724587e2dfe44af7b46377" }
-zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "2b2ebb4725d771724c724587e2dfe44af7b46377" }
+zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "214ca282ba42a177162fa54e6c0b2f6845a93359" }
+zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "214ca282ba42a177162fa54e6c0b2f6845a93359" }
+zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "214ca282ba42a177162fa54e6c0b2f6845a93359" }
 # - We do not use branch dependencies in general because they are brittle, but are forced
 #   to do so here because Zaino does.
 zebra-chain = { git = "https://github.com/ZcashFoundation/zebra.git", branch = "main" }
