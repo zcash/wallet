@@ -86,10 +86,10 @@ tonic = "0.13"
 
 [patch.crates-io]
 age = { git = "https://github.com/str4d/rage.git", rev = "84dc1e9f641994388f107ceebdbaa00126e30e16" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "5cea0c9abf3b7898981a862413e63c81040c0de3" }
-zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "5cea0c9abf3b7898981a862413e63c81040c0de3" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "5cea0c9abf3b7898981a862413e63c81040c0de3" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "5cea0c9abf3b7898981a862413e63c81040c0de3" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "5cea0c9abf3b7898981a862413e63c81040c0de3" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "5cea0c9abf3b7898981a862413e63c81040c0de3" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "5cea0c9abf3b7898981a862413e63c81040c0de3" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "0489ed87940fc729963edb3cc5d59985b52b3326" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "0489ed87940fc729963edb3cc5d59985b52b3326" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "0489ed87940fc729963edb3cc5d59985b52b3326" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "0489ed87940fc729963edb3cc5d59985b52b3326" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "0489ed87940fc729963edb3cc5d59985b52b3326" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "0489ed87940fc729963edb3cc5d59985b52b3326" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "0489ed87940fc729963edb3cc5d59985b52b3326" }
