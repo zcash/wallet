@@ -3,8 +3,10 @@ use jsonrpsee::{
     core::{JsonValue, RpcResult},
     proc_macros::rpc,
 };
+use zaino_state::fetch::FetchServiceSubscriber;
 
 use crate::components::{
+    chain_view::ChainView,
     database::{Database, DbHandle},
     keystore::KeyStore,
 };
@@ -123,18 +125,31 @@ pub(crate) trait Rpc {
 pub(crate) struct RpcImpl {
     wallet: Database,
     keystore: KeyStore,
+    chain_view: ChainView,
 }
 
 impl RpcImpl {
     /// Creates a new instance of the RPC handler.
-    pub(crate) fn new(wallet: Database, keystore: KeyStore) -> Self {
-        Self { wallet, keystore }
+    pub(crate) fn new(wallet: Database, keystore: KeyStore, chain_view: ChainView) -> Self {
+        Self {
+            wallet,
+            keystore,
+            chain_view,
+        }
     }
 
     async fn wallet(&self) -> RpcResult<DbHandle> {
         self.wallet
             .handle()
             .await
+            .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
+    }
+
+    async fn chain(&self) -> RpcResult<FetchServiceSubscriber> {
+        self.chain_view
+            .subscribe()
+            .await
+            .map(|s| s.inner())
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
 }
