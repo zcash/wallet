@@ -1,6 +1,12 @@
 
 # cargo-vet audits file
 
+[criteria.crypto-reviewed]
+description = "The cryptographic code in this crate has been reviewed for correctness by a member of a designated set of cryptography experts within the project."
+
+[criteria.license-reviewed]
+description = "The license of this crate has been reviewed for compatibility with its usage in this repository."
+
 [[audits.abscissa_core]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
@@ -10,6 +16,219 @@ delta = "0.8.1 -> 0.8.2"
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.8.0 -> 0.8.2"
+
+[[audits.anstyle]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.9 -> 1.0.10"
+
+[[audits.anstyle-wincon]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "3.0.6 -> 3.0.7"
+notes = """
+Changes to `unsafe` blocks are removing `std::mem::transmute` calls that are now
+unnecessary after `windows-sys` changed its `HANDLE` type from `isize` to
+`*mut c_void` (matching what `std::os::windows::io::RawHandle` uses).
+"""
+
+[[audits.anyhow]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.95 -> 1.0.97"
+
+[[audits.basic-toml]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.1.9 -> 0.1.10"
+
+[[audits.blake2b_simd]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = ["safe-to-deploy", "crypto-reviewed"]
+delta = "1.0.2 -> 1.0.3"
+notes = "No cryptographic changes."
+
+[[audits.blake2s_simd]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = ["safe-to-deploy", "crypto-reviewed"]
+delta = "1.0.2 -> 1.0.3"
+notes = "No cryptographic changes."
+
+[[audits.clap_lex]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.7.2 -> 0.7.4"
+
+[[audits.errno]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.3.10 -> 0.3.11"
+notes = "The `__errno` location for vxworks and cygwin looks correct from a quick search."
+
+[[audits.getset]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.1.4 -> 0.1.5"
+
+[[audits.h2]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.4.7 -> 0.4.8"
+notes = """
+Panic safety comment is locally correct, but I didn't confirm that the method
+`stream.send_flow.available()` is immutable, which it relies upon.
+"""
+
+[[audits.http]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.2.0 -> 1.3.1"
+notes = """
+No direct changes to `unsafe` code, but a `ByteStr::from_utf8_unchecked` call is
+wrapped in additional safety checks (now calling `std::from_utf8` in some cases).
+"""
+
+[[audits.i18n-embed]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.15.2 -> 0.15.3"
+
+[[audits.i18n-embed-fl]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.9.2 -> 0.9.3"
+
+[[audits.indexmap]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "2.8.0 -> 2.9.0"
+notes = """
+New `unsafe` code inside the `get_disjoint_mut` implementation is for obtaining
+mutable references to `Bucket`s inside a mutable `Slice`. The implementation
+takes `&mut self` and correctly enforces that the requested indices are unique,
+which makes the mutable pointer indexing sound because we are guaranteed that no
+other mutable borrows exist outside this method, and the indexing won't produce
+two mutable pointers to the same slice entry.
+"""
+
+[[audits.inout]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.1.3 -> 0.1.4"
+
+[[audits.jsonrpsee]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.24.7 -> 0.24.9"
+
+[[audits.jsonrpsee-core]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.24.7 -> 0.24.9"
+
+[[audits.jsonrpsee-proc-macros]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.24.7 -> 0.24.9"
+
+[[audits.jsonrpsee-server]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.24.7 -> 0.24.9"
+
+[[audits.jsonrpsee-types]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.24.7 -> 0.24.9"
+
+[[audits.known-folders]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.1.0 -> 1.2.0"
+notes = "Change to `unsafe` block is adapting to the `windows-sys` crate's API change."
+
+[[audits.pkg-config]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.3.31 -> 0.3.32"
+
+[[audits.prost]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.13.4 -> 0.13.5"
+
+[[audits.prost-derive]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.13.4 -> 0.13.5"
+
+[[audits.prost-types]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.13.4 -> 0.13.5"
+
+[[audits.regex-automata]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.4.8 -> 0.4.9"
+
+[[audits.rust-embed-impl]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "8.5.0 -> 8.6.0"
+notes = """
+If the folder path does not exist post-canonicalization, the non-canonicalized
+path is used instead to generate the `#ident::get` implementation. The path is
+checked as a prefix on requested paths to avoid escapes; not having this be a
+known-canonical path could be a problem in some scenarios. This is a limitation
+of how `Path::canonicalize` relies on filesystem resolution, and cannot
+canonicalize a path that does not exist.
+
+This change was made as part of adding a default-disabled `allow_missing`
+attribute, and the generator is gated on a check that the non-canonicalized path
+exists (if the new attribute is off), so there should not be any changes to
+existing usage.
+"""
+
+[[audits.rust-embed-utils]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "8.5.0 -> 8.6.0"
+
+[[audits.ryu]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.18 -> 1.0.20"
+
+[[audits.semver]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.25 -> 1.0.26"
+
+[[audits.serde_json]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.137 -> 1.0.140"
+
+[[audits.tokio-macros]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "2.4.0 -> 2.5.0"
+
+[[audits.toml]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.8.19 -> 0.8.20"
+
+[[audits.webpki-roots]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+version = "0.26.8"
+notes = """
+This crate contains a single constant `TLS_SERVER_ROOTS` and no runtime logic.
+It uses `#![forbid(unsafe_code, unstable_features)]`, and does not have any
+powerful imports.
+"""
 
 [[trusted.equihash]]
 criteria = "safe-to-deploy"
