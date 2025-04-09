@@ -467,11 +467,13 @@ impl KeyStore {
     ) -> Result<(), Error> {
         let recipients = self.recipients().await?;
 
-        let mut seed_bytes = Mnemonic::<English>::from_phrase(mnemonic.expose_secret())
-            .map_err(|e| ErrorKind::Generic.context(e))?
-            .to_seed("");
-        seed_bytes.zeroize();
-        let seed_fp = SeedFingerprint::from_seed(&seed_bytes).expect("valid length");
+        let seed_bytes = SecretVec::new(
+            Mnemonic::<English>::from_phrase(mnemonic.expose_secret())
+                .map_err(|e| ErrorKind::Generic.context(e))?
+                .to_seed("")
+                .to_vec(),
+        );
+        let seed_fp = SeedFingerprint::from_seed(seed_bytes.expose_secret()).expect("valid length");
 
         let encrypted_mnemonic = encrypt_string(&recipients, mnemonic.expose_secret())
             .map_err(|e| ErrorKind::Generic.context(e))?;
