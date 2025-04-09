@@ -58,11 +58,7 @@ impl ChainBlock {
     }
 
     pub(super) async fn tip(chain: &FetchServiceSubscriber) -> Result<Self, SyncError> {
-        let mut block_id = chain.get_latest_block().await?;
-        // TODO: TEMPORARILY work around a bug in Zaino.
-        //       https://github.com/zingolabs/zaino/issues/256
-        block_id.hash.reverse();
-
+        let block_id = chain.get_latest_block().await?;
         let compact_block = chain.get_block(block_id).await?;
 
         Ok(Self {

@@ -982,6 +982,10 @@ criteria = "safe-to-deploy"
 version = "2.0.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.proptest]]
+version = "1.6.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.prost]]
 version = "0.13.4"
 criteria = "safe-to-deploy"
@@ -1004,6 +1008,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.publicsuffix]]
 version = "2.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.quick-error]]
+version = "1.2.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.quickcheck]]
@@ -1172,6 +1180,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.rustls-webpki]]
 version = "0.103.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.rusty-fork]]
+version = "0.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.ryu]]
@@ -1424,6 +1436,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.uint]]
 version = "0.10.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.unarray]]
+version = "0.1.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.untrusted]]
