@@ -279,18 +279,18 @@ async fn recover_history(
         };
 
         // Limit the number of blocks we download and scan at any one time.
-        for scan_range in (0..).scan(scan_range, |acc, _| {
-            if acc.is_empty() {
-                None
-            } else if let Some((cur, next)) = acc.split_at(acc.block_range().start + batch_size) {
-                *acc = next;
-                Some(cur)
-            } else {
-                let cur = acc.clone();
-                let end = acc.block_range().end;
-                *acc = ScanRange::from_parts(end..end, acc.priority());
-                Some(cur)
-            }
+        for scan_range in (0..).scan(Some(scan_range), |acc, _| {
+            acc.clone().map(|remaining| {
+                if let Some((cur, next)) =
+                    remaining.split_at(remaining.block_range().start + batch_size)
+                {
+                    *acc = Some(next);
+                    cur
+                } else {
+                    *acc = None;
+                    remaining
+                }
+            })
         }) {
             db_cache
                 .insert(steps::fetch_blocks(&chain, &scan_range).await?)
