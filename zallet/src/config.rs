@@ -150,8 +150,12 @@ impl BuilderSection {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct IndexerSection {
-    /// Full node / validator listen port.
-    pub validator_listen_address: Option<SocketAddr>,
+    /// IP address and port of the JSON-RPC interface for the full node / validator being
+    /// used as a data source.
+    ///
+    /// If unset, connects on localhost to the standard JSON-RPC port for mainnet or
+    /// testnet (as appropriate).
+    pub validator_address: Option<SocketAddr>,
 
     /// Enable validator RPC cookie authentication.
     pub validator_cookie_auth: Option<bool>,

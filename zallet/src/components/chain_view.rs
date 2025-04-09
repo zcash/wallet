@@ -34,7 +34,7 @@ impl ChainView {
         let validator_rpc_address =
             config
                 .indexer
-                .validator_listen_address
+                .validator_address
                 .unwrap_or_else(|| match config.network() {
                     crate::network::Network::Consensus(
                         zcash_protocol::consensus::Network::MainNetwork,
