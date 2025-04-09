@@ -153,7 +153,7 @@ pub struct IndexerSection {
     /// Full node / validator listen port.
     pub validator_listen_address: Option<SocketAddr>,
 
-    /// Enable validator rpc cookie authentification.
+    /// Enable validator RPC cookie authentication.
     pub validator_cookie_auth: Option<bool>,
 
     /// Path to the validator cookie file.

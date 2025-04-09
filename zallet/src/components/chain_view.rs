@@ -62,7 +62,7 @@ impl ChainView {
             None,
             config.network().to_zebra(),
             false,
-            // Setting this to `true` causes start-up to block on completely filling the
+            // Setting this to `false` causes start-up to block on completely filling the
             // cache. Zaino's DB currently only contains a cache of CompactBlocks, so we
             // make do for now with uncached queries.
             // TODO: https://github.com/zingolabs/zaino/issues/249
@@ -80,6 +80,7 @@ impl ChainView {
             indexer: indexer.clone(),
         };
 
+        // Spawn a task that stops the indexer when appropriate internal signals occur.
         let task = tokio::spawn(async move {
             let mut server_interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(100));
