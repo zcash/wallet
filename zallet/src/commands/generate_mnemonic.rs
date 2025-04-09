@@ -29,8 +29,10 @@ impl GenerateMnemonicCmd {
             .expect("valid entropy length won't fail to generate the mnemonic");
 
         keystore
-            .encrypt_and_store_mnemonic(SecretString::new(mnemonic.into_phrase()))
-            .await
+            .encrypt_and_store_mnemonic(&SecretString::new(mnemonic.into_phrase()))
+            .await?;
+
+        Ok(())
     }
 }
 

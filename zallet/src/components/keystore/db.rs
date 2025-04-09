@@ -52,3 +52,21 @@ CREATE TABLE ext_zallet_keystore_mnemonics (
     encrypted_mnemonic BLOB NOT NULL
 )
 "#;
+
+/// Stores encrypted raw HD seeds.
+///
+/// ### Columns
+///
+/// - `hd_seed_fingerprint` is the [ZIP 32 fingerprint] for the raw seed bytes.
+///   This is present to enable quick lookups of which seed needs to be decrypted
+///   at spend time (rather than trial-decrypting every mnemonic).
+/// - `encrypted_legacy_seed` is a 32-byte HD seed in an [age encrypted file].
+///
+/// [ZIP 32 fingerprint]: https://zips.z.cash/zip-0032#seed-fingerprints
+/// [age encrypted file]: https://c2sp.org/age#encrypted-file-format
+pub(crate) const TABLE_LEGACY_SEEDS: &str = r#"
+CREATE TABLE ext_zallet_keystore_legacy_seeds (
+    hd_seed_fingerprint BLOB NOT NULL UNIQUE,
+    encrypted_legacy_seed BLOB NOT NULL
+)
+"#;

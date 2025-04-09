@@ -128,6 +128,7 @@ use zip32::fingerprint::SeedFingerprint;
 use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
+    fl,
 };
 
 use super::database::Database;
@@ -463,8 +464,8 @@ impl KeyStore {
 
     pub(crate) async fn encrypt_and_store_mnemonic(
         &self,
-        mnemonic: SecretString,
-    ) -> Result<(), Error> {
+        mnemonic: &SecretString,
+    ) -> Result<SeedFingerprint, Error> {
         let recipients = self.recipients().await?;
 
         let seed_bytes = SecretVec::new(
@@ -493,7 +494,37 @@ impl KeyStore {
         })
         .await?;
 
-        Ok(())
+        Ok(seed_fp)
+    }
+
+    pub(crate) async fn encrypt_and_store_legacy_seed(
+        &self,
+        legacy_seed: &SecretVec<u8>,
+    ) -> Result<SeedFingerprint, Error> {
+        let recipients = self.recipients().await?;
+
+        let legacy_seed_fp = SeedFingerprint::from_seed(legacy_seed.expose_secret())
+            .ok_or_else(|| ErrorKind::Generic.context(fl!("err-failed-seed-fingerprinting")))?;
+
+        let encrypted_legacy_seed = encrypt_legacy_seed_bytes(&recipients, legacy_seed)
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+
+        self.with_db_mut(|conn| {
+            conn.execute(
+                "INSERT INTO ext_zallet_keystore_legacy_seeds
+                VALUES (:hd_seed_fingerprint, :encrypted_legacy_seed)
+                ON CONFLICT (hd_seed_fingerprint) DO NOTHING ",
+                named_params! {
+                    ":hd_seed_fingerprint": legacy_seed_fp.to_bytes(),
+                    ":encrypted_legacy_seed": encrypted_legacy_seed,
+                },
+            )
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+            Ok(())
+        })
+        .await?;
+
+        Ok(legacy_seed_fp)
     }
 
     /// Decrypts the mnemonic phrase corresponding to the given seed fingerprint.
@@ -550,6 +581,20 @@ fn encrypt_string(
     let mut ciphertext = Vec::with_capacity(plaintext.len());
     let mut writer = encryptor.wrap_output(&mut ciphertext)?;
     writer.write_all(plaintext.as_bytes())?;
+    writer.finish()?;
+
+    Ok(ciphertext)
+}
+
+fn encrypt_legacy_seed_bytes(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    seed: &SecretVec<u8>,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let encryptor = age::Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref() as _))?;
+
+    let mut ciphertext = Vec::with_capacity(seed.expose_secret().len());
+    let mut writer = encryptor.wrap_output(&mut ciphertext)?;
+    writer.write_all(seed.expose_secret())?;
     writer.finish()?;
 
     Ok(ciphertext)
