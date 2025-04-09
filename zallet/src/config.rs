@@ -165,24 +165,10 @@ pub struct IndexerSection {
     /// Full node / validator Password.
     pub validator_password: Option<String>,
 
-    /// Capacity of the Dashmaps used for the Mempool.
-    /// Also use by the BlockCache::NonFinalisedState when using the FetchService.
-    pub map_capacity: Option<usize>,
-
-    /// Number of shard used in the DashMap used for the Mempool.
-    /// Also use by the BlockCache::NonFinalisedState when using the FetchService.
-    ///
-    /// shard_amount should greater than 0 and be a power of two.
-    /// If a shard_amount which is not a power of two is provided, the function will panic.
-    pub map_shard_amount: Option<usize>,
-
     /// Block Cache database file path.
     ///
     /// This is Zaino's Compact Block Cache db if using the FetchService or Zebra's RocksDB if using the StateService.
     pub db_path: Option<PathBuf>,
-
-    /// Block Cache database maximum size in GB.
-    pub db_size: Option<usize>,
 }
 
 /// Key store configuration section.

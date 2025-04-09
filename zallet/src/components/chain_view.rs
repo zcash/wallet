@@ -56,10 +56,10 @@ impl ChainView {
             config.indexer.validator_password.clone(),
             None,
             None,
-            config.indexer.map_capacity,
-            config.indexer.map_shard_amount,
+            None,
+            None,
             db_path,
-            config.indexer.db_size,
+            None,
             config.network().to_zebra(),
             false,
             // Setting this to `true` causes start-up to block on completely filling the
