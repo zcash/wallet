@@ -54,6 +54,9 @@ pub struct ZalletConfig {
     /// Settings that affect transactions created by Zallet.
     pub builder: BuilderSection,
 
+    /// Settings for the Zaino chain indexer.
+    pub indexer: IndexerSection,
+
     /// Settings for the key store.
     pub keystore: KeyStoreSection,
 
@@ -75,6 +78,7 @@ impl Default for ZalletConfig {
             require_backup: None,
             wallet_db: None,
             builder: Default::default(),
+            indexer: Default::default(),
             keystore: Default::default(),
             limits: Default::default(),
             rpc: Default::default(),
@@ -140,6 +144,35 @@ impl BuilderSection {
     pub fn tx_expiry_delta(&self) -> u16 {
         self.tx_expiry_delta.unwrap_or(40)
     }
+}
+
+/// Indexer configuration section.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IndexerSection {
+    /// IP address and port of the JSON-RPC interface for the full node / validator being
+    /// used as a data source.
+    ///
+    /// If unset, connects on localhost to the standard JSON-RPC port for mainnet or
+    /// testnet (as appropriate).
+    pub validator_address: Option<SocketAddr>,
+
+    /// Enable validator RPC cookie authentication.
+    pub validator_cookie_auth: Option<bool>,
+
+    /// Path to the validator cookie file.
+    pub validator_cookie_path: Option<String>,
+
+    /// Full node / validator Username.
+    pub validator_user: Option<String>,
+
+    /// Full node / validator Password.
+    pub validator_password: Option<String>,
+
+    /// Block Cache database file path.
+    ///
+    /// This is Zaino's Compact Block Cache db if using the FetchService or Zebra's RocksDB if using the StateService.
+    pub db_path: Option<PathBuf>,
 }
 
 /// Key store configuration section.

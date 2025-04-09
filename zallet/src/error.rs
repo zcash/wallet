@@ -3,6 +3,8 @@ use std::ops::Deref;
 
 use abscissa_core::error::{BoxError, Context};
 
+use crate::components::sync::SyncError;
+
 macro_rules! wfl {
     ($f:ident, $message_id:literal) => {
         write!($f, "{}", $crate::fl!($message_id))
@@ -28,6 +30,7 @@ macro_rules! wlnfl {
 pub(crate) enum ErrorKind {
     Generic,
     Init,
+    Sync,
 }
 
 impl fmt::Display for ErrorKind {
@@ -35,6 +38,7 @@ impl fmt::Display for ErrorKind {
         match self {
             ErrorKind::Generic => wfl!(f, "err-kind-generic"),
             ErrorKind::Init => wfl!(f, "err-kind-init"),
+            ErrorKind::Sync => wfl!(f, "err-kind-sync"),
         }
     }
 }
@@ -89,5 +93,11 @@ impl From<ErrorKind> for Error {
 impl From<Context<ErrorKind>> for Error {
     fn from(context: Context<ErrorKind>) -> Self {
         Error(Box::new(context))
+    }
+}
+
+impl From<SyncError> for Error {
+    fn from(e: SyncError) -> Self {
+        ErrorKind::Sync.context(e).into()
     }
 }

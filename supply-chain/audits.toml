@@ -254,6 +254,12 @@ user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2023-02-28"
 end = "2026-03-04"
 
+[[trusted.incrementalmerkletree-testing]]
+criteria = "safe-to-deploy"
+user-id = 169181 # Kris Nuttycombe (nuttycom)
+start = "2024-09-25"
+end = "2026-04-09"
+
 [[trusted.orchard]]
 criteria = "safe-to-deploy"
 user-id = 169181 # Kris Nuttycombe (nuttycom)
@@ -277,6 +283,36 @@ criteria = "safe-to-deploy"
 user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2022-12-15"
 end = "2026-03-04"
+
+[[trusted.windows-core]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-11-15"
+end = "2026-04-08"
+
+[[trusted.windows-implement]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2022-01-27"
+end = "2026-04-08"
+
+[[trusted.windows-link]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-07-17"
+end = "2026-04-08"
+
+[[trusted.windows-registry]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-02-15"
+end = "2026-04-08"
+
+[[trusted.windows-strings]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-02-02"
+end = "2026-04-08"
 
 [[trusted.windows-sys]]
 criteria = "safe-to-deploy"
@@ -362,6 +398,12 @@ user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2024-08-19"
 end = "2026-03-04"
 
+[[trusted.zcash_history]]
+criteria = "safe-to-deploy"
+user-id = 6289 # Jack Grigg (str4d)
+start = "2024-03-01"
+end = "2026-04-08"
+
 [[trusted.zcash_keys]]
 criteria = "safe-to-deploy"
 user-id = 169181 # Kris Nuttycombe (nuttycom)
@@ -374,11 +416,23 @@ user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2024-08-20"
 end = "2026-03-04"
 
+[[trusted.zcash_proofs]]
+criteria = "safe-to-deploy"
+user-id = 169181 # Kris Nuttycombe (nuttycom)
+start = "2024-08-20"
+end = "2026-04-08"
+
 [[trusted.zcash_protocol]]
 criteria = "safe-to-deploy"
 user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2024-01-27"
 end = "2026-03-04"
+
+[[trusted.zcash_script]]
+criteria = "safe-to-deploy"
+user-id = 159631 # Conrado Gouvea (conradoplg)
+start = "2022-08-31"
+end = "2026-04-08"
 
 [[trusted.zcash_spec]]
 criteria = "safe-to-deploy"
