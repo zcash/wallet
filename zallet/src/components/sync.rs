@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
-use tokio::{task::JoinHandle, time};
+use tokio::time;
 use zaino_state::{fetch::FetchServiceSubscriber, indexer::LightWalletIndexer as _};
 use zcash_client_backend::data_api::{
     WalletRead, WalletWrite,
@@ -15,6 +15,7 @@ use zcash_protocol::consensus::{self, BlockHeight};
 use zebra_chain::transaction::SerializedTransaction;
 
 use super::{
+    TaskHandle,
     chain_view::ChainView,
     database::{Database, DbConnection},
 };
@@ -36,7 +37,7 @@ impl WalletSync {
         config: &ZalletConfig,
         db: Database,
         chain_view: ChainView,
-    ) -> Result<(JoinHandle<Result<(), Error>>, JoinHandle<Result<(), Error>>), Error> {
+    ) -> Result<(TaskHandle, TaskHandle), Error> {
         let params = config.network();
 
         // Ensure the wallet is in a state that the sync tasks can work with.

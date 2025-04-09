@@ -8,7 +8,6 @@
 
 use abscissa_core::tracing::{info, warn};
 use jsonrpsee::tracing::Instrument;
-use tokio::task::JoinHandle;
 use zcash_protocol::value::{COIN, Zatoshis};
 
 use crate::{
@@ -16,7 +15,7 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-use super::{chain_view::ChainView, database::Database, keystore::KeyStore};
+use super::{TaskHandle, chain_view::ChainView, database::Database, keystore::KeyStore};
 
 pub(crate) mod methods;
 pub(crate) mod server;
@@ -36,7 +35,7 @@ impl JsonRpc {
         db: Database,
         keystore: KeyStore,
         chain_view: ChainView,
-    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    ) -> Result<TaskHandle, Error> {
         let rpc = config.rpc.clone();
 
         if !rpc.bind.is_empty() {

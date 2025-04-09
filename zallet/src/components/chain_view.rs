@@ -2,7 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use jsonrpsee::tracing::info;
-use tokio::{sync::RwLock, task::JoinHandle};
+use tokio::sync::RwLock;
 use zaino_state::{
     config::FetchServiceConfig,
     fetch::{FetchService, FetchServiceSubscriber},
@@ -14,6 +14,8 @@ use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
 };
+
+use super::TaskHandle;
 
 #[derive(Clone)]
 pub(crate) struct ChainView {
@@ -28,9 +30,7 @@ impl fmt::Debug for ChainView {
 }
 
 impl ChainView {
-    pub(crate) async fn new(
-        config: &ZalletConfig,
-    ) -> Result<(Self, JoinHandle<Result<(), Error>>), Error> {
+    pub(crate) async fn new(config: &ZalletConfig) -> Result<(Self, TaskHandle), Error> {
         let validator_rpc_address =
             config
                 .indexer
