@@ -481,7 +481,8 @@ impl KeyStore {
         self.with_db_mut(|conn| {
             conn.execute(
                 "INSERT INTO ext_zallet_keystore_mnemonics
-                VALUES (:hd_seed_fingerprint, :encrypted_mnemonic)",
+                VALUES (:hd_seed_fingerprint, :encrypted_mnemonic)
+                ON CONFLICT (hd_seed_fingerprint) DO NOTHING ",
                 named_params! {
                     ":hd_seed_fingerprint": seed_fp.to_bytes(),
                     ":encrypted_mnemonic": encrypted_mnemonic,

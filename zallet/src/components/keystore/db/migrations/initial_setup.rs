@@ -32,7 +32,7 @@ impl RusqliteMigration for Migration {
                 added TEXT NOT NULL
             );
             CREATE TABLE ext_zallet_keystore_mnemonics (
-                hd_seed_fingerprint BLOB NOT NULL,
+                hd_seed_fingerprint BLOB NOT NULL UNIQUE,
                 encrypted_mnemonic BLOB NOT NULL
             );",
         )?;

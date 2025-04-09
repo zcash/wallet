@@ -48,7 +48,7 @@ CREATE TABLE ext_zallet_keystore_age_recipients (
 /// [age encrypted file]: https://c2sp.org/age#encrypted-file-format
 pub(crate) const TABLE_MNEMONICS: &str = r#"
 CREATE TABLE ext_zallet_keystore_mnemonics (
-    hd_seed_fingerprint BLOB NOT NULL,
+    hd_seed_fingerprint BLOB NOT NULL UNIQUE,
     encrypted_mnemonic BLOB NOT NULL
 )
 "#;
