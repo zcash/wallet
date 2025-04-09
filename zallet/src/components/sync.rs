@@ -261,6 +261,7 @@ async fn recover_history(
     let db_cache = cache::MemoryCache::new();
 
     let mut interval = time::interval(Duration::from_secs(30));
+    interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     // The first tick completes immediately. We want to use it for a conditional delay, so
     // get that out of the way.
     interval.tick().await;
