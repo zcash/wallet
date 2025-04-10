@@ -3,6 +3,8 @@ use jsonrpsee::{
     core::{JsonValue, RpcResult},
     proc_macros::rpc,
 };
+use serde::Serialize;
+use tokio::sync::RwLock;
 use zaino_state::fetch::FetchServiceSubscriber;
 
 use crate::components::{
@@ -11,12 +13,16 @@ use crate::components::{
     keystore::KeyStore,
 };
 
+use super::asyncop::AsyncOperation;
+
 mod get_address_for_account;
 mod get_new_account;
 mod get_notes_count;
+mod get_operation;
 mod get_wallet_info;
 mod list_accounts;
 mod list_addresses;
+mod list_operation_ids;
 mod list_unified_receivers;
 mod list_unspent;
 mod lock_wallet;
@@ -24,6 +30,40 @@ mod unlock_wallet;
 
 #[rpc(server)]
 pub(crate) trait Rpc {
+    /// Returns the list of operation ids currently known to the wallet.
+    ///
+    /// # Arguments
+    /// - `status` (string, optional) Filter result by the operation's state e.g. "success".
+    #[method(name = "z_listoperationids")]
+    async fn list_operation_ids(&self, status: Option<&str>) -> list_operation_ids::Response;
+
+    /// Get operation status and any associated result or error data.
+    ///
+    /// The operation will remain in memory.
+    ///
+    /// - If the operation has failed, it will include an error object.
+    /// - If the operation has succeeded, it will include the result value.
+    /// - If the operation was cancelled, there will be no error object or result value.
+    ///
+    /// # Arguments
+    /// - `operationid` (array, optional) A list of operation ids we are interested in.
+    ///   If not provided, examine all operations known to the node.
+    #[method(name = "z_getoperationstatus")]
+    async fn get_operation_status(&self, operationid: Vec<&str>) -> get_operation::Response;
+
+    /// Retrieve the result and status of an operation which has finished, and then remove
+    /// the operation from memory.
+    ///
+    /// - If the operation has failed, it will include an error object.
+    /// - If the operation has succeeded, it will include the result value.
+    /// - If the operation was cancelled, there will be no error object or result value.
+    ///
+    /// # Arguments
+    /// - `operationid` (array, optional) A list of operation ids we are interested in.
+    ///   If not provided, retrieve all finished operations known to the node.
+    #[method(name = "z_getoperationresult")]
+    async fn get_operation_result(&self, operationid: Vec<&str>) -> get_operation::Response;
+
     #[method(name = "getwalletinfo")]
     async fn get_wallet_info(&self) -> get_wallet_info::Response;
 
@@ -147,6 +187,7 @@ pub(crate) struct RpcImpl {
     wallet: Database,
     keystore: KeyStore,
     chain_view: ChainView,
+    async_ops: RwLock<Vec<AsyncOperation>>,
 }
 
 impl RpcImpl {
@@ -156,6 +197,7 @@ impl RpcImpl {
             wallet,
             keystore,
             chain_view,
+            async_ops: RwLock::new(Vec::new()),
         }
     }
 
@@ -173,10 +215,33 @@ impl RpcImpl {
             .map(|s| s.inner())
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
+
+    async fn start_async<T: Serialize + Send + 'static>(
+        &self,
+        f: impl Future<Output = RpcResult<T>> + Send + 'static,
+    ) -> String {
+        let mut async_ops = self.async_ops.write().await;
+        let op = AsyncOperation::new(f).await;
+        let op_id = op.operation_id().to_string();
+        async_ops.push(op);
+        op_id
+    }
 }
 
 #[async_trait]
 impl RpcServer for RpcImpl {
+    async fn list_operation_ids(&self, status: Option<&str>) -> list_operation_ids::Response {
+        list_operation_ids::call(&self.async_ops.read().await, status).await
+    }
+
+    async fn get_operation_status(&self, operationid: Vec<&str>) -> get_operation::Response {
+        get_operation::status(&self.async_ops.read().await, operationid).await
+    }
+
+    async fn get_operation_result(&self, operationid: Vec<&str>) -> get_operation::Response {
+        get_operation::result(self.async_ops.write().await.as_mut(), operationid).await
+    }
+
     async fn get_wallet_info(&self) -> get_wallet_info::Response {
         get_wallet_info::call(&self.keystore).await
     }

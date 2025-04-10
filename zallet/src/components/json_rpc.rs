@@ -17,6 +17,7 @@ use crate::{
 
 use super::{TaskHandle, chain_view::ChainView, database::Database, keystore::KeyStore};
 
+mod asyncop;
 pub(crate) mod methods;
 pub(crate) mod server;
 mod utils;
