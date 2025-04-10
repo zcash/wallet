@@ -12,11 +12,7 @@ pub(crate) async fn status(async_ops: &[AsyncOperation], operationid: Vec<&str>)
 
     let mut ret = vec![];
 
-    for op in async_ops {
-        if !filter.is_empty() && !filter.contains(op.operation_id()) {
-            continue;
-        }
-
+    for op in filtered(async_ops, filter) {
         ret.push(op.to_status().await);
     }
 
@@ -32,11 +28,7 @@ pub(crate) async fn result(
     let mut ret = vec![];
     let mut remove = HashSet::new();
 
-    for op in async_ops.iter() {
-        if !filter.is_empty() && !filter.contains(op.operation_id()) {
-            continue;
-        }
-
+    for op in filtered(async_ops, filter) {
         if matches!(
             op.state().await,
             OperationState::Success | OperationState::Failed | OperationState::Cancelled
@@ -49,4 +41,13 @@ pub(crate) async fn result(
     async_ops.retain(|op| !remove.contains(op.operation_id()));
 
     Ok(ret)
+}
+
+fn filtered<'a>(
+    async_ops: &'a [AsyncOperation],
+    filter: HashSet<&str>,
+) -> impl Iterator<Item = &'a AsyncOperation> {
+    async_ops
+        .iter()
+        .filter(move |op| filter.is_empty() || filter.contains(op.operation_id()))
 }

@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use jsonrpsee::core::RpcResult;
 
 use crate::components::json_rpc::asyncop::{AsyncOperation, OperationState};
@@ -11,7 +9,7 @@ pub(crate) async fn call(async_ops: &[AsyncOperation], status: Option<&str>) -> 
     // - The outer `Option` indicates whether or not we are filtering.
     // - The inner `Option` indicates whether or not we recognise the requested state
     //   (`zcashd` treats unrecognised state strings as non-matching).
-    let state = status.map(OperationState::from_str).map(|r| r.ok());
+    let state = status.map(OperationState::parse);
 
     let mut operation_ids = vec![];
 

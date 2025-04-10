@@ -1,5 +1,4 @@
 use std::future::Future;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,7 +10,7 @@ use uuid::Uuid;
 
 /// The possible states that an async operation can be in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(into = "String")]
+#[serde(into = "&'static str")]
 pub(super) enum OperationState {
     Ready,
     Executing,
@@ -20,29 +19,27 @@ pub(super) enum OperationState {
     Success,
 }
 
-impl FromStr for OperationState {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl OperationState {
+    pub(super) fn parse(s: &str) -> Option<Self> {
         match s {
-            "queued" => Ok(Self::Ready),
-            "executing" => Ok(Self::Executing),
-            "cancelled" => Ok(Self::Cancelled),
-            "failed" => Ok(Self::Failed),
-            "success" => Ok(Self::Success),
-            _ => Err("invalid operation status"),
+            "queued" => Some(Self::Ready),
+            "executing" => Some(Self::Executing),
+            "cancelled" => Some(Self::Cancelled),
+            "failed" => Some(Self::Failed),
+            "success" => Some(Self::Success),
+            _ => None,
         }
     }
 }
 
-impl From<OperationState> for String {
+impl From<OperationState> for &'static str {
     fn from(value: OperationState) -> Self {
         match value {
-            OperationState::Ready => "queued".into(),
-            OperationState::Executing => "executing".into(),
-            OperationState::Cancelled => "cancelled".into(),
-            OperationState::Failed => "failed".into(),
-            OperationState::Success => "success".into(),
+            OperationState::Ready => "queued",
+            OperationState::Executing => "executing",
+            OperationState::Cancelled => "cancelled",
+            OperationState::Failed => "failed",
+            OperationState::Success => "success",
         }
     }
 }
