@@ -3,6 +3,7 @@ use jsonrpsee::{
     core::{JsonValue, RpcResult},
     proc_macros::rpc,
 };
+use serde::Serialize;
 use tokio::sync::RwLock;
 use zaino_state::fetch::FetchServiceSubscriber;
 
@@ -192,6 +193,17 @@ impl RpcImpl {
             .await
             .map(|s| s.inner())
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
+    }
+
+    async fn start_async<T: Serialize + Send + 'static>(
+        &self,
+        f: impl Future<Output = RpcResult<T>> + Send + 'static,
+    ) -> String {
+        let mut async_ops = self.async_ops.write().await;
+        let op = AsyncOperation::new(f).await;
+        let op_id = op.operation_id().to_string();
+        async_ops.push(op);
+        op_id
     }
 }
 
