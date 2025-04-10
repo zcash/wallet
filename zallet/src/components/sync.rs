@@ -318,7 +318,7 @@ async fn recover_history(
             let latest_ranges = db_data.suggest_scan_ranges()?;
             let scan_ranges_updated = latest_ranges
                 .first()
-                .map_or(false, |range| range.priority() > scan_range.priority());
+                .is_some_and(|range| range.priority() > scan_range.priority());
 
             // Delete the now-scanned blocks.
             db_cache.delete(scan_range).await?;
