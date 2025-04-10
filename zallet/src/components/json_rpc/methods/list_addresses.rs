@@ -16,7 +16,7 @@ use zip32::fingerprint::SeedFingerprint;
 
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
-/// Response to a `z_listaccounts` RPC request.
+/// Response to a `listaddresses` RPC request.
 pub(crate) type Response = RpcResult<Vec<AddressSource>>;
 
 #[derive(Clone, Debug, Serialize)]
