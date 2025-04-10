@@ -91,12 +91,12 @@ impl AsyncOperation {
             let end_time = SystemTime::now();
 
             // Map the concrete task result into a generic JSON blob.
-            let res = res.and_then(|ret| {
-                Ok(serde_json::from_str(
+            let res = res.map(|ret| {
+                serde_json::from_str(
                     &serde_json::to_string(&ret)
                         .expect("async return values should be serializable to JSON"),
                 )
-                .expect("round trip should succeed"))
+                .expect("round trip should succeed")
             });
 
             // Record the result.
