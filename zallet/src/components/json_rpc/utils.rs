@@ -6,6 +6,7 @@ use jsonrpsee::{
 };
 use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
+use zcash_protocol::value::{BalanceError, COIN, Zatoshis};
 use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
 
 use crate::components::{database::DbConnection, keystore::KeyStore};
@@ -120,9 +121,204 @@ pub(super) fn parse_diversifier_index(diversifier_index: u128) -> RpcResult<Dive
         .map_err(|_| LegacyCode::InvalidParameter.with_static("diversifier index is too large."))
 }
 
+/// Equivalent of `AmountFromValue` in `zcashd`, permitting the same input formats.
+pub(super) fn zatoshis_from_value(value: &JsonValue) -> RpcResult<Zatoshis> {
+    let amount_str = match value {
+        JsonValue::String(s) => Ok(s.as_str()),
+        JsonValue::Number(n) => Ok(n.as_str()),
+        _ => Err(LegacyCode::Type.with_static("Amount is not a number or string")),
+    }?;
+
+    let amount = parse_fixed_point(amount_str, 8)
+        .ok_or_else(|| LegacyCode::Type.with_static("Invalid amount"))?;
+
+    Zatoshis::from_nonnegative_i64(amount).map_err(|e| match e {
+        BalanceError::Underflow => {
+            LegacyCode::InvalidParameter.with_static("Invalid parameter, amount must be positive")
+        }
+        BalanceError::Overflow => LegacyCode::Type.with_static("Amount out of range"),
+    })
+}
+
+// TODO: https://github.com/zcash/wallet/issues/15
+pub(super) fn value_from_zatoshis(value: Zatoshis) -> f64 {
+    (u64::from(value) as f64) / (COIN as f64)
+}
+
+/// Upper bound for mantissa.
+///
+/// 10^18-1 is the largest arbitrary decimal that will fit in a signed 64-bit integer.
+/// Larger integers cannot consist of arbitrary combinations of 0-9:
+///
+/// ```text
+///   999999999999999999  (10^18)-1
+///  9223372036854775807  (1<<63)-1  (max int64_t)
+///  9999999999999999999  (10^19)-1  (would overflow)
+/// ```
+const UPPER_BOUND: i64 = 1000000000000000000 - 1;
+
+/// Helper function for [`parse_fixed_point`].
+fn process_mantissa_digit(ch: char, mantissa: &mut i64, mantissa_tzeros: &mut i64) -> bool {
+    if ch == '0' {
+        *mantissa_tzeros += 1;
+    } else {
+        for _ in 0..=*mantissa_tzeros {
+            if *mantissa > (UPPER_BOUND / 10) {
+                return false; // overflow
+            }
+            *mantissa *= 10;
+        }
+        *mantissa += i64::from(ch.to_digit(10).expect("caller checked this"));
+        *mantissa_tzeros = 0;
+    }
+    true
+}
+
+/// Equivalent to `ParseFixedPoint` in `zcashd`. Bleh.
+fn parse_fixed_point(mut val: &str, decimals: i64) -> Option<i64> {
+    let mut mantissa = 0i64;
+    let mut exponent = 0i64;
+    let mut mantissa_tzeros = 0i64;
+    let mut exponent_sign = false;
+    let mut point_ofs = 0;
+
+    let mantissa_sign = match val.split_at_checked(1) {
+        Some(("-", rest)) => {
+            val = rest;
+            true
+        }
+        _ => false,
+    };
+    match val.split_at_checked(1) {
+        Some(("0", rest)) => val = rest, // pass single 0
+        Some(("1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9", _)) => {
+            let mut chars = val.char_indices();
+            loop {
+                match chars.next() {
+                    Some((_, ch)) if ch.is_ascii_digit() => {
+                        if !process_mantissa_digit(ch, &mut mantissa, &mut mantissa_tzeros) {
+                            return None; // overflow
+                        }
+                    }
+                    Some((i, _)) => {
+                        val = val.split_at(i).1;
+                        break;
+                    }
+                    None => {
+                        val = "";
+                        break;
+                    }
+                }
+            }
+        }
+        Some(_) => return None, // missing expected digit
+        None => return None,    // empty string or loose '-'
+    }
+    if let Some((".", rest)) = val.split_at_checked(1) {
+        val = rest;
+        match val.split_at_checked(1) {
+            Some(("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9", _)) => {
+                let mut chars = val.char_indices();
+                loop {
+                    match chars.next() {
+                        Some((_, ch)) if ch.is_ascii_digit() => {
+                            if !process_mantissa_digit(ch, &mut mantissa, &mut mantissa_tzeros) {
+                                return None; // overflow
+                            }
+                            point_ofs += 1;
+                        }
+                        Some((i, _)) => {
+                            val = val.split_at(i).1;
+                            break;
+                        }
+                        None => {
+                            val = "";
+                            break;
+                        }
+                    }
+                }
+            }
+            _ => return None, // missing expected digit
+        }
+    }
+    if let Some(("e" | "E", rest)) = val.split_at_checked(1) {
+        val = rest;
+        match val.split_at_checked(1) {
+            Some(("+", rest)) => val = rest,
+            Some(("-", rest)) => {
+                exponent_sign = true;
+                val = rest;
+            }
+            _ => (),
+        }
+        match val.split_at_checked(1) {
+            Some(("0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9", _)) => {
+                let mut chars = val.char_indices();
+                loop {
+                    match chars.next() {
+                        Some((_, ch)) if ch.is_ascii_digit() => {
+                            if exponent > (UPPER_BOUND / 10) {
+                                return None; // overflow
+                            }
+                            exponent = exponent * 10 + i64::from(ch.to_digit(10).expect("checked"));
+                        }
+                        Some((i, _)) => {
+                            val = val.split_at(i).1;
+                            break;
+                        }
+                        None => {
+                            val = "";
+                            break;
+                        }
+                    }
+                }
+            }
+            _ => return None, // missing expected digit
+        }
+    }
+    if !val.is_empty() {
+        return None; // trailing garbage
+    }
+
+    // finalize exponent
+    if exponent_sign {
+        exponent = -exponent;
+    }
+    exponent = exponent - point_ofs + mantissa_tzeros;
+
+    // finalize mantissa
+    if mantissa_sign {
+        mantissa = -mantissa;
+    }
+
+    // convert to one 64-bit fixed-point value
+    exponent += decimals;
+    if exponent < 0 {
+        return None; // cannot represent values smaller than 10^-decimals
+    }
+    if exponent >= 18 {
+        return None; // cannot represent values larger than or equal to 10^(18-decimals)
+    }
+
+    for _ in 0..exponent {
+        if !(-(UPPER_BOUND / 10)..=(UPPER_BOUND / 10)).contains(&mantissa) {
+            return None; // overflow
+        }
+        mantissa *= 10;
+    }
+    if !(-UPPER_BOUND..=UPPER_BOUND).contains(&mantissa) {
+        return None; // overflow
+    }
+
+    Some(mantissa)
+}
+
 #[cfg(test)]
 mod tests {
+    use zcash_protocol::value::{COIN, Zatoshis};
     use zip32::fingerprint::SeedFingerprint;
+
+    use super::{parse_fixed_point, zatoshis_from_value};
 
     use crate::components::json_rpc::utils::{encode_seedfp_parameter, parse_seedfp_parameter};
 
@@ -134,5 +330,121 @@ mod tests {
             parse_seedfp_parameter(&encode_seedfp_parameter(&seedfp)),
             Ok(seedfp),
         );
+    }
+
+    #[test]
+    fn rpc_parse_monetary_values() {
+        let zat = |v| Ok(Zatoshis::const_from_u64(v));
+
+        assert!(zatoshis_from_value(&"-0.00000001".into()).is_err());
+        assert_eq!(zatoshis_from_value(&"0".into()), zat(0));
+        assert_eq!(zatoshis_from_value(&"0.00000000".into()), zat(0));
+        assert_eq!(zatoshis_from_value(&"0.00000001".into()), zat(1));
+        assert_eq!(zatoshis_from_value(&"0.17622195".into()), zat(17622195));
+        assert_eq!(zatoshis_from_value(&"0.5".into()), zat(50000000));
+        assert_eq!(zatoshis_from_value(&"0.50000000".into()), zat(50000000));
+        assert_eq!(zatoshis_from_value(&"0.89898989".into()), zat(89898989));
+        assert_eq!(zatoshis_from_value(&"1.00000000".into()), zat(100000000));
+        assert_eq!(
+            zatoshis_from_value(&"20999999.9999999".into()),
+            zat(2099999999999990)
+        );
+        assert_eq!(
+            zatoshis_from_value(&"20999999.99999999".into()),
+            zat(2099999999999999)
+        );
+
+        assert_eq!(zatoshis_from_value(&"1e-8".into()), zat(COIN / 100000000));
+        assert_eq!(zatoshis_from_value(&"0.1e-7".into()), zat(COIN / 100000000));
+        assert_eq!(
+            zatoshis_from_value(&"0.01e-6".into()),
+            zat(COIN / 100000000)
+        );
+        assert_eq!(
+            zatoshis_from_value(&
+                "0.0000000000000000000000000000000000000000000000000000000000000000000000000001e+68"
+            .into()),
+            zat(COIN / 100000000)
+        );
+        assert_eq!(
+            zatoshis_from_value(
+                &"10000000000000000000000000000000000000000000000000000000000000000e-64".into()
+            ),
+            zat(COIN)
+        );
+        assert_eq!(
+            zatoshis_from_value(&
+                "0.000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000e64"
+                .into()),
+            zat(COIN)
+        );
+
+        assert!(zatoshis_from_value(&"1e-9".into()).is_err()); //should fail
+        assert!(zatoshis_from_value(&"0.000000019".into()).is_err()); //should fail
+        assert_eq!(zatoshis_from_value(&"0.00000001000000".into()), zat(1)); //should pass, cut trailing 0
+        assert!(zatoshis_from_value(&"19e-9".into()).is_err()); //should fail
+        assert_eq!(zatoshis_from_value(&"0.19e-6".into()), zat(19)); //should pass, leading 0 is present
+
+        assert!(zatoshis_from_value(&"92233720368.54775808".into()).is_err()); //overflow error
+        assert!(zatoshis_from_value(&"1e+11".into()).is_err()); //overflow error
+        assert!(zatoshis_from_value(&"1e11".into()).is_err()); //overflow error signless
+        assert!(zatoshis_from_value(&"93e+9".into()).is_err()); //overflow error
+    }
+
+    #[test]
+    fn test_parse_fixed_point() {
+        assert_eq!(parse_fixed_point("0", 8), Some(0));
+        assert_eq!(parse_fixed_point("1", 8), Some(100000000));
+        assert_eq!(parse_fixed_point("0.0", 8), Some(0));
+        assert_eq!(parse_fixed_point("-0.1", 8), Some(-10000000));
+        assert_eq!(parse_fixed_point("1.1", 8), Some(110000000));
+        assert_eq!(parse_fixed_point("1.10000000000000000", 8), Some(110000000));
+        assert_eq!(parse_fixed_point("1.1e1", 8), Some(1100000000));
+        assert_eq!(parse_fixed_point("1.1e-1", 8), Some(11000000));
+        assert_eq!(parse_fixed_point("1000", 8), Some(100000000000));
+        assert_eq!(parse_fixed_point("-1000", 8), Some(-100000000000));
+        assert_eq!(parse_fixed_point("0.00000001", 8), Some(1));
+        assert_eq!(parse_fixed_point("0.0000000100000000", 8), Some(1));
+        assert_eq!(parse_fixed_point("-0.00000001", 8), Some(-1));
+        assert_eq!(
+            parse_fixed_point("1000000000.00000001", 8),
+            Some(100000000000000001)
+        );
+        assert_eq!(
+            parse_fixed_point("9999999999.99999999", 8),
+            Some(999999999999999999)
+        );
+        assert_eq!(
+            parse_fixed_point("-9999999999.99999999", 8),
+            Some(-999999999999999999)
+        );
+
+        assert_eq!(parse_fixed_point("", 8), None);
+        assert_eq!(parse_fixed_point("-", 8), None);
+        assert_eq!(parse_fixed_point("a-1000", 8), None);
+        assert_eq!(parse_fixed_point("-a1000", 8), None);
+        assert_eq!(parse_fixed_point("-1000a", 8), None);
+        assert_eq!(parse_fixed_point("-01000", 8), None);
+        assert_eq!(parse_fixed_point("00.1", 8), None);
+        assert_eq!(parse_fixed_point(".1", 8), None);
+        assert_eq!(parse_fixed_point("--0.1", 8), None);
+        assert_eq!(parse_fixed_point("0.000000001", 8), None);
+        assert_eq!(parse_fixed_point("-0.000000001", 8), None);
+        assert_eq!(parse_fixed_point("0.00000001000000001", 8), None);
+        assert_eq!(parse_fixed_point("-10000000000.00000000", 8), None);
+        assert_eq!(parse_fixed_point("10000000000.00000000", 8), None);
+        assert_eq!(parse_fixed_point("-10000000000.00000001", 8), None);
+        assert_eq!(parse_fixed_point("10000000000.00000001", 8), None);
+        assert_eq!(parse_fixed_point("-10000000000.00000009", 8), None);
+        assert_eq!(parse_fixed_point("10000000000.00000009", 8), None);
+        assert_eq!(parse_fixed_point("-99999999999.99999999", 8), None);
+        assert_eq!(parse_fixed_point("99999909999.09999999", 8), None);
+        assert_eq!(parse_fixed_point("92233720368.54775807", 8), None);
+        assert_eq!(parse_fixed_point("92233720368.54775808", 8), None);
+        assert_eq!(parse_fixed_point("-92233720368.54775808", 8), None);
+        assert_eq!(parse_fixed_point("-92233720368.54775809", 8), None);
+        assert_eq!(parse_fixed_point("1.1e", 8), None);
+        assert_eq!(parse_fixed_point("1.1e-", 8), None);
+        assert_eq!(parse_fixed_point("1.", 8), None);
     }
 }

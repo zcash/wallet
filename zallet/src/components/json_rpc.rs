@@ -8,7 +8,6 @@
 
 use abscissa_core::tracing::{info, warn};
 use jsonrpsee::tracing::Instrument;
-use zcash_protocol::value::{COIN, Zatoshis};
 
 use crate::{
     config::ZalletConfig,
@@ -21,11 +20,6 @@ mod asyncop;
 pub(crate) mod methods;
 pub(crate) mod server;
 pub(crate) mod utils;
-
-// TODO: https://github.com/zcash/wallet/issues/15
-fn value_from_zatoshis(value: Zatoshis) -> f64 {
-    (u64::from(value) as f64) / (COIN as f64)
-}
 
 #[derive(Debug)]
 pub(crate) struct JsonRpc {}
