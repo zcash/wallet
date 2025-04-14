@@ -13,7 +13,7 @@ use crate::components::{
     keystore::KeyStore,
 };
 
-use super::asyncop::AsyncOperation;
+use super::asyncop::{AsyncOperation, ContextInfo};
 
 mod get_address_for_account;
 mod get_new_account;
@@ -261,12 +261,13 @@ impl RpcImpl {
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
 
-    async fn start_async<T: Serialize + Send + 'static>(
-        &self,
-        f: impl Future<Output = RpcResult<T>> + Send + 'static,
-    ) -> String {
+    async fn start_async<F, T>(&self, (context, f): (Option<ContextInfo>, F)) -> String
+    where
+        F: Future<Output = RpcResult<T>> + Send + 'static,
+        T: Serialize + Send + 'static,
+    {
         let mut async_ops = self.async_ops.write().await;
-        let op = AsyncOperation::new(f).await;
+        let op = AsyncOperation::new(context, f).await;
         let op_id = op.operation_id().to_string();
         async_ops.push(op);
         op_id
