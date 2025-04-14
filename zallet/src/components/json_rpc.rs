@@ -18,6 +18,7 @@ use super::{TaskHandle, chain_view::ChainView, database::Database, keystore::Key
 
 mod asyncop;
 pub(crate) mod methods;
+mod payments;
 pub(crate) mod server;
 pub(crate) mod utils;
 
