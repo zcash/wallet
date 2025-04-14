@@ -72,6 +72,7 @@ sapling = { package = "sapling-crypto", version = "0.5" }
 transparent = { package = "zcash_transparent", version = "0.2" }
 zcash_keys = "0.8"
 zcash_primitives = "0.22"
+zcash_proofs = "0.22"
 
 # Zcash chain state
 zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "3f1a50782ba43356b877766c3e9d2a604d6f0cb1" }
