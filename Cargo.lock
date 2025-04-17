@@ -5958,6 +5958,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shardtree",
+ "tempfile",
  "time",
  "tokio",
  "toml 0.8.20",
