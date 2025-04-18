@@ -5949,6 +5949,7 @@ dependencies = [
  "orchard",
  "rand 0.8.5",
  "regex",
+ "rpassword",
  "rusqlite",
  "rust-embed",
  "sapling-crypto",

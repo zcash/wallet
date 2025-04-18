@@ -47,6 +47,9 @@ pub(crate) enum ZalletCmd {
 
     /// Generate a BIP 39 mnemonic phrase and store it in the wallet.
     GenerateMnemonic(GenerateMnemonicCmd),
+
+    /// Import a BIP 39 mnemonic phrase into the wallet.
+    ImportMnemonic(ImportMnemonicCmd),
 }
 
 /// `start` subcommand
@@ -97,3 +100,8 @@ pub(crate) struct InitWalletEncryptionCmd {}
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct GenerateMnemonicCmd {}
+
+/// `import-mnemonic` subcommand
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct ImportMnemonicCmd {}
