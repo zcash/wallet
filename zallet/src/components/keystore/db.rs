@@ -59,7 +59,7 @@ CREATE TABLE ext_zallet_keystore_mnemonics (
 ///
 /// - `hd_seed_fingerprint` is the [ZIP 32 fingerprint] for the raw seed bytes.
 ///   This is present to enable quick lookups of which seed needs to be decrypted
-///   at spend time (rather than trial-decrypting every mnemonic).
+///   at spend time (rather than trial-decrypting every legacy seed).
 /// - `encrypted_legacy_seed` is a 32-byte HD seed in an [age encrypted file].
 ///
 /// [ZIP 32 fingerprint]: https://zips.z.cash/zip-0032#seed-fingerprints
