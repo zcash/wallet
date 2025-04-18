@@ -39,6 +39,14 @@ identity = "/path/to/zallet/datadir/identity.txt"
 bind = ["127.0.0.1:SOMEPORT"]
 ```
 
+In particular, you currently need to configure the `[indexer]` section to point
+at your full node's JSON-RPC endpoint. The relevant config options in that
+section are:
+- `validator_address` (if not running on localhost at the default port)
+- `validator_cookie_auth = true` and `validator_cookie_path` (if using cookie
+  auth)
+- `validator_user` and `validator_password` (if using basic auth)
+
 If you have an existing `zcash.conf`, you can use it as a starting point:
 ```
 $ zallet migrate-zcash-conf --datadir /path/to/zcashd/datadir -o /path/to/zallet/datadir/zallet.toml
