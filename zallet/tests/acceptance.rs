@@ -46,6 +46,9 @@ fn version_no_args() {
 }
 
 #[test]
+// TODO: Fails on Windows because `tempdir` uses `C:\Users` as the dir prefix.
+//       https://github.com/zcash/wallet/issues/108
+#[cfg(not(target_os = "windows"))]
 fn setup_new_wallet() {
     let datadir = tempdir().unwrap();
     let config_file = datadir.path().join("zallet.toml");
