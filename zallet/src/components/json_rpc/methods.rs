@@ -216,6 +216,7 @@ impl RpcImpl {
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
 
+    #[allow(unused)]
     async fn start_async<T: Serialize + Send + 'static>(
         &self,
         f: impl Future<Output = RpcResult<T>> + Send + 'static,

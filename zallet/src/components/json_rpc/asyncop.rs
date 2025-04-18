@@ -61,6 +61,7 @@ pub(super) struct AsyncOperation {
 
 impl AsyncOperation {
     /// Launches a new async operation.
+    #[allow(unused)]
     pub(super) async fn new<T: Serialize + Send + 'static>(
         f: impl Future<Output = RpcResult<T>> + Send + 'static,
     ) -> Self {
