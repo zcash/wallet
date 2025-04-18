@@ -13,8 +13,12 @@
     unused_qualifications
 )]
 
-use abscissa_core::testing::prelude::*;
+use std::io::Write;
+
+use abscissa_core::{fs::File, testing::prelude::*};
+use age::secrecy::ExposeSecret;
 use once_cell::sync::Lazy;
+use tempfile::tempdir;
 
 /// Executes your application binary via `cargo run`.
 ///
@@ -39,4 +43,73 @@ fn version_no_args() {
     let mut runner = RUNNER.clone();
     let mut cmd = runner.arg("--version").capture_stdout().run();
     cmd.stdout().expect_regex(r"\A\w+ [\d\.\-]+\z");
+}
+
+#[test]
+// TODO: Fails on Windows because `tempdir` uses `C:\Users` as the dir prefix.
+//       https://github.com/zcash/wallet/issues/108
+#[cfg(not(target_os = "windows"))]
+fn setup_new_wallet() {
+    let datadir = tempdir().unwrap();
+    let config_file = datadir.path().join("zallet.toml");
+    let identity_file = datadir.path().join("identity.txt");
+    let wallet_db = datadir.path().join("data.sqlite");
+
+    {
+        let mut f = File::create(&config_file).unwrap();
+        writeln!(f, "network = \"test\"").unwrap();
+        writeln!(f, "wallet_db = \"{}\"", wallet_db.display()).unwrap();
+        writeln!(f, "[builder]").unwrap();
+        writeln!(f, "[indexer]").unwrap();
+        writeln!(f, "[keystore]").unwrap();
+        writeln!(f, "identity = \"{}\"", identity_file.display()).unwrap();
+        writeln!(f, "[limits]").unwrap();
+        writeln!(f, "[rpc]").unwrap();
+        writeln!(f, "bind = []").unwrap();
+    }
+
+    {
+        let mut f = File::create(identity_file).unwrap();
+        writeln!(
+            f,
+            "{}",
+            age::x25519::Identity::generate()
+                .to_string()
+                .expose_secret()
+        )
+        .unwrap();
+    }
+
+    {
+        let mut runner = RUNNER.clone();
+        let mut cmd = runner
+            .arg("-c")
+            .arg(&config_file)
+            .arg("init-wallet-encryption")
+            .capture_stdout()
+            .run();
+        cmd.stdout().expect_regex(".*Creating empty database.*");
+        cmd.wait().unwrap().expect_code(0);
+    }
+
+    {
+        let mut runner = RUNNER.clone();
+        let mut cmd = runner
+            .arg("-c")
+            .arg(&config_file)
+            .arg("generate-mnemonic")
+            .capture_stdout()
+            .run();
+        cmd.stdout()
+            .expect_regex(".*Applying latest database migrations.*");
+        cmd.wait().unwrap().expect_code(0);
+    }
+
+    {
+        let mut runner = RUNNER.clone();
+        let cmd = runner.arg("-c").arg(&config_file).arg("start").run();
+        // We omitted some config lines necessary for `start` in order to ensure
+        // that it fails.
+        cmd.wait().unwrap().expect_code(1);
+    }
 }

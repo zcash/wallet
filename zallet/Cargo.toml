@@ -145,6 +145,7 @@ rust-embed.workspace = true
 abscissa_core = { workspace = true, features = ["testing"] }
 once_cell = "1.2"
 regex = "1.4"
+tempfile = "3"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(outside_buildscript)'] }
