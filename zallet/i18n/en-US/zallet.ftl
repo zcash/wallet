@@ -70,6 +70,8 @@ err-kind-generic = Error
 err-kind-init = Failed to initialize {-zallet}
 err-kind-sync = Failed to synchronize {-zallet}
 
+# errors in migration of configuration data from the zcashd `zcash.conf` config file format
+
 err-migrate-allow-warnings = To allow a migration with warnings, use '{-allow-warnings}'
 err-migrate-duplicate-zcashd-option =
     {-zcashd} option '{$option}' does not support multiple values,
@@ -83,6 +85,12 @@ err-migrate-multiple-related-zcashd-options =
     {$conf}
     Remove one of the conflicting options, then re-run this command.
 err-migrate-unknown-zcashd-option = Unknown {-zcashd} option '{$option}'
+
+# errors in migration of wallet data from the zcashd `wallet.dat` database format
+
+err-failed-seed-fingerprinting =
+    Zallet was unable to import invalid seed data, likely due to the seed having
+    an invalid length.
 
 err-ux-A = Did {-zallet} not do what you expected? Could the error be more useful?
 err-ux-B = Tell us

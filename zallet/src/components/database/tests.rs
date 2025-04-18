@@ -45,6 +45,7 @@ fn verify_schema() {
         ORDER BY tbl_name",
         &[
             keystore::db::TABLE_AGE_RECIPIENTS,
+            keystore::db::TABLE_LEGACY_SEEDS,
             keystore::db::TABLE_MNEMONICS,
         ],
     );
