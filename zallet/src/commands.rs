@@ -10,6 +10,7 @@ use crate::{
 };
 
 mod generate_mnemonic;
+mod import_mnemonic;
 mod init_wallet_encryption;
 mod migrate_zcash_conf;
 mod start;

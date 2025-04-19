@@ -93,6 +93,7 @@ jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 orchard.workspace = true
 rand.workspace = true
+rpassword.workspace = true
 rusqlite.workspace = true
 rust-embed.workspace = true
 sapling.workspace = true

@@ -26,6 +26,7 @@ mod list_operation_ids;
 mod list_unified_receivers;
 mod list_unspent;
 mod lock_wallet;
+mod recover_accounts;
 mod unlock_wallet;
 
 #[rpc(server)]
@@ -110,6 +111,36 @@ pub(crate) trait Rpc {
         account_name: &str,
         seedfp: Option<&str>,
     ) -> get_new_account::Response;
+
+    /// Tells the wallet to track specific accounts.
+    ///
+    /// Returns the UUIDs within this Zallet instance of the newly-tracked accounts.
+    /// Accounts that are already tracked by the wallet are ignored.
+    ///
+    /// After calling this method, a subsequent call to `z_getnewaccount` will add the
+    /// first account with index greater than all indices provided here for the
+    /// corresponding `seedfp` (as well as any already tracked by the wallet).
+    ///
+    /// Each tracked account is a separate group of funds within the wallet, and adds an
+    /// additional performance cost to wallet scanning.
+    ///
+    /// Use the `z_getaddressforaccount` RPC method to obtain addresses for an account.
+    ///
+    /// # Arguments
+    ///
+    /// - `accounts` (array, required) An array of JSON objects representing the accounts
+    ///   to recover, with the following fields:
+    ///   - `name` (string, required)
+    ///   - `seedfp` (string, required) The seed fingerprint for the mnemonic phrase from
+    ///     which the account is derived. Available seed fingerprints can be found in the
+    ///     output of the `listaddresses` RPC method.
+    ///   - `zip32_account_index` (numeric, required)
+    ///   - `birthday_height` (numeric, required)
+    #[method(name = "z_recoveraccounts")]
+    async fn recover_accounts(
+        &self,
+        accounts: Vec<recover_accounts::AccountParameter<'_>>,
+    ) -> recover_accounts::Response;
 
     /// For the given account, derives a Unified Address in accordance with the remaining
     /// arguments:
@@ -273,6 +304,19 @@ impl RpcServer for RpcImpl {
             self.chain().await?,
             account_name,
             seedfp,
+        )
+        .await
+    }
+
+    async fn recover_accounts(
+        &self,
+        accounts: Vec<recover_accounts::AccountParameter<'_>>,
+    ) -> recover_accounts::Response {
+        recover_accounts::call(
+            self.wallet().await?.as_mut(),
+            &self.keystore,
+            self.chain().await?,
+            accounts,
         )
         .await
     }
