@@ -507,7 +507,7 @@ fn build_actions() -> HashMap<&'static str, Action> {
         .chain(Action::map_multi(
             "nuparams",
             |config| &mut config.regtest_nuparams,
-            |value| RegTestNuParam::try_from(value).map_err(|_| ()),
+            |value| RegTestNuParam::try_from(value.to_string()).map_err(|_| ()),
         ))
         .chain(Action::map_related(
             "regtest",
