@@ -1,5 +1,5 @@
 bin.name = "zallet"
-args = "migrate-zcashd-conf --datadir ./ -o - --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later"
+args = "migrate-zcash-conf --datadir ./ -o - --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later"
 stdin = ""
 stdout = """
 # Zallet configuration file
@@ -17,6 +17,10 @@ identity = ""
 [limits]
 
 [rpc]
+bind = [
+    "172.16.0.1:8234",
+    "127.0.0.1:8234",
+]
 
 """
 stderr = ""
