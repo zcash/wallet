@@ -90,17 +90,17 @@ impl consensus::Parameters for Network {
 
 /// A parameter for regtest mode.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(try_from = "&str")]
+#[serde(try_from = "String")]
 #[serde(into = "String")]
 pub struct RegTestNuParam {
     consensus_branch_id: consensus::BranchId,
     activation_height: BlockHeight,
 }
 
-impl TryFrom<&str> for RegTestNuParam {
+impl TryFrom<String> for RegTestNuParam {
     type Error = &'static str;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         let (branch_id, height) = value.split_once(':').ok_or("Invalid `regtest_nuparam`")?;
 
         let consensus_branch_id = u32::from_str_radix(branch_id, 16)
