@@ -1,0 +1,124 @@
+# Default configuration for Zallet.
+#
+# This file is generated as an example using Zallet's current defaults. It can
+# be used as a skeleton for custom configs.
+#
+# Fields that are required to be set are uncommented, and set to an example
+# value. Every other field is commented out, and set to the current default
+# value that Zallet will use for it (or `UNSET` if the field has no default).
+#
+# Leaving a field commented out means that Zallet will always use the latest
+# default value, even if it changes in future. Uncommenting a field but keeping
+# it set to the current default value means that Zallet will treat it as a
+# user-configured value going forward.
+
+# Whether the wallet should broadcast transactions.
+#broadcast = true
+
+# Directory to be used when exporting data.
+#export_dir = UNSET
+
+# Network type.
+network = "main"
+
+# Execute command when a wallet transaction changes.
+#
+# `%s` in the command is replaced by TxID.
+#notify = UNSET
+
+# The parameters for regtest mode.
+#
+# Ignored if `network` is not `NetworkType::Regtest`.
+#regtest_nuparams = []
+
+# By default, the wallet will not allow generation of new spending keys & addresses
+# from the mnemonic seed until the backup of that seed has been confirmed with the
+# `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
+# to allow generation of spending keys even if the backup has not yet been confirmed.
+#require_backup = true
+
+# Path to the wallet database file.
+#
+# TODO: If we decide to support a data directory, allow this to have a relative path
+# within it as well as a default name.
+#wallet_db = UNSET
+
+
+# Transaction builder configuration section.
+[builder]
+
+# Whether to spend unconfirmed transparent change when sending transactions.
+#
+# Does not affect unconfirmed shielded change, which cannot be spent.
+#spend_zeroconf_change = true
+
+# The number of blocks after which a transaction created by Zallet that has not been
+# mined will become invalid.
+#
+# - Minimum: `TX_EXPIRING_SOON_THRESHOLD + 1`
+#tx_expiry_delta = 40
+
+
+# Indexer configuration section.
+[indexer]
+
+# IP address and port of the JSON-RPC interface for the full node / validator being
+# used as a data source.
+#
+# If unset, connects on localhost to the standard JSON-RPC port for mainnet or
+# testnet (as appropriate).
+#validator_address = UNSET
+
+# Enable validator RPC cookie authentication.
+#validator_cookie_auth = UNSET
+
+# Path to the validator cookie file.
+#validator_cookie_path = UNSET
+
+# Full node / validator Username.
+#validator_user = UNSET
+
+# Full node / validator Password.
+#validator_password = UNSET
+
+# Block Cache database file path.
+#
+# This is Zaino's Compact Block Cache db if using the FetchService or Zebra's RocksDB if using the StateService.
+#db_path = UNSET
+
+
+# Key store configuration section.
+[keystore]
+
+# Path to the age identity file that encrypts key material.
+#identity = ""
+
+
+# Limits configuration section.
+[limits]
+
+# The maximum number of Orchard actions permitted in a constructed transaction.
+#orchard_actions = 50
+
+
+# RPC configuration section.
+[rpc]
+
+# Addresses to listen for JSON-RPC connections.
+#
+# Note: The RPC server is disabled by default. To enable the RPC server, set a
+# listen address in the config:
+# ```toml
+# [rpc]
+# bind = ["127.0.0.1:28232"]
+# ```
+#
+# # Security
+#
+# If you bind Zallet's RPC port to a public IP address, anyone on the internet can
+# view your transactions and spend your funds.
+#bind = []
+
+# Timeout (in seconds) during HTTP requests.
+#timeout = 30
+

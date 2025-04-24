@@ -1,0 +1,7 @@
+bin.name = "zallet"
+args = "example-config -o zallet.toml --this-is-alpha-code-and-you-will-need-to-recreate-the-example-later"
+stdin = ""
+stdout = """
+zallet config written to zallet.toml
+"""
+stderr = ""

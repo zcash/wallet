@@ -21,6 +21,10 @@ async-trait = "0.1"
 futures = "0.3"
 tokio = "1"
 
+# Documentation
+documented = "0.3"
+extruct = "0.2"
+
 # Filesystem
 home = "0.5"
 known-folders = "1"

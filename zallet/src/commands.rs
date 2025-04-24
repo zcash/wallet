@@ -9,6 +9,7 @@ use crate::{
     config::ZalletConfig,
 };
 
+mod example_config;
 mod generate_mnemonic;
 mod import_mnemonic;
 mod init_wallet_encryption;

@@ -39,6 +39,9 @@ pub(crate) enum ZalletCmd {
     /// The `start` subcommand
     Start(StartCmd),
 
+    /// Generate an example `zallet.toml` config.
+    ExampleConfig(ExampleConfigCmd),
+
     /// Generate a `zallet.toml` config from an existing `zcash.conf` file.
     MigrateZcashConf(MigrateZcashConfCmd),
 
@@ -56,6 +59,26 @@ pub(crate) enum ZalletCmd {
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct StartCmd {}
+
+/// `example-config` subcommand
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct ExampleConfigCmd {
+    /// Where to write the Zallet config file.
+    ///
+    /// - By default, the default Zallet config file path is used.
+    /// - The value `-` will write the config to stdout.
+    #[arg(short, long)]
+    pub(crate) output: Option<String>,
+
+    /// Force an existing Zallet config file to be overwritten.
+    #[arg(short, long)]
+    pub(crate) force: bool,
+
+    /// Temporary flag ensuring any alpha users are aware the config is not stable.
+    #[arg(long)]
+    pub(crate) this_is_alpha_code_and_you_will_need_to_recreate_the_example_later: bool,
+}
 
 /// `migrate-zcash-conf` subcommand
 #[derive(Debug, Parser)]
