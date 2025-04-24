@@ -86,10 +86,6 @@ criteria = "safe-to-deploy"
 version = "0.2.21"
 criteria = "safe-to-deploy"
 
-[[exemptions.android-tzdata]]
-version = "0.1.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.anstream]]
 version = "0.6.18"
 criteria = "safe-to-deploy"
@@ -306,6 +302,10 @@ criteria = "safe-to-deploy"
 version = "0.2.34"
 criteria = "safe-to-deploy"
 
+[[exemptions.content_inspector]]
+version = "0.2.4"
+criteria = "safe-to-run"
+
 [[exemptions.cookie]]
 version = "0.18.1"
 criteria = "safe-to-deploy"
@@ -410,6 +410,10 @@ criteria = "safe-to-deploy"
 version = "0.4.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.dunce]]
+version = "1.0.5"
+criteria = "safe-to-run"
+
 [[exemptions.ed25519]]
 version = "2.2.1"
 criteria = "safe-to-deploy"
@@ -442,13 +446,13 @@ criteria = "safe-to-deploy"
 version = "0.1.9"
 criteria = "safe-to-deploy"
 
-[[exemptions.fastrand]]
-version = "2.3.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.ff]]
 version = "0.13.1"
 criteria = "safe-to-deploy"
+
+[[exemptions.filetime]]
+version = "0.2.25"
+criteria = "safe-to-run"
 
 [[exemptions.find-crate]]
 version = "0.6.3"
@@ -636,10 +640,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.i18n-embed-impl]]
 version = "0.8.4"
-criteria = "safe-to-deploy"
-
-[[exemptions.iana-time-zone]]
-version = "0.1.63"
 criteria = "safe-to-deploy"
 
 [[exemptions.icu_locid_transform_data]]
@@ -886,6 +886,10 @@ criteria = "safe-to-deploy"
 version = "0.4.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.os_pipe]]
+version = "1.2.1"
+criteria = "safe-to-run"
+
 [[exemptions.owo-colors]]
 version = "3.5.0"
 criteria = "safe-to-deploy"
@@ -1028,10 +1032,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.quinn-proto]]
 version = "0.11.10"
-criteria = "safe-to-deploy"
-
-[[exemptions.quinn-udp]]
-version = "0.5.11"
 criteria = "safe-to-deploy"
 
 [[exemptions.r-efi]]
@@ -1270,6 +1270,10 @@ criteria = "safe-to-deploy"
 version = "1.4.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.similar]]
+version = "2.7.0"
+criteria = "safe-to-run"
+
 [[exemptions.sinsemilla]]
 version = "0.1.0"
 criteria = "safe-to-deploy"
@@ -1281,6 +1285,14 @@ criteria = "safe-to-deploy"
 [[exemptions.smallvec]]
 version = "1.15.0"
 criteria = "safe-to-deploy"
+
+[[exemptions.snapbox]]
+version = "0.4.17"
+criteria = "safe-to-run"
+
+[[exemptions.snapbox-macros]]
+version = "0.3.10"
+criteria = "safe-to-run"
 
 [[exemptions.socket2]]
 version = "0.5.9"
@@ -1421,6 +1433,10 @@ criteria = "safe-to-deploy"
 [[exemptions.tracing-subscriber]]
 version = "0.3.19"
 criteria = "safe-to-deploy"
+
+[[exemptions.trycmd]]
+version = "0.14.21"
+criteria = "safe-to-run"
 
 [[exemptions.type-map]]
 version = "0.5.0"
