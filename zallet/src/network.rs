@@ -176,4 +176,7 @@ pub(crate) mod kind {
             NetworkType::Regtest => "regtest",
         })
     }
+
+    #[derive(serde::Serialize)]
+    pub(crate) struct Serializable(#[serde(with = "crate::network::kind")] pub(crate) NetworkType);
 }

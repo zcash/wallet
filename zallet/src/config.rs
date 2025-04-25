@@ -1,9 +1,13 @@
 //! Zallet Config
 
+use std::collections::HashMap;
+use std::fmt::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use documented::{Documented, DocumentedFields};
+use extruct::Fields;
 use serde::{Deserialize, Serialize};
 use zcash_protocol::consensus::NetworkType;
 
@@ -15,7 +19,7 @@ use crate::network::{Network, RegTestNuParam};
 /// default value (which may change over time), and a user explicitly configuring an
 /// option with the current default value (which should be preserved). The sole exception
 /// to this is `network`, which cannot change for the lifetime of the wallet.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Fields, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
     /// Whether the wallet should broadcast transactions.
@@ -111,7 +115,7 @@ impl ZalletConfig {
 }
 
 /// Transaction builder configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct BuilderSection {
     /// Whether to spend unconfirmed transparent change when sending transactions.
@@ -147,7 +151,7 @@ impl BuilderSection {
 }
 
 /// Indexer configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct IndexerSection {
     /// IP address and port of the JSON-RPC interface for the full node / validator being
@@ -176,7 +180,7 @@ pub struct IndexerSection {
 }
 
 /// Key store configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct KeyStoreSection {
     /// Path to the age identity file that encrypts key material.
@@ -185,7 +189,7 @@ pub struct KeyStoreSection {
 }
 
 /// Limits configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct LimitsSection {
     /// The maximum number of Orchard actions permitted in a constructed transaction.
@@ -202,7 +206,7 @@ impl LimitsSection {
 }
 
 /// RPC configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct RpcSection {
     /// Addresses to listen for JSON-RPC connections.
@@ -231,5 +235,197 @@ impl RpcSection {
     /// Default is 30 seconds.
     pub fn timeout(&self) -> Duration {
         Duration::from_secs(self.timeout.unwrap_or(30))
+    }
+}
+
+impl ZalletConfig {
+    /// Generates an example config file, with all default values included as comments.
+    pub fn generate_example() -> String {
+        // This is the one bit of duplication we can't yet avoid. It could be replaced
+        // with a proc macro, but for now we just need to remember to update this as we
+        // make changes to the config structure.
+        let conf = ZalletConfig::default();
+        let field_defaults = [
+            top("broadcast", conf.broadcast()),
+            top("export_dir", &conf.export_dir),
+            top("network", crate::network::kind::Serializable(conf.network)),
+            top("notify", &conf.notify),
+            top("regtest_nuparams", &conf.regtest_nuparams),
+            top("require_backup", conf.require_backup()),
+            top("wallet_db", &conf.wallet_db),
+            builder(
+                "spend_zeroconf_change",
+                conf.builder.spend_zeroconf_change(),
+            ),
+            builder("tx_expiry_delta", conf.builder.tx_expiry_delta()),
+            indexer("validator_address", conf.indexer.validator_address),
+            indexer("validator_cookie_auth", conf.indexer.validator_cookie_auth),
+            indexer("validator_cookie_path", &conf.indexer.validator_cookie_path),
+            indexer("validator_user", &conf.indexer.validator_user),
+            indexer("validator_password", &conf.indexer.validator_password),
+            indexer("db_path", &conf.indexer.db_path),
+            keystore("identity", &conf.keystore.identity),
+            limits("orchard_actions", conf.limits.orchard_actions()),
+            rpc("bind", &conf.rpc.bind),
+            rpc("timeout", conf.rpc.timeout().as_secs()),
+        ]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+
+        // The glue that makes the above easy to maintain:
+        const BUILDER: &str = "builder";
+        const INDEXER: &str = "indexer";
+        const KEYSTORE: &str = "keystore";
+        const LIMITS: &str = "limits";
+        const RPC: &str = "rpc";
+        fn top<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field("", f, d)
+        }
+        fn builder<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(BUILDER, f, d)
+        }
+        fn indexer<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(INDEXER, f, d)
+        }
+        fn keystore<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(KEYSTORE, f, d)
+        }
+        fn limits<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(LIMITS, f, d)
+        }
+        fn rpc<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(RPC, f, d)
+        }
+        fn field<T: Serialize>(
+            s: &'static str,
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            (
+                (s, f),
+                match toml::Value::try_from(d) {
+                    Ok(v) => Some(v),
+                    Err(e) if e.to_string() == "unsupported None value" => None,
+                    Err(_) => unreachable!(),
+                },
+            )
+        }
+
+        let top_def = |field_name| {
+            field_defaults
+                .get(&("", field_name))
+                .expect("need to update field_defaults with changes to ZalletConfig")
+                .as_ref()
+        };
+
+        let sec_def = |section_name, field_name| {
+            field_defaults
+                .get(&(section_name, field_name))
+                .expect("need to update field_defaults with changes to ZalletConfig")
+                .as_ref()
+        };
+
+        let mut config = r"# Default configuration for Zallet.
+#
+# This file is generated as an example using Zallet's current defaults. It can
+# be used as a skeleton for custom configs.
+#
+# Fields that are required to be set are uncommented, and set to an example
+# value. Every other field is commented out, and set to the current default
+# value that Zallet will use for it (or `UNSET` if the field has no default).
+#
+# Leaving a field commented out means that Zallet will always use the latest
+# default value, even if it changes in future. Uncommenting a field but keeping
+# it set to the current default value means that Zallet will treat it as a
+# user-configured value going forward.
+
+"
+        .to_owned();
+
+        fn write_section<'a, T: Documented + Fields + DocumentedFields>(
+            config: &mut String,
+            section_name: &'static str,
+            sec_def: impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
+        ) {
+            writeln!(config).unwrap();
+            for line in T::DOCS.lines() {
+                writeln!(config, "# {}", line).unwrap();
+            }
+            writeln!(config, "[{}]", section_name).unwrap();
+            writeln!(config).unwrap();
+
+            for field_name in T::fields() {
+                write_field::<T>(config, field_name, false, sec_def(section_name, field_name));
+            }
+        }
+
+        fn write_field<T: DocumentedFields>(
+            config: &mut String,
+            field_name: &str,
+            required: bool,
+            field_default: Option<&toml::Value>,
+        ) {
+            let field_doc = T::get_field_docs(field_name).expect("present");
+            for line in field_doc.lines() {
+                if line.is_empty() {
+                    writeln!(config, "#").unwrap();
+                } else {
+                    writeln!(config, "# {}", line).unwrap();
+                }
+            }
+
+            write!(
+                config,
+                "{}{} = ",
+                if required { "" } else { "#" },
+                field_name
+            )
+            .unwrap();
+            match field_default {
+                Some(present) => {
+                    Serialize::serialize(&present, toml::ser::ValueSerializer::new(config)).unwrap()
+                }
+                None => write!(config, "UNSET").unwrap(),
+            }
+
+            writeln!(config).unwrap();
+            writeln!(config).unwrap();
+        }
+
+        for field_name in Self::fields() {
+            match *field_name {
+                BUILDER => write_section::<BuilderSection>(&mut config, field_name, sec_def),
+                INDEXER => write_section::<IndexerSection>(&mut config, field_name, sec_def),
+                KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, sec_def),
+                LIMITS => write_section::<LimitsSection>(&mut config, field_name, sec_def),
+                RPC => write_section::<RpcSection>(&mut config, field_name, sec_def),
+                _ => write_field::<Self>(
+                    &mut config,
+                    field_name,
+                    *field_name == "network",
+                    top_def(field_name),
+                ),
+            }
+        }
+
+        config
     }
 }

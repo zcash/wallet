@@ -18,6 +18,7 @@
 {-systemd} = systemd
 
 -allow-warnings = --allow-warnings
+-allow-alpha-example = --this-is-alpha-code-and-you-will-need-to-recreate-the-example-later
 -allow-alpha-migration = --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later
 
 ## Usage
@@ -25,6 +26,13 @@
 usage-header = Usage
 
 flags-header = Options
+
+## zallet.toml example messages
+
+example-alpha-code =
+    This command is not stable. You will need to rerun this command again once {-zallet}
+    is stable to migrate your config correctly. To confirm you are aware of this, use
+    '{-allow-alpha-example}'.
 
 ## zcash.conf migration messages
 
