@@ -1,0 +1,22 @@
+bin.name = "zallet"
+args = "migrate-zcash-conf --datadir ./ -o - --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later"
+stdin = ""
+stdout = """
+# Zallet configuration file
+# Migrated from ./zcash.conf
+
+network = "test"
+
+[builder]
+
+[indexer]
+
+[keystore]
+identity = ""
+
+[limits]
+
+[rpc]
+
+"""
+stderr = ""

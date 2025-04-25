@@ -218,7 +218,7 @@ pub struct RpcSection {
     ///
     /// If you bind Zallet's RPC port to a public IP address, anyone on the internet can
     /// view your transactions and spend your funds.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bind: Vec<SocketAddr>,
 
     /// Timeout (in seconds) during HTTP requests.

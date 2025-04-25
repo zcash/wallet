@@ -39,8 +39,8 @@ pub(crate) enum ZalletCmd {
     /// The `start` subcommand
     Start(StartCmd),
 
-    /// Generate a `zallet.toml` config from an existing `zcashd.conf` file.
-    MigrateZcashdConf(MigrateZcashConfCmd),
+    /// Generate a `zallet.toml` config from an existing `zcash.conf` file.
+    MigrateZcashConf(MigrateZcashConfCmd),
 
     /// Initialize wallet encryption.
     InitWalletEncryption(InitWalletEncryptionCmd),

@@ -527,7 +527,8 @@ fn build_actions() -> HashMap<&'static str, Action> {
         .chain(Action::map_multi(
             "rpcbind",
             |config| &mut config.rpc.bind,
-            |value| value.parse().map_err(|_| ()),
+            // TODO: Decide on a default Zallet JSON-RPC port.
+            |value| format!("{}:{}", value, 8234).parse().map_err(|_| ()),
         ))
         // TODO
         .chain(Action::ignore("rpccookiefile"))
@@ -608,6 +609,7 @@ fn build_actions() -> HashMap<&'static str, Action> {
         "gen",
         "help",
         "help-debug",
+        "i-am-aware-zcashd-will-be-replaced-by-zebrad-and-zallet-in-2025",
         "ibdskiptxverification",
         "insightexplorer",
         "json",
