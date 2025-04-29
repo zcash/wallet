@@ -1,4 +1,5 @@
 use std::env;
+use std::error::Error;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -27,34 +28,41 @@ macro_rules! fl {
     }};
 }
 
-fn main() -> io::Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
+    println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed=src/cli.rs");
+    println!("cargo::rerun-if-changed=src/i18n.rs");
+
     // Expose a cfg option so we can make parts of the CLI conditional on not being built
     // within the buildscript.
     println!("cargo:rustc-cfg=outside_buildscript");
 
+    let out_dir = match env::var_os("OUT_DIR") {
+        None => return Ok(()),
+        Some(out_dir) => PathBuf::from(out_dir),
+    };
+
     // `OUT_DIR` is "intentionally opaque as it is only intended for `rustc` interaction"
     // (https://github.com/rust-lang/cargo/issues/9858). Peek into the black box and use
     // it to figure out where the target directory is.
-    let out_dir = match env::var_os("OUT_DIR") {
-        None => return Ok(()),
-        Some(out_dir) => PathBuf::from(out_dir)
-            .ancestors()
-            .nth(3)
-            .expect("should be absolute path")
-            .to_path_buf(),
-    };
+    let target_dir = out_dir
+        .ancestors()
+        .nth(3)
+        .expect("should be absolute path")
+        .to_path_buf();
 
     // Generate the completions in English, because these aren't easily localizable.
     i18n::load_languages(&[]);
-    Cli::build().generate_completions(&out_dir.join("completions"))?;
+    Cli::build().generate_completions(&target_dir.join("completions"))?;
 
     // Generate manpages for all supported languages.
-    let manpage_dir = out_dir.join("manpages");
+    let manpage_dir = target_dir.join("manpages");
     for lang_dir in fs::read_dir("./i18n")? {
         let lang_dir = lang_dir?.file_name();
+        let lang_dir = lang_dir.to_str().expect("should be valid Unicode");
+        println!("cargo::rerun-if-changed=i18n/{lang_dir}/zallet.ftl");
+
         let lang: LanguageIdentifier = lang_dir
-            .to_str()
-            .expect("should be valid Unicode")
             .parse()
             .expect("should be valid language identifier");
 
