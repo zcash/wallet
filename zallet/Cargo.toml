@@ -94,6 +94,7 @@ i18n-embed-fl.workspace = true
 jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 orchard.workspace = true
+phf.workspace = true
 rand.workspace = true
 rpassword.workspace = true
 rusqlite.workspace = true
@@ -143,6 +144,7 @@ flate2 = "1"
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
 rust-embed.workspace = true
+syn = "2"
 
 [dev-dependencies]
 abscissa_core = { workspace = true, features = ["testing"] }
