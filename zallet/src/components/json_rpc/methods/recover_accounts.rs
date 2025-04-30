@@ -20,7 +20,8 @@ use crate::components::{
 };
 
 /// Response to a `z_recoveraccounts` RPC request.
-pub(crate) type Response = RpcResult<Accounts>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = Accounts;
 
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct AccountParameter<'a> {

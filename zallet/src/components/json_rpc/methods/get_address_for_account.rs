@@ -19,7 +19,8 @@ use crate::components::{
 };
 
 /// Response to a `z_getaddressforaccount` RPC request.
-pub(crate) type Response = RpcResult<Address>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = Address;
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct Address {

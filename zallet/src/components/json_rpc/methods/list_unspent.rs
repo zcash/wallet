@@ -24,7 +24,11 @@ use crate::components::{
 };
 
 /// Response to a `z_listunspent` RPC request.
-pub(crate) type Response = RpcResult<Vec<UnspentNote>>;
+pub(crate) type Response = RpcResult<ResultType>;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
+pub(crate) struct ResultType(Vec<UnspentNote>);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct UnspentNote {
@@ -84,7 +88,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         )
     })? {
         Some(block) => block.block_height(),
-        None => return Ok(vec![]),
+        None => return Ok(ResultType(vec![])),
     };
 
     let mut unspent_notes = vec![];
@@ -275,5 +279,5 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         }
     }
 
-    Ok(unspent_notes)
+    Ok(ResultType(unspent_notes))
 }

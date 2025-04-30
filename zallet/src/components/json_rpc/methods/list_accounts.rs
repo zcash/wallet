@@ -8,7 +8,11 @@ use zcash_client_backend::{
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `z_listaccounts` RPC request.
-pub(crate) type Response = RpcResult<Vec<Account>>;
+pub(crate) type Response = RpcResult<ResultType>;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
+pub(crate) struct ResultType(Vec<Account>);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Account {
@@ -68,5 +72,5 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         });
     }
 
-    Ok(accounts)
+    Ok(ResultType(accounts))
 }

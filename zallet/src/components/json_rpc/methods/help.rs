@@ -1,8 +1,18 @@
+use jsonrpsee::core::RpcResult;
+use serde::Serialize;
+
 // See `generate_rpc_help()` in `build.rs` for how this is generated.
 include!(concat!(env!("OUT_DIR"), "/rpc_help.rs"));
 
-pub(crate) fn call(command: Option<&str>) -> String {
-    if let Some(command) = command {
+/// Response to a `help` RPC request.
+pub(crate) type Response = RpcResult<ResultType>;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
+pub(crate) struct ResultType(String);
+
+pub(crate) fn call(command: Option<&str>) -> Response {
+    Ok(ResultType(if let Some(command) = command {
         match COMMANDS.get(command) {
             None => format!("help: unknown command: {command}\n"),
             Some(help_text) => format!("{command}\n\n{help_text}"),
@@ -17,5 +27,5 @@ pub(crate) fn call(command: Option<&str>) -> String {
             ret.push('\n');
         }
         ret
-    }
+    }))
 }

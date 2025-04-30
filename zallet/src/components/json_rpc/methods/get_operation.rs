@@ -1,11 +1,16 @@
 use std::collections::HashSet;
 
 use jsonrpsee::core::RpcResult;
+use serde::Serialize;
 
 use crate::components::json_rpc::asyncop::{AsyncOperation, OperationState, OperationStatus};
 
 /// Response to a `z_getoperationstatus` or `z_getoperationresult` RPC request.
-pub(crate) type Response = RpcResult<Vec<OperationStatus>>;
+pub(crate) type Response = RpcResult<ResultType>;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
+pub(crate) struct ResultType(Vec<OperationStatus>);
 
 pub(crate) async fn status(async_ops: &[AsyncOperation], operationid: Vec<&str>) -> Response {
     let filter = operationid.into_iter().collect::<HashSet<_>>();
@@ -16,7 +21,7 @@ pub(crate) async fn status(async_ops: &[AsyncOperation], operationid: Vec<&str>)
         ret.push(op.to_status().await);
     }
 
-    Ok(ret)
+    Ok(ResultType(ret))
 }
 
 pub(crate) async fn result(
@@ -40,7 +45,7 @@ pub(crate) async fn result(
 
     async_ops.retain(|op| !remove.contains(op.operation_id()));
 
-    Ok(ret)
+    Ok(ResultType(ret))
 }
 
 fn filtered<'a>(

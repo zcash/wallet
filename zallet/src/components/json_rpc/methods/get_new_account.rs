@@ -15,7 +15,8 @@ use crate::components::{
 };
 
 /// Response to a `z_getnewaccount` RPC request.
-pub(crate) type Response = RpcResult<Account>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = Account;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Account {

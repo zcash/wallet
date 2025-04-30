@@ -2,7 +2,8 @@ use jsonrpsee::{core::RpcResult, tracing::warn, types::ErrorCode};
 use serde::{Deserialize, Serialize};
 
 /// Response to a `z_listunifiedreceivers` RPC request.
-pub(crate) type Response = RpcResult<ListUnifiedReceivers>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = ListUnifiedReceivers;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ListUnifiedReceivers {

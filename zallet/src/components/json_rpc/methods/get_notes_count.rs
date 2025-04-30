@@ -6,7 +6,8 @@ use zcash_protocol::{ShieldedProtocol, value::Zatoshis};
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `z_getnotescount` RPC request.
-pub(crate) type Response = RpcResult<GetNotesCount>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = GetNotesCount;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct GetNotesCount {

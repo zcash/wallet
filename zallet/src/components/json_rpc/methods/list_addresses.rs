@@ -17,7 +17,11 @@ use zip32::fingerprint::SeedFingerprint;
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `listaddresses` RPC request.
-pub(crate) type Response = RpcResult<Vec<AddressSource>>;
+pub(crate) type Response = RpcResult<ResultType>;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
+pub(crate) struct ResultType(Vec<AddressSource>);
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct AddressSource {
@@ -271,11 +275,13 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         }
     }
 
-    Ok([
-        imported_watchonly.has_data().then_some(imported_watchonly),
-        mnemonic_seed.has_data().then_some(mnemonic_seed),
-    ]
-    .into_iter()
-    .flatten()
-    .collect())
+    Ok(ResultType(
+        [
+            imported_watchonly.has_data().then_some(imported_watchonly),
+            mnemonic_seed.has_data().then_some(mnemonic_seed),
+        ]
+        .into_iter()
+        .flatten()
+        .collect(),
+    ))
 }

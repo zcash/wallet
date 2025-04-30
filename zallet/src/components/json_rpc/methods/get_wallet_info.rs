@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use crate::components::keystore::KeyStore;
 
 /// Response to a `getwalletinfo` RPC request.
-pub(crate) type Response = RpcResult<GetWalletInfo>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = GetWalletInfo;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct GetWalletInfo {

@@ -37,7 +37,7 @@ pub(crate) trait Rpc {
     /// # Arguments
     /// - `command` (string, optional) The command to get help on.
     #[method(name = "help")]
-    fn help(&self, command: Option<&str>) -> String;
+    fn help(&self, command: Option<&str>) -> help::Response;
 
     /// Returns the list of operation ids currently known to the wallet.
     ///
@@ -269,7 +269,7 @@ impl RpcImpl {
 
 #[async_trait]
 impl RpcServer for RpcImpl {
-    fn help(&self, command: Option<&str>) -> String {
+    fn help(&self, command: Option<&str>) -> help::Response {
         help::call(command)
     }
 
