@@ -20,6 +20,7 @@ mod get_new_account;
 mod get_notes_count;
 mod get_operation;
 mod get_wallet_info;
+mod help;
 mod list_accounts;
 mod list_addresses;
 mod list_operation_ids;
@@ -31,6 +32,13 @@ mod unlock_wallet;
 
 #[rpc(server)]
 pub(crate) trait Rpc {
+    /// List all commands, or get help for a specified command.
+    ///
+    /// # Arguments
+    /// - `command` (string, optional) The command to get help on.
+    #[method(name = "help")]
+    fn help(&self, command: Option<&str>) -> String;
+
     /// Returns the list of operation ids currently known to the wallet.
     ///
     /// # Arguments
@@ -261,6 +269,10 @@ impl RpcImpl {
 
 #[async_trait]
 impl RpcServer for RpcImpl {
+    fn help(&self, command: Option<&str>) -> String {
+        help::call(command)
+    }
+
     async fn list_operation_ids(&self, status: Option<&str>) -> list_operation_ids::Response {
         list_operation_ids::call(&self.async_ops.read().await, status).await
     }
