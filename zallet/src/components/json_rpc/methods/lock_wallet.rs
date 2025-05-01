@@ -13,11 +13,6 @@ pub(crate) type Response = RpcResult<ResultType>;
 #[serde(transparent)]
 pub(crate) struct ResultType(());
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![]
-}
-
 pub(crate) async fn call(keystore: &KeyStore) -> Response {
     if !keystore.uses_encrypted_identities() {
         return Err(LegacyCode::WalletWrongEncState

@@ -144,6 +144,7 @@ clap_mangen = "0.2"
 flate2 = "1"
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
+quote = "1"
 rust-embed.workspace = true
 syn = "2"
 

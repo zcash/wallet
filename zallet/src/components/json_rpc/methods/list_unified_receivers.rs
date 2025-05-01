@@ -31,10 +31,7 @@ pub(crate) struct ListUnifiedReceivers {
     orchard: Option<String>,
 }
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![g.param::<&str>("unified_address", "The unified address to inspect.", true)]
-}
+pub(super) const PARAM_UNIFIED_ADDRESS_DESC: &str = "The unified address to inspect.";
 
 pub(crate) fn call(unified_address: &str) -> Response {
     warn!("TODO: Implement z_listunifiedreceivers({unified_address})");

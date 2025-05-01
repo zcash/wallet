@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 
 use documented::Documented;
-use jsonrpsee::core::RpcResult;
+use jsonrpsee::core::{JsonValue, RpcResult};
 use schemars::{JsonSchema, SchemaGenerator, r#gen::SchemaSettings, schema::Schema};
 use serde::Serialize;
+
+// Imports to work around deficiencies in the build script.
+use super::recover_accounts;
 
 // See `generate_rpc_help()` in `build.rs` for how this is generated.
 include!(concat!(env!("OUT_DIR"), "/rpc_openrpc.rs"));
@@ -11,11 +14,6 @@ include!(concat!(env!("OUT_DIR"), "/rpc_openrpc.rs"));
 /// Response to an `rpc.discover` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = OpenRpc;
-
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(_: &mut Generator) -> Vec<ContentDescriptor> {
-    vec![]
-}
 
 pub(crate) fn call() -> Response {
     let mut generator = Generator::new();
