@@ -3,13 +3,14 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use jsonrpsee::core::RpcResult;
+use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 /// The possible states that an async operation can be in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(into = "&'static str")]
 pub(super) enum OperationState {
     Ready,
@@ -172,7 +173,7 @@ impl AsyncOperation {
 }
 
 /// The status of an async operation.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct OperationStatus {
     id: String,
 
@@ -192,7 +193,7 @@ pub(crate) struct OperationStatus {
     execution_secs: Option<u64>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct OperationError {
     /// Code
     code: i32,

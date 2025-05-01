@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
+use documented::Documented;
 use jsonrpsee::core::RpcResult;
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::components::json_rpc::asyncop::{AsyncOperation, OperationState, OperationStatus};
@@ -8,9 +10,19 @@ use crate::components::json_rpc::asyncop::{AsyncOperation, OperationState, Opera
 /// Response to a `z_getoperationstatus` or `z_getoperationresult` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 
-#[derive(Clone, Debug, Serialize)]
+/// The relevant operations.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 #[serde(transparent)]
 pub(crate) struct ResultType(Vec<OperationStatus>);
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![g.param::<Vec<&str>>(
+        "operationid",
+        "A list of operation ids we are interested in.",
+        false,
+    )]
+}
 
 pub(crate) async fn status(async_ops: &[AsyncOperation], operationid: Vec<&str>) -> Response {
     let filter = operationid.into_iter().collect::<HashSet<_>>();

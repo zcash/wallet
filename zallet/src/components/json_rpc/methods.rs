@@ -27,6 +27,7 @@ mod list_operation_ids;
 mod list_unified_receivers;
 mod list_unspent;
 mod lock_wallet;
+mod openrpc;
 mod recover_accounts;
 mod unlock_wallet;
 
@@ -38,6 +39,10 @@ pub(crate) trait Rpc {
     /// - `command` (string, optional) The command to get help on.
     #[method(name = "help")]
     fn help(&self, command: Option<&str>) -> help::Response;
+
+    /// Returns an OpenRPC schema as a description of this service.
+    #[method(name = "rpc.discover")]
+    fn openrpc(&self) -> openrpc::Response;
 
     /// Returns the list of operation ids currently known to the wallet.
     ///
@@ -73,6 +78,7 @@ pub(crate) trait Rpc {
     #[method(name = "z_getoperationresult")]
     async fn get_operation_result(&self, operationid: Vec<&str>) -> get_operation::Response;
 
+    /// Returns wallet state information.
     #[method(name = "getwalletinfo")]
     async fn get_wallet_info(&self) -> get_wallet_info::Response;
 
@@ -271,6 +277,10 @@ impl RpcImpl {
 impl RpcServer for RpcImpl {
     fn help(&self, command: Option<&str>) -> help::Response {
         help::call(command)
+    }
+
+    fn openrpc(&self) -> openrpc::Response {
+        openrpc::call()
     }
 
     async fn list_operation_ids(&self, status: Option<&str>) -> list_operation_ids::Response {

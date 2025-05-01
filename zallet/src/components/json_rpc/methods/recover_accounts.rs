@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use documented::Documented;
 use jsonrpsee::{
     core::RpcResult,
     types::{ErrorCode as RpcErrorCode, ErrorObjectOwned},
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use zaino_state::fetch::FetchServiceSubscriber;
 use zcash_client_backend::{
@@ -23,7 +25,7 @@ use crate::components::{
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = Accounts;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema)]
 pub(crate) struct AccountParameter<'a> {
     name: &'a str,
     seedfp: &'a str,
@@ -31,12 +33,13 @@ pub(crate) struct AccountParameter<'a> {
     birthday_height: u32,
 }
 
-#[derive(Clone, Debug, Serialize)]
+/// The list of recovered accounts.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct Accounts {
     accounts: Vec<Account>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct Account {
     /// The account's UUID within this Zallet instance.
     account_uuid: String,
@@ -45,6 +48,15 @@ struct Account {
 
     /// The account's ZIP 32 account index.
     zip32_account_index: u32,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![g.param::<Vec<AccountParameter<'_>>>(
+        "accounts",
+        "An array of JSON objects representing the accounts to recover.",
+        true,
+    )]
 }
 
 pub(crate) async fn call(

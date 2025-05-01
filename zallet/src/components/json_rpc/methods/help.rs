@@ -1,24 +1,31 @@
+use documented::Documented;
 use jsonrpsee::core::RpcResult;
+use schemars::JsonSchema;
 use serde::Serialize;
 
-// See `generate_rpc_help()` in `build.rs` for how this is generated.
-include!(concat!(env!("OUT_DIR"), "/rpc_help.rs"));
+use super::openrpc::METHODS;
 
 /// Response to a `help` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 
-#[derive(Clone, Debug, Serialize)]
+/// The help response.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 #[serde(transparent)]
 pub(crate) struct ResultType(String);
 
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![g.param::<&str>("command", "The command to get help on.", false)]
+}
+
 pub(crate) fn call(command: Option<&str>) -> Response {
     Ok(ResultType(if let Some(command) = command {
-        match COMMANDS.get(command) {
+        match METHODS.get(command) {
             None => format!("help: unknown command: {command}\n"),
-            Some(help_text) => format!("{command}\n\n{help_text}"),
+            Some(method) => format!("{command}\n\n{}", method.description),
         }
     } else {
-        let mut commands = COMMANDS.entries().collect::<Vec<_>>();
+        let mut commands = METHODS.entries().collect::<Vec<_>>();
         commands.sort_by_cached_key(|(command, _)| command.to_string());
 
         let mut ret = String::new();

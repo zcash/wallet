@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 
+use documented::Documented;
 use jsonrpsee::{
     core::RpcResult,
     types::{ErrorCode as RpcErrorCode, ErrorObjectOwned as RpcError},
 };
+use schemars::JsonSchema;
 use serde::Serialize;
 use zcash_client_backend::{
     address::UnifiedAddress,
@@ -26,11 +28,12 @@ use crate::components::{
 /// Response to a `z_listunspent` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 
-#[derive(Clone, Debug, Serialize)]
+/// A list of unspent notes.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 #[serde(transparent)]
 pub(crate) struct ResultType(Vec<UnspentNote>);
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct UnspentNote {
     /// The transaction ID.
     txid: String,
@@ -75,6 +78,11 @@ pub(crate) struct UnspentNote {
     /// Omitted if the note is not spendable.
     #[serde(skip_serializing_if = "Option::is_none")]
     change: Option<bool>,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![]
 }
 
 pub(crate) fn call(wallet: &DbConnection) -> Response {

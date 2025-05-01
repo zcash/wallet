@@ -1,4 +1,6 @@
+use documented::Documented;
 use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
+use schemars::JsonSchema;
 use serde::Serialize;
 use zcash_client_backend::{
     data_api::{Account as _, WalletRead},
@@ -10,11 +12,12 @@ use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 /// Response to a `z_listaccounts` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 
-#[derive(Clone, Debug, Serialize)]
+/// A list of accounts.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 #[serde(transparent)]
 pub(crate) struct ResultType(Vec<Account>);
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct Account {
     /// The account's UUID within this Zallet instance.
     account_uuid: String,
@@ -26,13 +29,18 @@ pub(crate) struct Account {
     addresses: Vec<Address>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct Address {
     /// A diversifier index used in the account.
     diversifier_index: u128,
 
     /// The unified address corresponding to the diversifier.
     ua: String,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![]
 }
 
 pub(crate) fn call(wallet: &DbConnection) -> Response {
