@@ -4,7 +4,7 @@ use jsonrpsee::{
     core::RpcResult,
     types::{ErrorCode as RpcErrorCode, ErrorObjectOwned as RpcError},
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{Account, AccountPurpose, InputSource, NullifierQuery, WalletRead},
@@ -30,7 +30,7 @@ pub(crate) type Response = RpcResult<ResultType>;
 #[serde(transparent)]
 pub(crate) struct ResultType(Vec<UnspentNote>);
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct UnspentNote {
     /// The transaction ID.
     txid: String,

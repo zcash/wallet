@@ -1,5 +1,5 @@
 use jsonrpsee::core::RpcResult;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use zcash_client_backend::data_api::{InputSource, NoteFilter, WalletRead};
 use zcash_protocol::{ShieldedProtocol, value::Zatoshis};
 
@@ -9,7 +9,7 @@ use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = GetNotesCount;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct GetNotesCount {
     /// The number of Sprout notes in the wallet.
     ///

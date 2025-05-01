@@ -1,11 +1,11 @@
 use jsonrpsee::{core::RpcResult, tracing::warn, types::ErrorCode};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Response to a `z_listunifiedreceivers` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = ListUnifiedReceivers;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct ListUnifiedReceivers {
     /// The legacy P2PKH transparent address.
     ///

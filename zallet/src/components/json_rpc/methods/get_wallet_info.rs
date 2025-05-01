@@ -1,7 +1,7 @@
 use std::time::UNIX_EPOCH;
 
 use jsonrpsee::{core::RpcResult, tracing::warn};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::components::keystore::KeyStore;
 
@@ -9,7 +9,7 @@ use crate::components::keystore::KeyStore;
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = GetWalletInfo;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct GetWalletInfo {
     /// The wallet version, in its "Bitcoin client version" form.
     walletversion: u64,

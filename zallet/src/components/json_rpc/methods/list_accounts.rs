@@ -1,5 +1,5 @@
 use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use zcash_client_backend::{
     data_api::{Account as _, WalletRead},
     keys::UnifiedAddressRequest,
@@ -14,7 +14,7 @@ pub(crate) type Response = RpcResult<ResultType>;
 #[serde(transparent)]
 pub(crate) struct ResultType(Vec<Account>);
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct Account {
     /// The account's UUID within this Zallet instance.
     account_uuid: String,
@@ -26,7 +26,7 @@ pub(crate) struct Account {
     addresses: Vec<Address>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 struct Address {
     /// A diversifier index used in the account.
     diversifier_index: u128,

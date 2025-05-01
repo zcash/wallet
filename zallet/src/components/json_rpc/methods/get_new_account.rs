@@ -1,5 +1,5 @@
 use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use zaino_state::fetch::FetchServiceSubscriber;
 use zcash_client_backend::{
     data_api::{AccountBirthday, WalletRead, WalletWrite},
@@ -18,7 +18,7 @@ use crate::components::{
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = Account;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct Account {
     /// The new account's UUID within this Zallet instance.
     account_uuid: String,
