@@ -13,7 +13,7 @@ use crate::components::{
     keystore::KeyStore,
 };
 
-use super::asyncop::{AsyncOperation, ContextInfo};
+use super::asyncop::{AsyncOperation, ContextInfo, OperationId};
 
 mod get_address_for_account;
 mod get_new_account;
@@ -63,7 +63,7 @@ pub(crate) trait Rpc {
     /// - `operationid` (array, optional) A list of operation ids we are interested in.
     ///   If not provided, examine all operations known to the node.
     #[method(name = "z_getoperationstatus")]
-    async fn get_operation_status(&self, operationid: Vec<&str>) -> get_operation::Response;
+    async fn get_operation_status(&self, operationid: Vec<OperationId>) -> get_operation::Response;
 
     /// Retrieve the result and status of an operation which has finished, and then remove
     /// the operation from memory.
@@ -76,7 +76,7 @@ pub(crate) trait Rpc {
     /// - `operationid` (array, optional) A list of operation ids we are interested in.
     ///   If not provided, retrieve all finished operations known to the node.
     #[method(name = "z_getoperationresult")]
-    async fn get_operation_result(&self, operationid: Vec<&str>) -> get_operation::Response;
+    async fn get_operation_result(&self, operationid: Vec<OperationId>) -> get_operation::Response;
 
     /// Returns wallet state information.
     #[method(name = "getwalletinfo")]
@@ -261,14 +261,14 @@ impl RpcImpl {
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
 
-    async fn start_async<F, T>(&self, (context, f): (Option<ContextInfo>, F)) -> String
+    async fn start_async<F, T>(&self, (context, f): (Option<ContextInfo>, F)) -> OperationId
     where
         F: Future<Output = RpcResult<T>> + Send + 'static,
         T: Serialize + Send + 'static,
     {
         let mut async_ops = self.async_ops.write().await;
         let op = AsyncOperation::new(context, f).await;
-        let op_id = op.operation_id().to_string();
+        let op_id = op.operation_id().clone();
         async_ops.push(op);
         op_id
     }
@@ -288,11 +288,11 @@ impl RpcServer for RpcImpl {
         list_operation_ids::call(&self.async_ops.read().await, status).await
     }
 
-    async fn get_operation_status(&self, operationid: Vec<&str>) -> get_operation::Response {
+    async fn get_operation_status(&self, operationid: Vec<OperationId>) -> get_operation::Response {
         get_operation::status(&self.async_ops.read().await, operationid).await
     }
 
-    async fn get_operation_result(&self, operationid: Vec<&str>) -> get_operation::Response {
+    async fn get_operation_result(&self, operationid: Vec<OperationId>) -> get_operation::Response {
         get_operation::result(self.async_ops.write().await.as_mut(), operationid).await
     }
 
