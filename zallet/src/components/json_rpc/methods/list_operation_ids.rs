@@ -3,7 +3,7 @@ use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::components::json_rpc::asyncop::{AsyncOperation, OperationState};
+use crate::components::json_rpc::asyncop::{AsyncOperation, OperationId, OperationState};
 
 /// Response to a `z_listoperationids` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -11,7 +11,7 @@ pub(crate) type Response = RpcResult<ResultType>;
 /// A list of operation IDs.
 #[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 #[serde(transparent)]
-pub(crate) struct ResultType(Vec<String>);
+pub(crate) struct ResultType(Vec<OperationId>);
 
 pub(super) const PARAM_STATUS_DESC: &str =
     "Filter result by the operation's state e.g. \"success\".";
@@ -26,11 +26,11 @@ pub(crate) async fn call(async_ops: &[AsyncOperation], status: Option<&str>) -> 
 
     for op in async_ops {
         match state {
-            None => operation_ids.push(op.operation_id().into()),
+            None => operation_ids.push(op.operation_id().clone()),
             Some(f) => {
                 let op_state = op.state().await;
                 if f == Some(op_state) {
-                    operation_ids.push(op.operation_id().into());
+                    operation_ids.push(op.operation_id().clone());
                 }
             }
         }
