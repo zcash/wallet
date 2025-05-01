@@ -4,7 +4,9 @@ use secrecy::{ExposeSecret, SecretString};
 
 use crate::{
     cli::ImportMnemonicCmd,
-    components::{database::Database, keystore::KeyStore},
+    components::{
+        database::Database, json_rpc::utils::encode_seedfp_parameter, keystore::KeyStore,
+    },
     error::{Error, ErrorKind},
     prelude::*,
 };
@@ -28,7 +30,7 @@ impl ImportMnemonicCmd {
             .encrypt_and_store_mnemonic(&SecretString::new(mnemonic.into_phrase()))
             .await?;
 
-        println!("Seed fingerprint: {}", hex::encode(seedfp.to_bytes()));
+        println!("Seed fingerprint: {}", encode_seedfp_parameter(&seedfp));
 
         Ok(())
     }

@@ -8,11 +8,13 @@ use zcash_client_backend::{
     proto::service::TreeState,
 };
 use zcash_protocol::consensus::{NetworkType, Parameters};
-use zip32::fingerprint::SeedFingerprint;
 
 use crate::components::{
     database::DbConnection,
-    json_rpc::{server::LegacyCode, utils::ensure_wallet_is_unlocked},
+    json_rpc::{
+        server::LegacyCode,
+        utils::{ensure_wallet_is_unlocked, parse_seedfp_parameter},
+    },
     keystore::KeyStore,
 };
 
@@ -49,16 +51,7 @@ pub(crate) async fn call(
     ensure_wallet_is_unlocked(keystore).await?;
     // TODO: Ensure wallet is backed up.
 
-    let seedfp = seedfp
-        .map(|s| {
-            let mut hash = [0; 32];
-            hex::decode_to_slice(s, &mut hash)?;
-            Ok(SeedFingerprint::from_bytes(hash))
-        })
-        .transpose()
-        .map_err(|e: hex::FromHexError| {
-            LegacyCode::InvalidParameter.with_message(format!("Invalid seed fingerprint: {e}"))
-        })?;
+    let seedfp = seedfp.map(parse_seedfp_parameter).transpose()?;
 
     let birthday_height = wallet
         .chain_height()

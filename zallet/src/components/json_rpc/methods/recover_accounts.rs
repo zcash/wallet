@@ -13,11 +13,13 @@ use zcash_client_backend::{
     proto::service::TreeState,
 };
 use zcash_protocol::consensus::{BlockHeight, NetworkType, Parameters};
-use zip32::fingerprint::SeedFingerprint;
 
 use crate::components::{
     database::DbConnection,
-    json_rpc::{server::LegacyCode, utils::ensure_wallet_is_unlocked},
+    json_rpc::{
+        server::LegacyCode,
+        utils::{encode_seedfp_parameter, ensure_wallet_is_unlocked, parse_seedfp_parameter},
+    },
     keystore::KeyStore,
 };
 
@@ -76,13 +78,7 @@ pub(crate) async fn call(
     // Prepare arguments for the wallet.
     let mut account_args = vec![];
     for account in accounts {
-        let seed_fp = {
-            let mut hash = [0; 32];
-            hex::decode_to_slice(account.seedfp, &mut hash).map_err(|e: hex::FromHexError| {
-                LegacyCode::InvalidParameter.with_message(format!("Invalid seed fingerprint: {e}"))
-            })?;
-            SeedFingerprint::from_bytes(hash)
-        };
+        let seed_fp = parse_seedfp_parameter(account.seedfp)?;
 
         let account_index =
             zip32::AccountId::try_from(account.zip32_account_index).map_err(|e| {
@@ -147,7 +143,7 @@ pub(crate) async fn call(
 
             Ok::<_, ErrorObjectOwned>(Account {
                 account_uuid: account.id().expose_uuid().to_string(),
-                seedfp: hex::encode(seed_fp.to_bytes()),
+                seedfp: encode_seedfp_parameter(&seed_fp),
                 zip32_account_index: account_index.into(),
             })
         })
