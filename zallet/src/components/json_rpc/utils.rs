@@ -6,7 +6,7 @@ use jsonrpsee::{
 };
 use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
-use zip32::DiversifierIndex;
+use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
 
 use crate::components::{database::DbConnection, keystore::KeyStore};
 
@@ -25,6 +25,33 @@ pub(super) async fn ensure_wallet_is_unlocked(keystore: &KeyStore) -> RpcResult<
     } else {
         Ok(())
     }
+}
+
+/// Parses the `seedfp` parameter present in many wallet RPCs.
+///
+/// TODO: Also parse desired public format: https://github.com/zcash/wallet/issues/119
+pub(super) fn parse_seedfp_parameter(seedfp: &str) -> RpcResult<SeedFingerprint> {
+    let mut hash = [0; 32];
+    hex::decode_to_slice(seedfp, &mut hash).map_err(|e: hex::FromHexError| {
+        LegacyCode::InvalidParameter.with_message(format!("Invalid seed fingerprint: {e}"))
+    })?;
+
+    // `zcashd` used `uint256` so the canonical hex byte ordering is "reverse".
+    hash.reverse();
+
+    Ok(SeedFingerprint::from_bytes(hash))
+}
+
+/// Encodes a seed fingerprint for returning via wallet RPCs.
+///
+/// TODO: Replace with desired public format: https://github.com/zcash/wallet/issues/119
+pub(crate) fn encode_seedfp_parameter(seedfp: &SeedFingerprint) -> String {
+    let mut hash = seedfp.to_bytes();
+
+    // `zcashd` used `uint256` so the canonical hex byte ordering is "reverse".
+    hash.reverse();
+
+    hex::encode(hash)
 }
 
 /// Parses the `account` parameter present in many wallet RPCs.
@@ -91,4 +118,21 @@ pub(super) fn parse_diversifier_index(diversifier_index: u128) -> RpcResult<Dive
     diversifier_index
         .try_into()
         .map_err(|_| LegacyCode::InvalidParameter.with_static("diversifier index is too large."))
+}
+
+#[cfg(test)]
+mod tests {
+    use zip32::fingerprint::SeedFingerprint;
+
+    use crate::components::json_rpc::utils::{encode_seedfp_parameter, parse_seedfp_parameter};
+
+    #[test]
+    fn seed_fingerprint_roundtrip() {
+        let seedfp = SeedFingerprint::from_seed(&[0; 32]).unwrap();
+
+        assert_eq!(
+            parse_seedfp_parameter(&encode_seedfp_parameter(&seedfp)),
+            Ok(seedfp),
+        );
+    }
 }

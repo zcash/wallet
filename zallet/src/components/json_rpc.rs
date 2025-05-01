@@ -20,7 +20,7 @@ use super::{TaskHandle, chain_view::ChainView, database::Database, keystore::Key
 mod asyncop;
 pub(crate) mod methods;
 pub(crate) mod server;
-mod utils;
+pub(crate) mod utils;
 
 // TODO: https://github.com/zcash/wallet/issues/15
 fn value_from_zatoshis(value: Zatoshis) -> f64 {
