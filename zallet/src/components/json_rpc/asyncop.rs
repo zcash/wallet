@@ -2,14 +2,15 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
+use jsonrpsee::core::RpcResult;
+use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 /// The possible states that an async operation can be in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(into = "&'static str")]
 pub(super) enum OperationState {
     Ready,
@@ -139,7 +140,15 @@ impl AsyncOperation {
 
         let (error, result, execution_secs) = match &data.result {
             None => (None, None, None),
-            Some(Err(e)) => (Some(e.clone()), None, None),
+            Some(Err(e)) => (
+                Some(OperationError {
+                    code: e.code(),
+                    message: e.message().to_string(),
+                    data: e.data().map(|data| data.get().to_string()),
+                }),
+                None,
+                None,
+            ),
             Some(Ok(v)) => (
                 None,
                 Some(v.clone()),
@@ -164,7 +173,7 @@ impl AsyncOperation {
 }
 
 /// The status of an async operation.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct OperationStatus {
     id: String,
 
@@ -174,7 +183,7 @@ pub(crate) struct OperationStatus {
     creation_time: u64,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<ErrorObjectOwned>,
+    error: Option<OperationError>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<Value>,
@@ -182,4 +191,17 @@ pub(crate) struct OperationStatus {
     /// Execution time for successful operations.
     #[serde(skip_serializing_if = "Option::is_none")]
     execution_secs: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+struct OperationError {
+    /// Code
+    code: i32,
+
+    /// Message
+    message: String,
+
+    /// Optional data
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<String>,
 }

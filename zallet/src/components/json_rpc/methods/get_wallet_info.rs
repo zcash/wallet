@@ -1,14 +1,18 @@
 use std::time::UNIX_EPOCH;
 
+use documented::Documented;
 use jsonrpsee::{core::RpcResult, tracing::warn};
-use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use serde::Serialize;
 
 use crate::components::keystore::KeyStore;
 
 /// Response to a `getwalletinfo` RPC request.
-pub(crate) type Response = RpcResult<GetWalletInfo>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = GetWalletInfo;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// The wallet state information.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct GetWalletInfo {
     /// The wallet version, in its "Bitcoin client version" form.
     walletversion: u64,
@@ -49,6 +53,11 @@ pub(crate) struct GetWalletInfo {
 
     /// The BLAKE2b-256 hash of the HD seed derived from the wallet's emergency recovery phrase.
     mnemonic_seedfp: String,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![]
 }
 
 pub(crate) async fn call(keystore: &KeyStore) -> Response {

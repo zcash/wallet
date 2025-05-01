@@ -1,9 +1,26 @@
+use documented::Documented;
 use jsonrpsee::core::RpcResult;
+use schemars::JsonSchema;
+use serde::Serialize;
 
 use crate::components::json_rpc::asyncop::{AsyncOperation, OperationState};
 
 /// Response to a `z_listoperationids` RPC request.
-pub(crate) type Response = RpcResult<Vec<String>>;
+pub(crate) type Response = RpcResult<ResultType>;
+
+/// A list of operation IDs.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
+#[serde(transparent)]
+pub(crate) struct ResultType(Vec<String>);
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![g.param::<&str>(
+        "status",
+        "Filter result by the operation's state e.g. \"success\".",
+        false,
+    )]
+}
 
 pub(crate) async fn call(async_ops: &[AsyncOperation], status: Option<&str>) -> Response {
     // - The outer `Option` indicates whether or not we are filtering.
@@ -25,5 +42,5 @@ pub(crate) async fn call(async_ops: &[AsyncOperation], status: Option<&str>) -> 
         }
     }
 
-    Ok(operation_ids)
+    Ok(ResultType(operation_ids))
 }

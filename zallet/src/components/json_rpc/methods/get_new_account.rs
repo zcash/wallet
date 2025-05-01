@@ -1,5 +1,7 @@
+use documented::Documented;
 use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
-use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use serde::Serialize;
 use zaino_state::fetch::FetchServiceSubscriber;
 use zcash_client_backend::{
     data_api::{AccountBirthday, WalletRead, WalletWrite},
@@ -15,9 +17,11 @@ use crate::components::{
 };
 
 /// Response to a `z_getnewaccount` RPC request.
-pub(crate) type Response = RpcResult<Account>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = Account;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Information about the new account.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct Account {
     /// The new account's UUID within this Zallet instance.
     account_uuid: String,
@@ -25,6 +29,14 @@ pub(crate) struct Account {
     /// The new account's ZIP 32 account index.
     #[serde(skip_serializing_if = "Option::is_none")]
     account: Option<u64>,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![
+        g.param::<&str>("account_name", "A human-readable name for the account.", true),
+        g.param::<&str>("seedfp", "ZIP 32 seed fingerprint for the BIP 39 mnemonic phrase from which to derive the account.", false),
+    ]
 }
 
 pub(crate) async fn call(

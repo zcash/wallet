@@ -1,14 +1,18 @@
+use documented::Documented;
 use jsonrpsee::core::RpcResult;
-use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use serde::Serialize;
 use zcash_client_backend::data_api::{InputSource, NoteFilter, WalletRead};
 use zcash_protocol::{ShieldedProtocol, value::Zatoshis};
 
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `z_getnotescount` RPC request.
-pub(crate) type Response = RpcResult<GetNotesCount>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = GetNotesCount;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// The number of notes in the wallet.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct GetNotesCount {
     /// The number of Sprout notes in the wallet.
     ///
@@ -20,6 +24,14 @@ pub(crate) struct GetNotesCount {
 
     /// The number of Orchard notes in the wallet.
     orchard: u32,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![
+        g.param::<u32>("minconf", "Only include notes in transactions confirmed at least this many times.", false),
+        g.param::<i32>("as_of_height", "Execute the query as if it were run when the blockchain was at the height specified by this argument.", false),
+    ]
 }
 
 pub(crate) fn call(

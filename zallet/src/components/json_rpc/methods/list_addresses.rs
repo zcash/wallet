@@ -1,8 +1,10 @@
+use documented::Documented;
 use jsonrpsee::{
     core::RpcResult,
     tracing::{error, warn},
     types::ErrorCode as RpcErrorCode,
 };
+use schemars::JsonSchema;
 use serde::Serialize;
 use transparent::keys::TransparentKeyScope;
 use zcash_address::unified;
@@ -17,9 +19,14 @@ use zip32::fingerprint::SeedFingerprint;
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `listaddresses` RPC request.
-pub(crate) type Response = RpcResult<Vec<AddressSource>>;
+pub(crate) type Response = RpcResult<ResultType>;
 
-#[derive(Clone, Debug, Serialize)]
+/// A list of address sources.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
+#[serde(transparent)]
+pub(crate) struct ResultType(Vec<AddressSource>);
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct AddressSource {
     source: &'static str,
 
@@ -63,7 +70,7 @@ impl AddressSource {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct TransparentAddresses {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     addresses: Vec<String>,
@@ -73,7 +80,7 @@ struct TransparentAddresses {
     change_addresses: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct DerivedTransparentAddresses {
     seedfp: String,
 
@@ -92,7 +99,7 @@ struct DerivedTransparentAddresses {
     ephemeral_addresses: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct SaplingAddresses {
     #[serde(rename = "zip32KeyPath")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -101,7 +108,7 @@ struct SaplingAddresses {
     addresses: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 struct UnifiedAddresses {
     #[serde(skip_serializing_if = "Option::is_none")]
     seedfp: Option<String>,
@@ -113,7 +120,7 @@ struct UnifiedAddresses {
     addresses: Vec<UnifiedAddress>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct UnifiedAddress {
     /// The diversifier index that the UA was derived at.
     diversifier_index: u128,
@@ -123,6 +130,11 @@ pub(crate) struct UnifiedAddress {
 
     /// The unified address corresponding to the diversifier.
     address: String,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![]
 }
 
 pub(crate) fn call(wallet: &DbConnection) -> Response {
@@ -271,11 +283,13 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         }
     }
 
-    Ok([
-        imported_watchonly.has_data().then_some(imported_watchonly),
-        mnemonic_seed.has_data().then_some(mnemonic_seed),
-    ]
-    .into_iter()
-    .flatten()
-    .collect())
+    Ok(ResultType(
+        [
+            imported_watchonly.has_data().then_some(imported_watchonly),
+            mnemonic_seed.has_data().then_some(mnemonic_seed),
+        ]
+        .into_iter()
+        .flatten()
+        .collect(),
+    ))
 }

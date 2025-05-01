@@ -1,10 +1,14 @@
+use documented::Documented;
 use jsonrpsee::{core::RpcResult, tracing::warn, types::ErrorCode};
-use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use serde::Serialize;
 
 /// Response to a `z_listunifiedreceivers` RPC request.
-pub(crate) type Response = RpcResult<ListUnifiedReceivers>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = ListUnifiedReceivers;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// The receivers within a unified address.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct ListUnifiedReceivers {
     /// The legacy P2PKH transparent address.
     ///
@@ -25,6 +29,11 @@ pub(crate) struct ListUnifiedReceivers {
     /// A single-receiver Unified Address containing the Orchard receiver.
     #[serde(skip_serializing_if = "Option::is_none")]
     orchard: Option<String>,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![g.param::<&str>("unified_address", "The unified address to inspect.", true)]
 }
 
 pub(crate) fn call(unified_address: &str) -> Response {

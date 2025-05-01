@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 
+use documented::Documented;
 use jsonrpsee::{
     core::RpcResult,
     types::{ErrorCode as RpcErrorCode, ErrorObjectOwned as RpcError},
 };
-use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use serde::Serialize;
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{Account, AccountPurpose, InputSource, NullifierQuery, WalletRead},
@@ -24,9 +26,14 @@ use crate::components::{
 };
 
 /// Response to a `z_listunspent` RPC request.
-pub(crate) type Response = RpcResult<Vec<UnspentNote>>;
+pub(crate) type Response = RpcResult<ResultType>;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// A list of unspent notes.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
+#[serde(transparent)]
+pub(crate) struct ResultType(Vec<UnspentNote>);
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct UnspentNote {
     /// The transaction ID.
     txid: String,
@@ -73,6 +80,11 @@ pub(crate) struct UnspentNote {
     change: Option<bool>,
 }
 
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![]
+}
+
 pub(crate) fn call(wallet: &DbConnection) -> Response {
     // Use the height of the maximum scanned block as the anchor height, to emulate a
     // zero-conf transaction in order to select every note in the wallet.
@@ -84,7 +96,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         )
     })? {
         Some(block) => block.block_height(),
-        None => return Ok(vec![]),
+        None => return Ok(ResultType(vec![])),
     };
 
     let mut unspent_notes = vec![];
@@ -275,5 +287,5 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         }
     }
 
-    Ok(unspent_notes)
+    Ok(ResultType(unspent_notes))
 }

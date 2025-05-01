@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("should be absolute path")
         .to_path_buf();
 
-    generate_rpc_help(&out_dir)?;
+    generate_rpc_openrpc(&out_dir)?;
 
     // Generate the completions in English, because these aren't easily localizable.
     i18n::load_languages(&[]);
@@ -151,7 +151,7 @@ impl Cli {
     }
 }
 
-fn generate_rpc_help(out_dir: &Path) -> Result<(), Box<dyn Error>> {
+fn generate_rpc_openrpc(out_dir: &Path) -> Result<(), Box<dyn Error>> {
     // Parse the source file containing the `Rpc` trait.
     let methods_rs = fs::read_to_string(JSON_RPC_METHODS_RS)?;
     let methods_ast = syn::parse_file(&methods_rs)?;
@@ -165,63 +165,95 @@ fn generate_rpc_help(out_dir: &Path) -> Result<(), Box<dyn Error>> {
         })
         .expect("present");
 
-    let mut contents = "static COMMANDS: ::phf::Map<&str, &str> = ::phf::phf_map! {\n".to_string();
+    let mut contents = "#[allow(unused_qualifications)]
+pub(super) static METHODS: ::phf::Map<&str, RpcMethod> = ::phf::phf_map! {
+"
+    .to_string();
 
     for item in &rpc_trait.items {
-        match item {
-            syn::TraitItem::Fn(method) => {
-                // Find methods via their `#[method(name = "command")]` attribute.
-                let mut command = None;
-                method
+        if let syn::TraitItem::Fn(method) = item {
+            // Find methods via their `#[method(name = "command")]` attribute.
+            let mut command = None;
+            method
+                .attrs
+                .iter()
+                .find(|attr| attr.path().is_ident("method"))
+                .and_then(|attr| {
+                    attr.parse_nested_meta(|meta| {
+                        command = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                        Ok(())
+                    })
+                    .ok()
+                });
+
+            if let Some(command) = command {
+                let module = match &method.sig.output {
+                    syn::ReturnType::Type(_, ret) => match ret.as_ref() {
+                        syn::Type::Path(type_path) => type_path.path.segments.first(),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+                .expect("required")
+                .ident
+                .to_string();
+
+                contents.push('"');
+                contents.push_str(&command);
+                contents.push_str("\" => RpcMethod {\n");
+
+                contents.push_str("    description: \"");
+                for attr in method
                     .attrs
                     .iter()
-                    .find(|attr| attr.path().is_ident("method"))
-                    .and_then(|attr| {
-                        attr.parse_nested_meta(|meta| {
-                            command = Some(meta.value()?.parse::<syn::LitStr>()?.value());
-                            Ok(())
-                        })
-                        .ok()
-                    });
+                    .filter(|attr| attr.path().is_ident("doc"))
+                {
+                    if let syn::Meta::NameValue(doc_line) = &attr.meta {
+                        if let syn::Expr::Lit(docs) = &doc_line.value {
+                            if let syn::Lit::Str(s) = &docs.lit {
+                                // Trim the leading space from the doc comment line.
+                                let line = s.value();
+                                let trimmed_line = if line.is_empty() { &line } else { &line[1..] };
 
-                if let Some(command) = command {
-                    contents.push('"');
-                    contents.push_str(&command);
-                    contents.push_str("\" => \"");
+                                let escaped = trimmed_line.escape_default().collect::<String>();
 
-                    for attr in method
-                        .attrs
-                        .iter()
-                        .filter(|attr| attr.path().is_ident("doc"))
-                    {
-                        if let syn::Meta::NameValue(doc_line) = &attr.meta {
-                            if let syn::Expr::Lit(docs) = &doc_line.value {
-                                if let syn::Lit::Str(s) = &docs.lit {
-                                    // Trim the leading space from the doc comment line.
-                                    let line = s.value();
-                                    let trimmed_line =
-                                        if line.is_empty() { &line } else { &line[1..] };
-
-                                    let escaped = trimmed_line.escape_default().collect::<String>();
-
-                                    contents.push_str(&escaped);
-                                    contents.push_str("\\n");
-                                }
+                                contents.push_str(&escaped);
+                                contents.push_str("\\n");
                             }
                         }
                     }
-
-                    contents.push_str("\",\n");
                 }
+                contents.push_str("\",\n");
+
+                contents.push_str("    params: super::");
+                contents.push_str(&module);
+                contents.push_str("::params,\n");
+
+                contents.push_str("    result: |g| g.result::<super::");
+                contents.push_str(&module);
+                contents.push_str("::ResultType>(\"");
+                contents.push_str(&command);
+                contents.push_str("_result\"),\n");
+
+                contents.push_str("    deprecated: ");
+                contents.push_str(
+                    &method
+                        .attrs
+                        .iter()
+                        .any(|attr| attr.path().is_ident("deprecated"))
+                        .to_string(),
+                );
+                contents.push_str(",\n");
+
+                contents.push_str("},\n");
             }
-            _ => (),
         }
     }
 
     contents.push_str("};");
 
-    let rpc_help_path = out_dir.join("rpc_help.rs");
-    fs::write(&rpc_help_path, contents)?;
+    let rpc_openrpc_path = out_dir.join("rpc_openrpc.rs");
+    fs::write(&rpc_openrpc_path, contents)?;
 
     Ok(())
 }

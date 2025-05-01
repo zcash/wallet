@@ -1,7 +1,9 @@
+use documented::Documented;
 use jsonrpsee::{
     core::{JsonValue, RpcResult},
     types::{ErrorCode as RpcErrorCode, ErrorObjectOwned},
 };
+use schemars::JsonSchema;
 use serde::Serialize;
 use zcash_address::unified;
 use zcash_client_backend::{
@@ -19,9 +21,11 @@ use crate::components::{
 };
 
 /// Response to a `z_getaddressforaccount` RPC request.
-pub(crate) type Response = RpcResult<Address>;
+pub(crate) type Response = RpcResult<ResultType>;
+pub(crate) type ResultType = Address;
 
-#[derive(Clone, Debug, Serialize)]
+/// Information about a derived Unified Address.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct Address {
     /// The account's UUID within this Zallet instance.
     account_uuid: String,
@@ -38,6 +42,27 @@ pub(crate) struct Address {
 
     /// The unified address corresponding to the diversifier.
     address: String,
+}
+
+/// Defines the method parameters for OpenRPC.
+pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
+    vec![
+        g.param::<JsonValue>(
+            "account",
+            "Either the UUID or ZIP 32 account index of the account to derive from.",
+            true,
+        ),
+        g.param::<Vec<String>>(
+            "receiver_types",
+            "Receiver types to include in the derived address.",
+            false,
+        ),
+        g.param::<u128>(
+            "diversifier_index",
+            "A specific diversifier index to derive at.",
+            false,
+        ),
+    ]
 }
 
 pub(crate) fn call(
