@@ -2,7 +2,7 @@ use documented::Documented;
 use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
 use schemars::JsonSchema;
 use serde::Serialize;
-use zaino_state::fetch::FetchServiceSubscriber;
+use zaino_state::FetchServiceSubscriber;
 use zcash_client_backend::{
     data_api::{AccountBirthday, WalletRead, WalletWrite},
     proto::service::TreeState,

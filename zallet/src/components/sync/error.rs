@@ -1,7 +1,7 @@
 use std::fmt;
 
 use shardtree::error::ShardTreeError;
-use zaino_state::error::FetchServiceError;
+use zaino_state::FetchServiceError;
 use zcash_client_backend::scanning::ScanError;
 use zcash_client_sqlite::error::SqliteClientError;
 
