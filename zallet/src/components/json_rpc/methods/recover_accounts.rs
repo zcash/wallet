@@ -7,7 +7,7 @@ use jsonrpsee::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use zaino_state::fetch::FetchServiceSubscriber;
+use zaino_state::FetchServiceSubscriber;
 use zcash_client_backend::{
     data_api::{Account as _, AccountBirthday, WalletRead, WalletWrite},
     proto::service::TreeState,

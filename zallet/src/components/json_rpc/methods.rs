@@ -5,7 +5,7 @@ use jsonrpsee::{
 };
 use serde::Serialize;
 use tokio::sync::RwLock;
-use zaino_state::fetch::FetchServiceSubscriber;
+use zaino_state::FetchServiceSubscriber;
 
 use crate::components::{
     chain_view::ChainView,

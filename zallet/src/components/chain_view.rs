@@ -4,10 +4,8 @@ use std::sync::Arc;
 use jsonrpsee::tracing::info;
 use tokio::sync::RwLock;
 use zaino_state::{
-    config::FetchServiceConfig,
-    fetch::{FetchService, FetchServiceSubscriber},
-    indexer::{IndexerService, IndexerSubscriber, ZcashService},
-    status::StatusType,
+    FetchService, FetchServiceConfig, FetchServiceSubscriber, IndexerService, IndexerSubscriber,
+    StatusType, ZcashService,
 };
 
 use crate::{
@@ -90,7 +88,7 @@ impl ChainView {
 
                 let service = indexer.read().await;
                 let status = match service.as_ref() {
-                    Some(service) => service.inner_ref().status(),
+                    Some(service) => service.inner_ref().status().await,
                     None => StatusType::CriticalError,
                 };
 
