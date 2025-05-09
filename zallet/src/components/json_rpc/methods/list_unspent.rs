@@ -9,7 +9,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use zcash_client_backend::{
     address::UnifiedAddress,
-    data_api::{Account, AccountPurpose, InputSource, NullifierQuery, WalletRead},
+    data_api::{Account, AccountPurpose, InputSource, NullifierQuery, TargetValue, WalletRead},
     encoding::AddressCodec,
     fees::{orchard::InputView as _, sapling::InputView as _},
     wallet::NoteId,
@@ -127,7 +127,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         let notes = wallet
             .select_spendable_notes(
                 account_id,
-                Zatoshis::const_from_u64(MAX_MONEY),
+                TargetValue::AtLeast(Zatoshis::const_from_u64(MAX_MONEY)),
                 &[ShieldedProtocol::Sapling, ShieldedProtocol::Orchard],
                 anchor_height,
                 &[],
