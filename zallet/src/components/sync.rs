@@ -3,7 +3,7 @@ use std::time::Duration;
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
 use tokio::time;
-use zaino_state::{fetch::FetchServiceSubscriber, indexer::LightWalletIndexer as _};
+use zaino_state::{FetchServiceSubscriber, LightWalletIndexer as _};
 use zcash_client_backend::data_api::{
     WalletRead, WalletWrite,
     chain::{BlockCache, scan_cached_blocks},

@@ -3,7 +3,7 @@ use std::{collections::HashSet, fmt};
 use abscissa_core::Application;
 use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
 use serde::Serialize;
-use zaino_state::{fetch::FetchServiceSubscriber, indexer::ZcashIndexer};
+use zaino_state::{FetchServiceSubscriber, ZcashIndexer};
 use zcash_client_backend::{data_api::WalletRead, proposal::Proposal};
 use zcash_client_sqlite::wallet::Account;
 use zcash_keys::address::Address;
