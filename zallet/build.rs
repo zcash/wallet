@@ -9,6 +9,7 @@ use clap_complete::{Shell, generate_to};
 use clap_mangen::Man;
 use flate2::{Compression, write::GzEncoder};
 use i18n_embed::unic_langid::LanguageIdentifier;
+use quote::ToTokens;
 
 const JSON_RPC_METHODS_RS: &str = "src/components/json_rpc/methods.rs";
 
@@ -198,6 +199,56 @@ pub(super) static METHODS: ::phf::Map<&str, RpcMethod> = ::phf::phf_map! {
                 .ident
                 .to_string();
 
+                let params = method.sig.inputs.iter().filter_map(|arg| match arg {
+                    syn::FnArg::Receiver(_) => None,
+                    syn::FnArg::Typed(pat_type) => match pat_type.pat.as_ref() {
+                        syn::Pat::Ident(pat_ident) => {
+                            let parameter = pat_ident.ident.to_string();
+                            let rust_ty = pat_type.ty.as_ref();
+
+                            // If we can determine the parameter's optionality, do so.
+                            let (param_ty, required) = match rust_ty {
+                                syn::Type::Path(type_path) => {
+                                    let is_standalone_ident =
+                                        type_path.path.leading_colon.is_none()
+                                            && type_path.path.segments.len() == 1;
+                                    let first_segment = &type_path.path.segments[0];
+
+                                    if first_segment.ident == "Option" && is_standalone_ident {
+                                        // Strip the `Option<_>` for the schema type.
+                                        let schema_ty = match &first_segment.arguments {
+                                            syn::PathArguments::AngleBracketed(args) => {
+                                                match args.args.first().expect("valid Option") {
+                                                    syn::GenericArgument::Type(ty) => ty,
+                                                    _ => panic!("Invalid Option"),
+                                                }
+                                            }
+                                            _ => panic!("Invalid Option"),
+                                        };
+                                        (schema_ty, Some(false))
+                                    } else if first_segment.ident == "Vec" {
+                                        // We don't know whether the vec may be empty.
+                                        (rust_ty, None)
+                                    } else {
+                                        (rust_ty, Some(true))
+                                    }
+                                }
+                                _ => (rust_ty, Some(true)),
+                            };
+
+                            // Handle a few conversions we know we need.
+                            let param_ty = param_ty.to_token_stream().to_string();
+                            let schema_ty = match param_ty.as_str() {
+                                "age :: secrecy :: SecretString" => "String".into(),
+                                _ => param_ty,
+                            };
+
+                            Some((parameter, schema_ty, required))
+                        }
+                        _ => None,
+                    },
+                });
+
                 contents.push('"');
                 contents.push_str(&command);
                 contents.push_str("\" => RpcMethod {\n");
@@ -225,9 +276,33 @@ pub(super) static METHODS: ::phf::Map<&str, RpcMethod> = ::phf::phf_map! {
                 }
                 contents.push_str("\",\n");
 
-                contents.push_str("    params: super::");
-                contents.push_str(&module);
-                contents.push_str("::params,\n");
+                contents.push_str("    params: |_g| vec![\n");
+                for (parameter, schema_ty, required) in params {
+                    let param_upper = parameter.to_uppercase();
+
+                    contents.push_str("        _g.param::<");
+                    contents.push_str(&schema_ty);
+                    contents.push_str(">(\"");
+                    contents.push_str(&parameter);
+                    contents.push_str("\", super::");
+                    contents.push_str(&module);
+                    contents.push_str("::PARAM_");
+                    contents.push_str(&param_upper);
+                    contents.push_str("_DESC, ");
+                    match required {
+                        Some(required) => contents.push_str(&required.to_string()),
+                        None => {
+                            // Require a helper const to be present.
+                            contents.push_str("super::");
+                            contents.push_str(&module);
+                            contents.push_str("::PARAM_");
+                            contents.push_str(&param_upper);
+                            contents.push_str("_REQUIRED");
+                        }
+                    }
+                    contents.push_str("),\n");
+                }
+                contents.push_str("    ],\n");
 
                 contents.push_str("    result: |g| g.result::<super::");
                 contents.push_str(&module);

@@ -13,14 +13,8 @@ pub(crate) type Response = RpcResult<ResultType>;
 #[serde(transparent)]
 pub(crate) struct ResultType(Vec<String>);
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![g.param::<&str>(
-        "status",
-        "Filter result by the operation's state e.g. \"success\".",
-        false,
-    )]
-}
+pub(super) const PARAM_STATUS_DESC: &str =
+    "Filter result by the operation's state e.g. \"success\".";
 
 pub(crate) async fn call(async_ops: &[AsyncOperation], status: Option<&str>) -> Response {
     // - The outer `Option` indicates whether or not we are filtering.

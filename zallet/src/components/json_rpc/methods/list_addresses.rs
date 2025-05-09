@@ -132,11 +132,6 @@ pub(crate) struct UnifiedAddress {
     address: String,
 }
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![]
-}
-
 pub(crate) fn call(wallet: &DbConnection) -> Response {
     let mut imported_watchonly = AddressSource::empty("imported_watchonly");
     let mut mnemonic_seed = AddressSource::empty("mnemonic_seed");

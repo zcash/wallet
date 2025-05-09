@@ -26,13 +26,9 @@ pub(crate) struct GetNotesCount {
     orchard: u32,
 }
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![
-        g.param::<u32>("minconf", "Only include notes in transactions confirmed at least this many times.", false),
-        g.param::<i32>("as_of_height", "Execute the query as if it were run when the blockchain was at the height specified by this argument.", false),
-    ]
-}
+pub(super) const PARAM_MINCONF_DESC: &str =
+    "Only include notes in transactions confirmed at least this many times.";
+pub(super) const PARAM_AS_OF_HEIGHT_DESC: &str = "Execute the query as if it were run when the blockchain was at the height specified by this argument.";
 
 pub(crate) fn call(
     wallet: &DbConnection,

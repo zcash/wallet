@@ -13,10 +13,7 @@ pub(crate) type Response = RpcResult<ResultType>;
 #[serde(transparent)]
 pub(crate) struct ResultType(String);
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![g.param::<&str>("command", "The command to get help on.", false)]
-}
+pub(super) const PARAM_COMMAND_DESC: &str = "The command to get help on.";
 
 pub(crate) fn call(command: Option<&str>) -> Response {
     Ok(ResultType(if let Some(command) = command {
