@@ -29,8 +29,11 @@ impl StartCmd {
             JsonRpc::spawn(&config, db.clone(), keystore, chain_view.clone()).await?;
 
         // Start the wallet sync process.
-        let (wallet_sync_steady_state_task_handle, wallet_sync_recover_history_task_handle) =
-            WalletSync::spawn(&config, db, chain_view).await?;
+        let (
+            wallet_sync_steady_state_task_handle,
+            wallet_sync_recover_history_task_handle,
+            wallet_sync_data_requests_task_handle,
+        ) = WalletSync::spawn(&config, db, chain_view).await?;
 
         info!("Spawned Zallet tasks");
 
@@ -39,6 +42,7 @@ impl StartCmd {
         pin!(rpc_task_handle);
         pin!(wallet_sync_steady_state_task_handle);
         pin!(wallet_sync_recover_history_task_handle);
+        pin!(wallet_sync_data_requests_task_handle);
 
         // Wait for tasks to finish.
         let res = loop {
@@ -72,6 +76,13 @@ impl StartCmd {
                     info!(?wallet_sync_result, "Wallet recover-history sync task exited");
                     Ok(())
                 }
+
+                wallet_sync_join_result = &mut wallet_sync_data_requests_task_handle => {
+                    let wallet_sync_result = wallet_sync_join_result
+                        .expect("unexpected panic in the wallet data-requests sync task");
+                    info!(?wallet_sync_result, "Wallet data-requests sync task exited");
+                    Ok(())
+                }
             };
 
             // Stop Zallet if a task finished and returned an error, or if an ongoing task
@@ -90,6 +101,7 @@ impl StartCmd {
         rpc_task_handle.abort();
         wallet_sync_steady_state_task_handle.abort();
         wallet_sync_recover_history_task_handle.abort();
+        wallet_sync_data_requests_task_handle.abort();
 
         info!("All tasks have been asked to stop, waiting for remaining tasks to finish");
 
