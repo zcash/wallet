@@ -19,4 +19,4 @@ jobs:
 
       - name: Run command inside Docker container
         run: |
-          docker run --rm zallet -help
+          docker run --rm zallet -h
