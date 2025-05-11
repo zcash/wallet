@@ -44,26 +44,11 @@ pub(crate) struct Address {
     address: String,
 }
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![
-        g.param::<JsonValue>(
-            "account",
-            "Either the UUID or ZIP 32 account index of the account to derive from.",
-            true,
-        ),
-        g.param::<Vec<String>>(
-            "receiver_types",
-            "Receiver types to include in the derived address.",
-            false,
-        ),
-        g.param::<u128>(
-            "diversifier_index",
-            "A specific diversifier index to derive at.",
-            false,
-        ),
-    ]
-}
+pub(super) const PARAM_ACCOUNT_DESC: &str =
+    "Either the UUID or ZIP 32 account index of the account to derive from.";
+pub(super) const PARAM_RECEIVER_TYPES_DESC: &str =
+    "Receiver types to include in the derived address.";
+pub(super) const PARAM_DIVERSIFIER_INDEX_DESC: &str = "A specific diversifier index to derive at.";
 
 pub(crate) fn call(
     wallet: &mut DbConnection,

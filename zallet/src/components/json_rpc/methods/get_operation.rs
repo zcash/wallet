@@ -15,14 +15,8 @@ pub(crate) type Response = RpcResult<ResultType>;
 #[serde(transparent)]
 pub(crate) struct ResultType(Vec<OperationStatus>);
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![g.param::<Vec<&str>>(
-        "operationid",
-        "A list of operation ids we are interested in.",
-        false,
-    )]
-}
+pub(super) const PARAM_OPERATIONID_DESC: &str = "A list of operation ids we are interested in.";
+pub(super) const PARAM_OPERATIONID_REQUIRED: bool = false;
 
 pub(crate) async fn status(async_ops: &[AsyncOperation], operationid: Vec<&str>) -> Response {
     let filter = operationid.into_iter().collect::<HashSet<_>>();

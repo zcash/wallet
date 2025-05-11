@@ -80,11 +80,6 @@ pub(crate) struct UnspentNote {
     change: Option<bool>,
 }
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![]
-}
-
 pub(crate) fn call(wallet: &DbConnection) -> Response {
     // Use the height of the maximum scanned block as the anchor height, to emulate a
     // zero-conf transaction in order to select every note in the wallet.

@@ -14,21 +14,9 @@ pub(crate) type Response = RpcResult<ResultType>;
 #[serde(transparent)]
 pub(crate) struct ResultType(());
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![
-        g.param::<String>(
-            "passphrase",
-            "The passphrase for decrypting the wallet's age identity.",
-            true,
-        ),
-        g.param::<u64>(
-            "timeout",
-            "Time in seconds after which the wallet wil relock.",
-            true,
-        ),
-    ]
-}
+pub(super) const PARAM_PASSPHRASE_DESC: &str =
+    "The passphrase for decrypting the wallet's age identity.";
+pub(super) const PARAM_TIMEOUT_DESC: &str = "Time in seconds after which the wallet will relock.";
 
 pub(crate) async fn call(keystore: &KeyStore, passphrase: SecretString, timeout: u64) -> Response {
     if !keystore.uses_encrypted_identities() {

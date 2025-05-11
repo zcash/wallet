@@ -33,13 +33,9 @@ pub(crate) struct Account {
     account: Option<u64>,
 }
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![
-        g.param::<&str>("account_name", "A human-readable name for the account.", true),
-        g.param::<&str>("seedfp", "ZIP 32 seed fingerprint for the BIP 39 mnemonic phrase from which to derive the account.", false),
-    ]
-}
+pub(super) const PARAM_ACCOUNT_NAME_DESC: &str = "A human-readable name for the account.";
+pub(super) const PARAM_SEEDFP_DESC: &str =
+    "ZIP 32 seed fingerprint for the BIP 39 mnemonic phrase from which to derive the account.";
 
 pub(crate) async fn call(
     wallet: &mut DbConnection,

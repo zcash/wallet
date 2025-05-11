@@ -38,11 +38,6 @@ struct Address {
     ua: String,
 }
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(_: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![]
-}
-
 pub(crate) fn call(wallet: &DbConnection) -> Response {
     let mut accounts = vec![];
 

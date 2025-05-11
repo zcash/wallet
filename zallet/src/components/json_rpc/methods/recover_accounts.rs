@@ -52,14 +52,9 @@ struct Account {
     zip32_account_index: u32,
 }
 
-/// Defines the method parameters for OpenRPC.
-pub(super) fn params(g: &mut super::openrpc::Generator) -> Vec<super::openrpc::ContentDescriptor> {
-    vec![g.param::<Vec<AccountParameter<'_>>>(
-        "accounts",
-        "An array of JSON objects representing the accounts to recover.",
-        true,
-    )]
-}
+pub(super) const PARAM_ACCOUNTS_DESC: &str =
+    "An array of JSON objects representing the accounts to recover.";
+pub(super) const PARAM_ACCOUNTS_REQUIRED: bool = true;
 
 pub(crate) async fn call(
     wallet: &mut DbConnection,
