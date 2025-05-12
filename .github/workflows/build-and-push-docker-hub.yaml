@@ -6,6 +6,8 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   set_env:
     name: Create version tag
@@ -16,8 +18,15 @@ jobs:
     steps:
     - id: version_step
       run:  |
-        echo "tags=latest,${{ github.ref_name }},${{ github.sha }}" >> $GITHUB_OUTPUT
-        echo "zallet_version=$(echo ${{ github.ref_name }} | sed 's/v//g')" >> $GITHUB_OUTPUT
+        if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc-[0-9]+)?$ ]]; then
+          safe_ref_name="${{ github.ref_name }}"
+          echo "tags=latest,${safe_ref_name},${{ github.sha }}" >> $GITHUB_OUTPUT
+          zallet_version=$(echo "$safe_ref_name" | sed 's/^v//')
+          echo "zallet_version=$zallet_version" >> $GITHUB_OUTPUT
+        else
+          echo "Invalid ref_name format: ${{ github.ref_name }}" >&2
+          exit 1
+        fi
 
   build_push:
     uses: zcash/.github/.github/workflows/build-and-push-docker-hub.yaml@main
@@ -27,8 +36,7 @@ jobs:
       image_tags: ${{ needs.set_env.outputs.tags }}
       dockerfile: Dockerfile
       context: .
-      build-args: |
-        zallet_version=${{ needs.set_env.outputs.zallet_version }}
+      build-args: ""
     secrets:
       dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub_password: ${{ secrets.DOCKERHUB_PASSWORD }}
