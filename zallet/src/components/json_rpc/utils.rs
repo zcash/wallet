@@ -174,7 +174,9 @@ fn process_mantissa_digit(ch: char, mantissa: &mut i64, mantissa_tzeros: &mut i6
     true
 }
 
-/// Equivalent to `ParseFixedPoint` in `zcashd`. Bleh.
+/// Equivalent to [`ParseFixedPoint`] in `zcashd`. Bleh.
+///
+/// [`ParseFixedPoint`]: https://github.com/zcash/zcash/blob/1f1f7a385adc048154e7f25a3a0de76f3658ca09/src/util/strencodings.cpp#L418
 fn parse_fixed_point(mut val: &str, decimals: i64) -> Option<i64> {
     let mut mantissa = 0i64;
     let mut exponent = 0i64;
