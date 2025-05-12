@@ -14,17 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tags: ${{ steps.version_step.outputs.tags }}
-      zallet_version: ${{ steps.version_step.outputs.zallet_version }}
+    env:
+      VERSION: ${{ github.ref_name }}
+      SHA: ${{ github.sha }}
     steps:
     - id: version_step
-      run:  |
-        if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc-[0-9]+)?$ ]]; then
-          safe_ref_name="${{ github.ref_name }}"
-          echo "tags=latest,${safe_ref_name},${{ github.sha }}" >> $GITHUB_OUTPUT
-          zallet_version=$(echo "$safe_ref_name" | sed 's/^v//')
-          echo "zallet_version=$zallet_version" >> $GITHUB_OUTPUT
+      run: |
+        set -Eeuo pipefail
+        IFS=$'\n\t'
+
+        if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc-[0-9]+)?$ ]]; then
+          echo "Valid version: $VERSION"
+          echo "tags=latest,$VERSION,$SHA" >> "$GITHUB_OUTPUT"
         else
-          echo "Invalid ref_name format: ${{ github.ref_name }}" >&2
+          echo "Invalid ref_name format: $VERSION" >&2
           exit 1
         fi
 
