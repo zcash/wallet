@@ -22,7 +22,7 @@ use zip32::Scope;
 
 use crate::components::{
     database::DbConnection,
-    json_rpc::{server::LegacyCode, value_from_zatoshis},
+    json_rpc::{server::LegacyCode, utils::value_from_zatoshis},
 };
 
 /// Response to a `z_listunspent` RPC request.

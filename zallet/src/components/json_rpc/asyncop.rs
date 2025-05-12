@@ -2,12 +2,53 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use jsonrpsee::core::RpcResult;
+use documented::Documented;
+use jsonrpsee::{
+    core::{JsonValue, RpcResult},
+    types::ErrorObjectOwned,
+};
 use schemars::JsonSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+
+use super::server::LegacyCode;
+
+/// An async operation ID.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize, Documented, JsonSchema)]
+#[serde(try_from = "String")]
+pub(crate) struct OperationId(String);
+
+impl OperationId {
+    fn new() -> Self {
+        Self(format!("opid-{}", Uuid::new_v4()))
+    }
+}
+
+impl TryFrom<String> for OperationId {
+    type Error = ErrorObjectOwned;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let uuid = value
+            .strip_prefix("opid-")
+            .ok_or_else(|| LegacyCode::InvalidParameter.with_static("Invalid operation ID"))?;
+        Uuid::try_parse(uuid)
+            .map_err(|_| LegacyCode::InvalidParameter.with_static("Invalid operation ID"))?;
+        Ok(Self(value))
+    }
+}
+
+pub(super) struct ContextInfo {
+    method: &'static str,
+    params: JsonValue,
+}
+
+impl ContextInfo {
+    pub(super) fn new(method: &'static str, params: JsonValue) -> Self {
+        Self { method, params }
+    }
+}
 
 /// The possible states that an async operation can be in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
@@ -55,7 +96,8 @@ pub(super) struct OperationData {
 
 /// An async operation launched by an RPC call.
 pub(super) struct AsyncOperation {
-    operation_id: String,
+    operation_id: OperationId,
+    context: Option<ContextInfo>,
     creation_time: SystemTime,
     data: Arc<RwLock<OperationData>>,
 }
@@ -63,6 +105,7 @@ pub(super) struct AsyncOperation {
 impl AsyncOperation {
     /// Launches a new async operation.
     pub(super) async fn new<T: Serialize + Send + 'static>(
+        context: Option<ContextInfo>,
         f: impl Future<Output = RpcResult<T>> + Send + 'static,
     ) -> Self {
         let creation_time = SystemTime::now();
@@ -112,14 +155,15 @@ impl AsyncOperation {
         });
 
         Self {
-            operation_id: format!("opid-{}", Uuid::new_v4()),
+            operation_id: OperationId::new(),
+            context,
             creation_time,
             data,
         }
     }
 
     /// Returns the ID of this operation.
-    pub(super) fn operation_id(&self) -> &str {
+    pub(super) fn operation_id(&self) -> &OperationId {
         &self.operation_id
     }
 
@@ -131,6 +175,12 @@ impl AsyncOperation {
     /// Builds the current status of this operation.
     pub(super) async fn to_status(&self) -> OperationStatus {
         let data = self.data.read().await;
+
+        let (method, params) = self
+            .context
+            .as_ref()
+            .map(|context| (context.method, context.params.clone()))
+            .unzip();
 
         let creation_time = self
             .creation_time
@@ -163,6 +213,8 @@ impl AsyncOperation {
 
         OperationStatus {
             id: self.operation_id.clone(),
+            method,
+            params,
             status: data.state,
             creation_time,
             error,
@@ -175,7 +227,13 @@ impl AsyncOperation {
 /// The status of an async operation.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct OperationStatus {
-    id: String,
+    id: OperationId,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    method: Option<&'static str>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    params: Option<JsonValue>,
 
     status: OperationState,
 

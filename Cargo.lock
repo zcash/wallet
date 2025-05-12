@@ -6217,6 +6217,7 @@ dependencies = [
  "zcash_client_sqlite",
  "zcash_keys",
  "zcash_primitives",
+ "zcash_proofs",
  "zcash_protocol 0.5.1",
  "zcash_transparent",
  "zebra-chain",
@@ -6447,6 +6448,7 @@ dependencies = [
  "redjubjub",
  "sapling-crypto",
  "tracing",
+ "wagyu-zcash-parameters",
  "xdg",
  "zcash_primitives",
 ]

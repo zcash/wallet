@@ -105,6 +105,52 @@ err-ux-B = Tell us
 # Put (len(A) - len(B) - 41) spaces here.
 err-ux-C = {"                    "}
 
+## Limit errors
+
+err-excess-orchard-actions =
+    Including {$count} Orchard {$kind} would exceed the current limit of
+    {$limit} actions, which exists to prevent memory exhaustion. Restart with
+    '{$config}' where {$bound} to allow the wallet to attempt to construct this
+    transaction.
+
+## Privacy policy errors
+
+err-privpol-no-privacy-not-allowed =
+    This transaction would have no privacy, which is not enabled by default.
+    THIS WILL AFFECT YOUR PRIVACY. Resubmit with the '{$parameter}' parameter
+    set to '{$policy}' if you wish to allow this transaction to proceed anyway.
+err-privpol-linking-addrs-not-allowed =
+    This transaction would spend transparent funds received by multiple unified
+    addresses within the same account, which is not enabled by default because
+    it will publicly link those addresses together.
+err-privpol-fully-transparent-not-allowed =
+    This transaction would both spend transparent funds and have transparent
+    recipients or change, which is not enabled by default because it will
+    publicly reveal transaction participants and amounts.
+err-privpol-transparent-sender-not-allowed =
+    This transaction would spend transparent funds, which is not enabled by
+    default because it will publicly reveal transaction senders and amounts.
+err-privpol-transparent-recipient-not-allowed =
+    This transaction would have transparent recipients, which is not enabled by
+    default because it will publicly reveal transaction recipients and amounts.
+err-privpol-transparent-change-not-allowed =
+    This transaction would have transparent change, which is not enabled by
+    default because it will publicly reveal the change address and amounts.
+err-privpol-revealing-amount-not-allowed =
+    Could not send to the {$pool} shielded pool without spending non-{$pool}
+    funds, which would reveal transaction amounts.
+err-privpol-transparent-receiver-not-allowed =
+    This transaction would send to a transparent receiver of a unified address,
+    which is not enabled by default because it will publicly reveal transaction
+    recipients and amounts.
+err-privpol-revealing-receiver-amounts-not-allowed =
+    Could not send to a shielded receiver of a unified address without spending
+    funds from a different pool, which would reveal transaction amounts.
+rec-privpol-privacy-weakening =
+    THIS MAY AFFECT YOUR PRIVACY. Resubmit with the '{$parameter}' parameter set
+    to '{$policy}' or weaker if you wish to allow this transaction to proceed
+    anyway.
+
 ## zallet manpage
 
 man-zallet-about = A {-zcash} wallet.

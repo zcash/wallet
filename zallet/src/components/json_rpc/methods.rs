@@ -13,7 +13,7 @@ use crate::components::{
     keystore::KeyStore,
 };
 
-use super::asyncop::AsyncOperation;
+use super::asyncop::{AsyncOperation, ContextInfo, OperationId};
 
 mod get_address_for_account;
 mod get_new_account;
@@ -30,6 +30,7 @@ mod lock_wallet;
 mod openrpc;
 mod recover_accounts;
 mod unlock_wallet;
+mod z_send_many;
 
 #[rpc(server)]
 pub(crate) trait Rpc {
@@ -63,7 +64,7 @@ pub(crate) trait Rpc {
     /// - `operationid` (array, optional) A list of operation ids we are interested in.
     ///   If not provided, examine all operations known to the node.
     #[method(name = "z_getoperationstatus")]
-    async fn get_operation_status(&self, operationid: Vec<&str>) -> get_operation::Response;
+    async fn get_operation_status(&self, operationid: Vec<OperationId>) -> get_operation::Response;
 
     /// Retrieve the result and status of an operation which has finished, and then remove
     /// the operation from memory.
@@ -76,7 +77,7 @@ pub(crate) trait Rpc {
     /// - `operationid` (array, optional) A list of operation ids we are interested in.
     ///   If not provided, retrieve all finished operations known to the node.
     #[method(name = "z_getoperationresult")]
-    async fn get_operation_result(&self, operationid: Vec<&str>) -> get_operation::Response;
+    async fn get_operation_result(&self, operationid: Vec<OperationId>) -> get_operation::Response;
 
     /// Returns wallet state information.
     #[method(name = "getwalletinfo")]
@@ -226,6 +227,75 @@ pub(crate) trait Rpc {
         minconf: Option<u32>,
         as_of_height: Option<i32>,
     ) -> get_notes_count::Response;
+
+    /// Send a transaction with multiple recipients.
+    ///
+    /// This is an async operation; it returns an operation ID string that you can pass to
+    /// `z_getoperationstatus` or `z_getoperationresult`.
+    ///
+    /// Amounts are decimal numbers with at most 8 digits of precision.
+    ///
+    /// Change generated from one or more transparent addresses flows to a new transparent
+    /// address, while change generated from a legacy Sapling address returns to itself.
+    /// TODO: https://github.com/zcash/wallet/issues/138
+    ///
+    /// When sending from a unified address, change is returned to the internal-only
+    /// address for the associated unified account.
+    ///
+    /// When spending coinbase UTXOs, only shielded recipients are permitted and change is
+    /// not allowed; the entire value of the coinbase UTXO(s) must be consumed.
+    /// TODO: https://github.com/zcash/wallet/issues/137
+    ///
+    /// # Arguments
+    ///
+    /// - `fromaddress` (string, required) The transparent or shielded address to send the
+    ///   funds from. The following special strings are also accepted:
+    ///   - `"ANY_TADDR"`: Select non-coinbase UTXOs from any transparent addresses
+    ///     belonging to the wallet. Use `z_shieldcoinbase` to shield coinbase UTXOs from
+    ///     multiple transparent addresses.
+    ///   If a unified address is provided for this argument, the TXOs to be spent will be
+    ///   selected from those associated with the account corresponding to that unified
+    ///   address, from value pools corresponding to the receivers included in the UA.
+    /// - `amounts` (array, required) An array of JSON objects representing the amounts to
+    ///   send, with the following fields:
+    ///   - `address` (string, required) A taddr, zaddr, or Unified Address.
+    ///   - `amount` (numeric, required) The numeric amount in ZEC.
+    ///   - `memo` (string, optional) If the address is a zaddr, raw data represented in
+    ///     hexadecimal string format. If the output is being sent to a transparent
+    ///     address, it’s an error to include this field.
+    /// - `minconf` (numeric, optional) Only use funds confirmed at least this many times.
+    /// - `fee` (numeric, optional) If set, it must be null. Zallet always uses a fee
+    ///   calculated according to ZIP 317.
+    /// - `privacyPolicy` (string, optional, default=`"FullPrivacy"`) Policy for what
+    ///   information leakage is acceptable. One of the following strings:
+    ///   - `"FullPrivacy"`: Only allow fully-shielded transactions (involving a single
+    ///     shielded value pool).
+    ///   - `"AllowRevealedAmounts"`: Allow funds to cross between shielded value pools,
+    ///     revealing the amount that crosses pools.
+    ///   - `"AllowRevealedRecipients"`: Allow transparent recipients. This also implies
+    ///     revealing information described under `"AllowRevealedAmounts"`.
+    ///   - `"AllowRevealedSenders"`: Allow transparent funds to be spent, revealing the
+    ///     sending addresses and amounts. This implies revealing information described
+    ///     under `"AllowRevealedAmounts"`.
+    ///   - `"AllowFullyTransparent"`: Allow transaction to both spend transparent funds
+    ///     and have transparent recipients. This implies revealing information described
+    ///     under `"AllowRevealedSenders"` and `"AllowRevealedRecipients"`.
+    ///   - `"AllowLinkingAccountAddresses"`: Allow selecting transparent coins from the
+    ///     full account, rather than just the funds sent to the transparent receiver in
+    ///     the provided Unified Address. This implies revealing information described
+    ///     under `"AllowRevealedSenders"`.
+    ///   - `"NoPrivacy"`: Allow the transaction to reveal any information necessary to
+    ///     create it. This implies revealing information described under
+    ///     `"AllowFullyTransparent"` and `"AllowLinkingAccountAddresses"`.
+    #[method(name = "z_sendmany")]
+    async fn z_send_many(
+        &self,
+        fromaddress: String,
+        amounts: Vec<z_send_many::AmountParameter>,
+        minconf: Option<u32>,
+        fee: Option<JsonValue>,
+        #[argument(rename = "privacyPolicy")] privacy_policy: Option<String>,
+    ) -> z_send_many::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -261,13 +331,14 @@ impl RpcImpl {
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
 
-    async fn start_async<T: Serialize + Send + 'static>(
-        &self,
-        f: impl Future<Output = RpcResult<T>> + Send + 'static,
-    ) -> String {
+    async fn start_async<F, T>(&self, (context, f): (Option<ContextInfo>, F)) -> OperationId
+    where
+        F: Future<Output = RpcResult<T>> + Send + 'static,
+        T: Serialize + Send + 'static,
+    {
         let mut async_ops = self.async_ops.write().await;
-        let op = AsyncOperation::new(f).await;
-        let op_id = op.operation_id().to_string();
+        let op = AsyncOperation::new(context, f).await;
+        let op_id = op.operation_id().clone();
         async_ops.push(op);
         op_id
     }
@@ -287,11 +358,11 @@ impl RpcServer for RpcImpl {
         list_operation_ids::call(&self.async_ops.read().await, status).await
     }
 
-    async fn get_operation_status(&self, operationid: Vec<&str>) -> get_operation::Response {
+    async fn get_operation_status(&self, operationid: Vec<OperationId>) -> get_operation::Response {
         get_operation::status(&self.async_ops.read().await, operationid).await
     }
 
-    async fn get_operation_result(&self, operationid: Vec<&str>) -> get_operation::Response {
+    async fn get_operation_result(&self, operationid: Vec<OperationId>) -> get_operation::Response {
         get_operation::result(self.async_ops.write().await.as_mut(), operationid).await
     }
 
@@ -375,5 +446,30 @@ impl RpcServer for RpcImpl {
         as_of_height: Option<i32>,
     ) -> get_notes_count::Response {
         get_notes_count::call(self.wallet().await?.as_ref(), minconf, as_of_height)
+    }
+
+    async fn z_send_many(
+        &self,
+        fromaddress: String,
+        amounts: Vec<z_send_many::AmountParameter>,
+        minconf: Option<u32>,
+        fee: Option<JsonValue>,
+        privacy_policy: Option<String>,
+    ) -> z_send_many::Response {
+        Ok(self
+            .start_async(
+                z_send_many::call(
+                    self.wallet().await?,
+                    self.keystore.clone(),
+                    self.chain().await?,
+                    fromaddress,
+                    amounts,
+                    minconf,
+                    fee,
+                    privacy_policy,
+                )
+                .await?,
+            )
+            .await)
     }
 }
