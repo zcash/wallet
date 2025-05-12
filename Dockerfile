@@ -1,5 +1,5 @@
 # --- Stage 1: Build with Rust --- (amd64)
-FROM rustlang/rust:nightly-slim@sha256:e1fb83983ca45a2f2afe386077cdf6873a7c0a496a5ae6e469b25dc1a90b1561 AS builder
+FROM rust:1-slim@sha256:57d415bbd61ce11e2d5f73de068103c7bd9f3188dc132c97cef4a8f62989e944 AS builder
 
 WORKDIR /app
 
