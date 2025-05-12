@@ -6,7 +6,7 @@ use jsonrpsee::{
 };
 use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
-use zcash_protocol::value::{BalanceError, COIN, Zatoshis};
+use zcash_protocol::{value::{BalanceError, ZatBalance, Zatoshis, COIN},TxId};
 use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
 
 use crate::components::{database::DbConnection, keystore::KeyStore};
@@ -26,6 +26,15 @@ pub(super) async fn ensure_wallet_is_unlocked(keystore: &KeyStore) -> RpcResult<
     } else {
         Ok(())
     }
+}
+
+// TODO: Move this to `zcash_protocol`.
+pub(super) fn parse_txid(txid_str: &str) -> RpcResult<TxId> {
+    let mut bytes = [0; 32];
+    hex::decode_to_slice(txid_str, &mut bytes)
+        .map_err(|_| LegacyCode::InvalidParameter.with_static("invalid txid"))?;
+    bytes.reverse();
+    Ok(TxId::from_bytes(bytes))
 }
 
 /// Parses the `seedfp` parameter present in many wallet RPCs.
@@ -143,6 +152,11 @@ pub(super) fn zatoshis_from_value(value: &JsonValue) -> RpcResult<Zatoshis> {
 // TODO: https://github.com/zcash/wallet/issues/15
 pub(super) fn value_from_zatoshis(value: Zatoshis) -> f64 {
     (u64::from(value) as f64) / (COIN as f64)
+}
+
+// TODO: https://github.com/zcash/wallet/issues/15
+pub(super) fn value_from_zat_balance(value: ZatBalance) -> f64 {
+    (i64::from(value) as f64) / (COIN as f64)
 }
 
 /// Upper bound for mantissa.
