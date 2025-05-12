@@ -148,7 +148,7 @@ pub(crate) async fn call(
 
     let account = match fromaddress.as_str() {
         // Select from the legacy transparent address pool.
-        // TODO: Support this if we're going to.
+        // TODO: Support this if we're going to. https://github.com/zcash/wallet/issues/138
         "ANY_TADDR" => Err(LegacyCode::WalletAccountsUnsupported
             .with_static("The legacy account is currently unsupported for spending from")),
         // Select the account corresponding to the given address.
@@ -182,6 +182,7 @@ pub(crate) async fn call(
     let min_confirmations = match minconf {
         Some(minconf) => NonZeroU32::new(minconf)
             // TODO: Fix this inconsistency with `zcashd` (inability to create zero-conf txs).
+            // https://github.com/zcash/wallet/issues/139
             .ok_or_else(|| LegacyCode::InvalidParameter.with_static("minconf must be non-zero"))?,
         None => DEFAULT_NOTE_CONFIRMATIONS,
     };
@@ -241,7 +242,7 @@ async fn run(
     request: TransactionRequest,
     min_confirmations: NonZeroU32,
     privacy_policy: PrivacyPolicy,
-    // TODO: Support legacy transparent pool of funds.
+    // TODO: Support legacy transparent pool of funds. https://github.com/zcash/wallet/issues/138
     usk: UnifiedSpendingKey,
 ) -> RpcResult<SendResult> {
     let params = *wallet.params();
@@ -312,7 +313,7 @@ async fn run(
         None,
         ShieldedProtocol::Orchard,
         DustOutputPolicy::default(),
-        // TODO: Make this configurable.
+        // TODO: Make this configurable. https://github.com/zcash/wallet/issues/140
         SplitPolicy::with_min_output_value(
             NonZeroUsize::new(4).expect("valid"),
             Zatoshis::from_u64(100_0000).expect("valid"),
