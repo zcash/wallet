@@ -59,10 +59,10 @@ pub(crate) async fn result(
     Ok(ResultType(ret))
 }
 
-fn filtered<'a>(
-    async_ops: &'a [AsyncOperation],
+fn filtered(
+    async_ops: &[AsyncOperation],
     filter: HashSet<OperationId>,
-) -> impl Iterator<Item = &'a AsyncOperation> {
+) -> impl Iterator<Item = &AsyncOperation> {
     async_ops
         .iter()
         .filter(move |op| filter.is_empty() || filter.contains(op.operation_id()))
