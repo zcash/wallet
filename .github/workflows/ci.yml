@@ -18,14 +18,10 @@ jobs:
           - Linux
         state:
           - default
-          - NU7
 
         include:
           - target: Linux
             os: ubuntu-latest
-
-          - state: NU7
-            rustflags: '--cfg zcash_unstable="nu7"'
 
     env:
       RUSTFLAGS: ${{ matrix.rustflags }}
@@ -61,7 +57,9 @@ jobs:
           - target: Windows
             os: windows-latest
 
-          - state: NU7
+          - target: Linux
+            state: NU7
+            os: ubuntu-latest
             rustflags: '--cfg zcash_unstable="nu7"'
 
         exclude:
