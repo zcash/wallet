@@ -360,7 +360,12 @@ async fn data_requests(
     // get that out of the way.
     interval.tick().await;
 
+    // TODO: Remove this once https://github.com/zcash/librustzcash/issues/1805
+    // is implemented and used by Zallet.
+    let mut hotloop_preventer = time::interval(Duration::from_secs(1));
     loop {
+        hotloop_preventer.tick().await;
+
         let requests = db_data.transaction_data_requests()?;
         if requests.is_empty() {
             // Wait for new requests.
@@ -441,10 +446,12 @@ async fn data_requests(
                     output_status_filter,
                 } => {
                     let address = address.encode(params);
-                    info!(
+                    debug!(
+                        tx_status_filter = ?tx_status_filter,
+                        output_status_filter = ?output_status_filter,
                         "Fetching transactions involving {address} in range {}..{}",
                         block_range_start,
-                        block_range_end.map(|h| h.to_string()).unwrap_or_default()
+                        block_range_end.map(|h| h.to_string()).unwrap_or_default(),
                     );
 
                     let request = GetAddressTxIdsRequest::from_parts(
