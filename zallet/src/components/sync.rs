@@ -411,12 +411,22 @@ async fn data_requests(
                             // TODO: We should make the consensus branch ID optional in
                             // the parser, so Zaino only need to provide it to us for v4
                             // or earlier txs.
-                            let parse_height = mined_height.unwrap_or(BlockHeight::from_u32(
-                                // TODO: Zaino should be returning this as a u32, or ideally as a `BlockHeight`.
-                                chain.get_latest_block().await?.height.try_into().expect(
-                                    "TODO: Zaino's API should have caught this error for us",
-                                ),
-                            ));
+                            let parse_height = match mined_height {
+                                Some(height) => height,
+                                None => {
+                                    let chain_height = BlockHeight::from_u32(
+                                        // TODO: Zaino should be returning this as a u32,
+                                        // or ideally as a `BlockHeight`.
+                                        chain.get_latest_block().await?.height.try_into().expect(
+                                            "TODO: Zaino's API should have caught this error for us",
+                                        ),
+                                    );
+                                    // If the transaction is not mined, it is validated at
+                                    // the "mempool height" which is the height that the
+                                    // next mined block would have.
+                                    chain_height + 1
+                                }
+                            };
                             let tx = Transaction::read(
                                 tx.hex.as_ref(),
                                 consensus::BranchId::for_height(params, parse_height),
@@ -523,13 +533,22 @@ async fn data_requests(
                         // TODO: We should make the consensus branch ID optional in
                         // the parser, so Zaino only need to provide it to us for v4
                         // or earlier txs.
-                        let parse_height =
-                            mined_height.unwrap_or(BlockHeight::from_u32(
-                                // TODO: Zaino should be returning this as a u32, or ideally as a `BlockHeight`.
-                                chain.get_latest_block().await?.height.try_into().expect(
-                                    "TODO: Zaino's API should have caught this error for us",
-                                ),
-                            ));
+                        let parse_height = match mined_height {
+                            Some(height) => height,
+                            None => {
+                                let chain_height = BlockHeight::from_u32(
+                                    // TODO: Zaino should be returning this as a u32, or
+                                    // ideally as a `BlockHeight`.
+                                    chain.get_latest_block().await?.height.try_into().expect(
+                                        "TODO: Zaino's API should have caught this error for us",
+                                    ),
+                                );
+                                // If the transaction is not mined, it is validated at the
+                                // "mempool height" which is the height that the next
+                                // mined block would have.
+                                chain_height + 1
+                            }
+                        };
                         let tx = Transaction::read(
                             tx.hex.as_ref(),
                             consensus::BranchId::for_height(params, parse_height),
