@@ -7,7 +7,7 @@ use rand::rngs::OsRng;
 use secrecy::SecretVec;
 use shardtree::{ShardTree, error::ShardTreeError};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
-use zcash_client_backend::data_api::AddressInfo;
+use zcash_client_backend::data_api::{AddressInfo, TargetValue};
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
@@ -373,7 +373,7 @@ impl InputSource for DbConnection {
     fn select_spendable_notes(
         &self,
         account: Self::AccountId,
-        target_value: Zatoshis,
+        target_value: TargetValue,
         sources: &[ShieldedProtocol],
         anchor_height: BlockHeight,
         exclude: &[Self::NoteRef],

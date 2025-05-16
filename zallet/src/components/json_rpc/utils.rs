@@ -6,7 +6,10 @@ use jsonrpsee::{
 };
 use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
-use zcash_protocol::value::{BalanceError, COIN, Zatoshis};
+use zcash_protocol::{
+    TxId,
+    value::{BalanceError, COIN, Zatoshis},
+};
 use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
 
 use crate::components::{database::DbConnection, keystore::KeyStore};
@@ -26,6 +29,15 @@ pub(super) async fn ensure_wallet_is_unlocked(keystore: &KeyStore) -> RpcResult<
     } else {
         Ok(())
     }
+}
+
+// TODO: Move this to `zcash_protocol`.
+pub(crate) fn parse_txid(txid_str: &str) -> RpcResult<TxId> {
+    let mut bytes = [0; 32];
+    hex::decode_to_slice(txid_str, &mut bytes)
+        .map_err(|_| LegacyCode::InvalidParameter.with_static("invalid txid"))?;
+    bytes.reverse();
+    Ok(TxId::from_bytes(bytes))
 }
 
 /// Parses the `seedfp` parameter present in many wallet RPCs.

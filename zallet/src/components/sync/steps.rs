@@ -2,9 +2,7 @@ use jsonrpsee::tracing::info;
 use orchard::tree::MerkleHashOrchard;
 use zaino_fetch::jsonrpsee::error::JsonRpSeeConnectorError;
 use zaino_state::{
-    error::FetchServiceError,
-    fetch::FetchServiceSubscriber,
-    indexer::{LightWalletIndexer as _, ZcashIndexer as _},
+    FetchServiceError, FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer as _,
 };
 use zcash_client_backend::{
     data_api::{

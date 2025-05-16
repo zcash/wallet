@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use zaino_state::fetch::FetchServiceSubscriber;
+use zaino_state::FetchServiceSubscriber;
 use zcash_address::{ZcashAddress, unified};
 use zcash_client_backend::{
     data_api::{

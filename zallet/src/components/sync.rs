@@ -1,25 +1,34 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
 use tokio::time;
-use zaino_state::{fetch::FetchServiceSubscriber, indexer::LightWalletIndexer as _};
+use zaino_proto::proto::service::GetAddressUtxosArg;
+use zaino_state::{FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer};
 use zcash_client_backend::data_api::{
+    OutputStatusFilter, TransactionDataRequest, TransactionStatus, TransactionStatusFilter,
     WalletRead, WalletWrite,
     chain::{BlockCache, scan_cached_blocks},
     scanning::{ScanPriority, ScanRange},
     wallet::decrypt_and_store_transaction,
 };
+use zcash_keys::encoding::AddressCodec;
 use zcash_primitives::transaction::Transaction;
-use zcash_protocol::consensus::{self, BlockHeight};
+use zcash_protocol::{
+    TxId,
+    consensus::{self, BlockHeight},
+};
 use zebra_chain::transaction::SerializedTransaction;
+use zebra_rpc::methods::GetAddressTxIdsRequest;
 
 use super::{
     TaskHandle,
     chain_view::ChainView,
     database::{Database, DbConnection},
 };
-use crate::{config::ZalletConfig, error::Error, network::Network};
+use crate::{
+    components::json_rpc::utils::parse_txid, config::ZalletConfig, error::Error, network::Network,
+};
 
 mod cache;
 
@@ -37,7 +46,7 @@ impl WalletSync {
         config: &ZalletConfig,
         db: Database,
         chain_view: ChainView,
-    ) -> Result<(TaskHandle, TaskHandle), Error> {
+    ) -> Result<(TaskHandle, TaskHandle, TaskHandle), Error> {
         let params = config.network();
 
         // Ensure the wallet is in a state that the sync tasks can work with.
@@ -59,7 +68,14 @@ impl WalletSync {
             Ok(())
         });
 
-        Ok((steady_state_task, recover_history_task))
+        let chain = chain_view.subscribe().await?.inner();
+        let mut db_data = db.handle().await?;
+        let data_requests_task = tokio::spawn(async move {
+            data_requests(chain, &params, db_data.as_mut()).await?;
+            Ok(())
+        });
+
+        Ok((steady_state_task, recover_history_task, data_requests_task))
     }
 }
 
@@ -325,6 +341,223 @@ async fn recover_history(
 
             if scan_ranges_updated {
                 break;
+            }
+        }
+    }
+}
+
+/// Fetches information that the wallet requests to complete its view of transaction
+/// history.
+#[tracing::instrument(skip_all)]
+async fn data_requests(
+    chain: FetchServiceSubscriber,
+    params: &Network,
+    db_data: &mut DbConnection,
+) -> Result<(), SyncError> {
+    let mut interval = time::interval(Duration::from_secs(10));
+    interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
+    // The first tick completes immediately. We want to use it for a conditional delay, so
+    // get that out of the way.
+    interval.tick().await;
+
+    // TODO: Remove this once https://github.com/zcash/librustzcash/issues/1805
+    // is implemented and used by Zallet.
+    let mut hotloop_preventer = time::interval(Duration::from_secs(1));
+    loop {
+        hotloop_preventer.tick().await;
+
+        let requests = db_data.transaction_data_requests()?;
+        if requests.is_empty() {
+            // Wait for new requests.
+            debug!("No transaction data requests, sleeping");
+            interval.tick().await;
+            continue;
+        }
+
+        for request in requests {
+            match request {
+                TransactionDataRequest::GetStatus(txid) => {
+                    info!("Getting status of {txid}");
+                    let status = match chain.get_raw_transaction(txid.to_string(), Some(1)).await {
+                        // TODO: Zaino should have a Rust API for fetching tx details,
+                        // instead of requiring us to specify a verbosity and then deal
+                        // with an enum variant that should never occur.
+                        Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => unreachable!(),
+                        Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => tx
+                            .height
+                            .map(BlockHeight::from_u32)
+                            .map(TransactionStatus::Mined)
+                            .unwrap_or(TransactionStatus::NotInMainChain),
+                        // TODO: Detect error corresponding to
+                        // `TransactionStatus::TxidNotRecognized`.
+                        Err(e) => return Err(e.into()),
+                    };
+
+                    db_data.set_transaction_status(txid, status)?;
+                }
+                TransactionDataRequest::Enhancement(txid) => {
+                    info!("Enhancing {txid}");
+                    let tx = match chain.get_raw_transaction(txid.to_string(), Some(1)).await {
+                        // TODO: Zaino should have a Rust API for fetching tx details,
+                        // instead of requiring us to specify a verbosity and then deal
+                        // with an enum variant that should never occur.
+                        Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => unreachable!(),
+                        Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => {
+                            let mined_height = tx.height.map(BlockHeight::from_u32);
+
+                            // TODO: Zaino should either be doing the tx parsing for us,
+                            // or telling us the consensus branch ID for which the tx is
+                            // treated as valid.
+                            // TODO: We should make the consensus branch ID optional in
+                            // the parser, so Zaino only need to provide it to us for v4
+                            // or earlier txs.
+                            let parse_height = match mined_height {
+                                Some(height) => height,
+                                None => {
+                                    let chain_height = BlockHeight::from_u32(
+                                        // TODO: Zaino should be returning this as a u32,
+                                        // or ideally as a `BlockHeight`.
+                                        chain.get_latest_block().await?.height.try_into().expect(
+                                            "TODO: Zaino's API should have caught this error for us",
+                                        ),
+                                    );
+                                    // If the transaction is not mined, it is validated at
+                                    // the "mempool height" which is the height that the
+                                    // next mined block would have.
+                                    chain_height + 1
+                                }
+                            };
+                            let tx = Transaction::read(
+                                tx.hex.as_ref(),
+                                consensus::BranchId::for_height(params, parse_height),
+                            )
+                            .expect("TODO: Zaino's API should have caught this error for us");
+
+                            Some((tx, mined_height))
+                        }
+                        // TODO: Detect error corresponding to
+                        // `TransactionStatus::TxidNotRecognized`.
+                        Err(e) => return Err(e.into()),
+                    };
+
+                    if let Some((tx, mined_height)) = tx {
+                        decrypt_and_store_transaction(params, db_data, &tx, mined_height)?;
+                    } else {
+                        db_data
+                            .set_transaction_status(txid, TransactionStatus::TxidNotRecognized)?;
+                    }
+                }
+                TransactionDataRequest::TransactionsInvolvingAddress {
+                    address,
+                    block_range_start,
+                    block_range_end,
+                    request_at,
+                    tx_status_filter,
+                    output_status_filter,
+                } => {
+                    let address = address.encode(params);
+                    debug!(
+                        tx_status_filter = ?tx_status_filter,
+                        output_status_filter = ?output_status_filter,
+                        "Fetching transactions involving {address} in range {}..{}",
+                        block_range_start,
+                        block_range_end.map(|h| h.to_string()).unwrap_or_default(),
+                    );
+
+                    let request = GetAddressTxIdsRequest::from_parts(
+                        vec![address.clone()],
+                        block_range_start.into(),
+                        block_range_end.map(u32::from).unwrap_or(0),
+                    );
+
+                    // Zallet is a full node wallet with an index; we can safely look up
+                    // information immediately without exposing correlations between
+                    // addresses to untrusted parties.
+                    let _ = request_at;
+
+                    let txs_with_unspent_outputs = match output_status_filter {
+                        OutputStatusFilter::Unspent => {
+                            let request = GetAddressUtxosArg {
+                                addresses: vec![address],
+                                start_height: block_range_start.into(),
+                                max_entries: 0,
+                            };
+                            Some(
+                                chain
+                                    .get_address_utxos(request)
+                                    .await?
+                                    .address_utxos
+                                    .into_iter()
+                                    .map(|utxo| {
+                                        TxId::read(utxo.txid.as_slice())
+                                            .expect("TODO: Zaino's API should have caught this error for us")
+                                    })
+                                    .collect::<HashSet<_>>(),
+                            )
+                        }
+                        OutputStatusFilter::All => None,
+                    };
+
+                    for txid_str in chain.get_address_tx_ids(request).await? {
+                        let txid = parse_txid(&txid_str)
+                            .expect("TODO: Zaino's API should have caught this error for us");
+
+                        let tx = match chain.get_raw_transaction(txid_str, Some(1)).await? {
+                            // TODO: Zaino should have a Rust API for fetching tx details,
+                            // instead of requiring us to specify a verbosity and then deal
+                            // with an enum variant that should never occur.
+                            zebra_rpc::methods::GetRawTransaction::Raw(_) => unreachable!(),
+                            zebra_rpc::methods::GetRawTransaction::Object(tx) => tx,
+                        };
+
+                        let mined_height = tx.height.map(BlockHeight::from_u32);
+
+                        // Ignore transactions that don't match the status filter.
+                        match (&tx_status_filter, mined_height) {
+                            (TransactionStatusFilter::Mined, None)
+                            | (TransactionStatusFilter::Mempool, Some(_)) => continue,
+                            _ => (),
+                        }
+
+                        // Ignore transactions with outputs that don't match the status
+                        // filter.
+                        if let Some(filter) = &txs_with_unspent_outputs {
+                            if !filter.contains(&txid) {
+                                continue;
+                            }
+                        }
+
+                        // TODO: Zaino should either be doing the tx parsing for us,
+                        // or telling us the consensus branch ID for which the tx is
+                        // treated as valid.
+                        // TODO: We should make the consensus branch ID optional in
+                        // the parser, so Zaino only need to provide it to us for v4
+                        // or earlier txs.
+                        let parse_height = match mined_height {
+                            Some(height) => height,
+                            None => {
+                                let chain_height = BlockHeight::from_u32(
+                                    // TODO: Zaino should be returning this as a u32, or
+                                    // ideally as a `BlockHeight`.
+                                    chain.get_latest_block().await?.height.try_into().expect(
+                                        "TODO: Zaino's API should have caught this error for us",
+                                    ),
+                                );
+                                // If the transaction is not mined, it is validated at the
+                                // "mempool height" which is the height that the next
+                                // mined block would have.
+                                chain_height + 1
+                            }
+                        };
+                        let tx = Transaction::read(
+                            tx.hex.as_ref(),
+                            consensus::BranchId::for_height(params, parse_height),
+                        )
+                        .expect("TODO: Zaino's API should have caught this error for us");
+
+                        decrypt_and_store_transaction(params, db_data, &tx, mined_height)?;
+                    }
+                }
             }
         }
     }
