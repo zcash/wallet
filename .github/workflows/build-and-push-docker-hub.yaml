@@ -1,0 +1,46 @@
+name: Build and Push Docker Image to Docker Hub
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  set_env:
+    name: Create version tag
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.version_step.outputs.tags }}
+    env:
+      VERSION: ${{ github.ref_name }}
+      SHA: ${{ github.sha }}
+    steps:
+    - id: version_step
+      run: |
+        set -Eeuo pipefail
+        IFS=$'\n\t'
+
+        if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc-[0-9]+)?$ ]]; then
+          echo "Valid version: $VERSION"
+          echo "tags=latest,$VERSION,$SHA" >> "$GITHUB_OUTPUT"
+        else
+          echo "Invalid ref_name format: $VERSION" >&2
+          exit 1
+        fi
+
+  build_push:
+    uses: zcash/.github/.github/workflows/build-and-push-docker-hub.yaml@main
+    needs: set_env
+    with:
+      image_name: zallet
+      image_tags: ${{ needs.set_env.outputs.tags }}
+      dockerfile: Dockerfile
+      context: .
+      build-args: ""
+    secrets:
+      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+      dockerhub_password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      dockerhub_registry: ${{ secrets.DOCKERHUB_REGISTRY }}
