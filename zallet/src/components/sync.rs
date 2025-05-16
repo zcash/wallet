@@ -119,7 +119,7 @@ async fn initialize(
             .await?;
 
         let from_state =
-            steps::fetch_chain_state(&chain, scan_range.block_range().start - 1).await?;
+            steps::fetch_chain_state(&chain, params, scan_range.block_range().start - 1).await?;
 
         // Scan the downloaded blocks.
         tokio::task::block_in_place(|| {
@@ -206,7 +206,8 @@ async fn steady_state(
             let scan_range = ScanRange::from_parts(from_height..end_height, ScanPriority::ChainTip);
             db_cache.insert(block_stack).await?;
 
-            let from_state = steps::fetch_chain_state(chain, from_height.saturating_sub(1)).await?;
+            let from_state =
+                steps::fetch_chain_state(chain, params, from_height.saturating_sub(1)).await?;
 
             tokio::task::block_in_place(|| {
                 info!("Scanning {}", scan_range);
@@ -314,7 +315,8 @@ async fn recover_history(
                 .await?;
 
             let from_state =
-                steps::fetch_chain_state(&chain, scan_range.block_range().start - 1).await?;
+                steps::fetch_chain_state(&chain, params, scan_range.block_range().start - 1)
+                    .await?;
 
             // Scan the downloaded blocks.
             tokio::task::block_in_place(|| {

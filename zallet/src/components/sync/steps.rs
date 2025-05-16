@@ -1,3 +1,4 @@
+use incrementalmerkletree::frontier::Frontier;
 use jsonrpsee::tracing::info;
 use orchard::tree::MerkleHashOrchard;
 use zaino_fetch::jsonrpsee::error::JsonRpSeeConnectorError;
@@ -16,14 +17,14 @@ use zcash_client_backend::{
     },
 };
 use zcash_primitives::{block::BlockHash, merkle_tree::read_frontier_v0};
-use zcash_protocol::consensus::BlockHeight;
+use zcash_protocol::consensus::{BlockHeight, NetworkUpgrade, Parameters};
 use zebra_chain::{
     block::Block, serialization::ZcashDeserialize as _, subtree::NoteCommitmentSubtreeIndex,
 };
 use zebra_rpc::methods::GetBlock;
 use zebra_state::HashOrHeight;
 
-use crate::components::database::DbConnection;
+use crate::{components::database::DbConnection, network::Network};
 
 use super::SyncError;
 
@@ -299,6 +300,7 @@ async fn fetch_compact_block_inner(
 
 pub(super) async fn fetch_chain_state(
     chain: &FetchServiceSubscriber,
+    params: &Network,
     height: BlockHeight,
 ) -> Result<ChainState, SyncError> {
     let (hash, height, _time, sapling, orchard) = chain
@@ -306,9 +308,7 @@ pub(super) async fn fetch_chain_state(
         .await?
         .into_parts();
 
-    Ok(ChainState::new(
-        BlockHeight::from_u32(height.0),
-        BlockHash(hash.0),
+    let final_sapling_tree = if params.is_nu_active(NetworkUpgrade::Sapling, height.into()) {
         read_frontier_v0(
             sapling
                 .ok_or_else(|| {
@@ -321,7 +321,13 @@ pub(super) async fn fetch_chain_state(
                 .as_slice(),
         )
         .map_err(JsonRpSeeConnectorError::IoError)
-        .map_err(FetchServiceError::JsonRpcConnectorError)?,
+        .map_err(FetchServiceError::JsonRpcConnectorError)?
+    } else {
+        // Sapling is not yet active; the Sapling tree is empty.
+        Frontier::empty()
+    };
+
+    let final_orchard_tree = if params.is_nu_active(NetworkUpgrade::Nu5, height.into()) {
         read_frontier_v0(
             orchard
                 .ok_or_else(|| {
@@ -334,6 +340,16 @@ pub(super) async fn fetch_chain_state(
                 .as_slice(),
         )
         .map_err(JsonRpSeeConnectorError::IoError)
-        .map_err(FetchServiceError::JsonRpcConnectorError)?,
+        .map_err(FetchServiceError::JsonRpcConnectorError)?
+    } else {
+        // NU5 is not yet active; the Orchard tree is empty.
+        Frontier::empty()
+    };
+
+    Ok(ChainState::new(
+        BlockHeight::from_u32(height.0),
+        BlockHash(hash.0),
+        final_sapling_tree,
+        final_orchard_tree,
     ))
 }
