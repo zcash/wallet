@@ -3,23 +3,31 @@ use std::{collections::HashSet, time::Duration};
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
 use tokio::time;
+use transparent::{
+    address::Script,
+    bundle::{OutPoint, TxOut},
+};
 use zaino_proto::proto::service::GetAddressUtxosArg;
 use zaino_state::{FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer};
-use zcash_client_backend::data_api::{
-    OutputStatusFilter, TransactionDataRequest, TransactionStatus, TransactionStatusFilter,
-    WalletRead, WalletWrite,
-    chain::{BlockCache, scan_cached_blocks},
-    scanning::{ScanPriority, ScanRange},
-    wallet::decrypt_and_store_transaction,
+use zcash_client_backend::{
+    data_api::{
+        OutputStatusFilter, TransactionDataRequest, TransactionStatus, TransactionStatusFilter,
+        WalletRead, WalletWrite,
+        chain::{BlockCache, scan_cached_blocks},
+        scanning::{ScanPriority, ScanRange},
+        wallet::decrypt_and_store_transaction,
+    },
+    wallet::WalletTransparentOutput,
 };
 use zcash_keys::encoding::AddressCodec;
 use zcash_primitives::transaction::Transaction;
 use zcash_protocol::{
     TxId,
     consensus::{self, BlockHeight},
+    value::Zatoshis,
 };
 use zebra_chain::transaction::SerializedTransaction;
-use zebra_rpc::methods::GetAddressTxIdsRequest;
+use zebra_rpc::methods::{AddressStrings, GetAddressTxIdsRequest};
 
 use super::{
     TaskHandle,
@@ -46,7 +54,7 @@ impl WalletSync {
         config: &ZalletConfig,
         db: Database,
         chain_view: ChainView,
-    ) -> Result<(TaskHandle, TaskHandle, TaskHandle), Error> {
+    ) -> Result<(TaskHandle, TaskHandle, TaskHandle, TaskHandle), Error> {
         let params = config.network();
 
         // Ensure the wallet is in a state that the sync tasks can work with.
@@ -70,12 +78,24 @@ impl WalletSync {
 
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
+        let poll_transparent_task = tokio::spawn(async move {
+            poll_transparent(chain, &params, db_data.as_mut()).await?;
+            Ok(())
+        });
+
+        let chain = chain_view.subscribe().await?.inner();
+        let mut db_data = db.handle().await?;
         let data_requests_task = tokio::spawn(async move {
             data_requests(chain, &params, db_data.as_mut()).await?;
             Ok(())
         });
 
-        Ok((steady_state_task, recover_history_task, data_requests_task))
+        Ok((
+            steady_state_task,
+            recover_history_task,
+            poll_transparent_task,
+            data_requests_task,
+        ))
     }
 }
 
@@ -343,6 +363,75 @@ async fn recover_history(
                 break;
             }
         }
+    }
+}
+
+/// Polls the non-ephemeral transparent addresses in the wallet for UTXOs.
+///
+/// Ephemeral addresses are handled by [`data_requests`].
+#[tracing::instrument(skip_all)]
+async fn poll_transparent(
+    chain: FetchServiceSubscriber,
+    params: &Network,
+    db_data: &mut DbConnection,
+) -> Result<(), SyncError> {
+    info!("Transparent address polling sync task started");
+
+    loop {
+        // Collect all of the wallet's non-ephemeral transparent addresses. We do this
+        // fresh every loop to ensure we incorporate changes to the address set.
+        //
+        // TODO: This is likely to be append-only unless we add support for removing an
+        // account from the wallet, so we could implement a more efficient strategy here
+        // with some changes to the `WalletRead` API. For now this is fine.
+        let addresses = db_data
+            .get_account_ids()?
+            .into_iter()
+            .map(|account| db_data.get_transparent_receivers(account, true))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flat_map(|m| m.into_keys().map(|addr| addr.encode(params)))
+            .collect();
+
+        // Open a mempool stream, which we use for its side-effect: notifying us of
+        // changes to the UTXO set (either due to a new mempool transaction, or the chain
+        // tip changing).
+        // TODO: Alter this once Zaino supports transactional chain view queries.
+        let mut mempool_stream = chain.get_mempool_stream().await?;
+
+        // Fetch all mined UTXOs.
+        // TODO: I really want to use the chaininfo-aware version (which Zaino doesn't
+        // implement) or an equivalent Zaino index (once it exists).
+        info!("Fetching mined UTXOs");
+        let utxos = chain
+            .z_get_address_utxos(
+                AddressStrings::new_valid(addresses).expect("we just encoded these"),
+            )
+            .await?;
+
+        // Notify the wallet about all mined UTXOs.
+        for utxo in utxos {
+            let (address, txid, index, script, value_zat, mined_height) = utxo.into_parts();
+            debug!("{address} has UTXO in tx {txid} at index {}", index.index());
+
+            let output = WalletTransparentOutput::from_parts(
+                OutPoint::new(txid.0, index.index()),
+                TxOut {
+                    value: Zatoshis::const_from_u64(value_zat),
+                    script_pubkey: Script(script.as_raw_bytes().to_vec()),
+                },
+                Some(BlockHeight::from_u32(mined_height.0)),
+            )
+            .expect("the UTXO was detected via a supported address kind");
+
+            db_data.put_received_transparent_utxo(&output)?;
+        }
+
+        // Now wait on the chain tip to change.
+        // TODO: Once Zaino has an index over the mempool, monitor it for changes to the
+        // unmined UTXO set (which we can't get directly from the stream without building
+        // an index because existing mempool txs can be spent within the mempool).
+        while mempool_stream.next().await.is_some() {}
     }
 }
 
