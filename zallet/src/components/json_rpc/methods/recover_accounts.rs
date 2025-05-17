@@ -82,15 +82,17 @@ pub(crate) async fn call(
             })?;
 
         let birthday_height = BlockHeight::from_u32(account.birthday_height);
+        let treestate_height = birthday_height.saturating_sub(1);
 
         let treestate = {
             let treestate = chain
                 .fetcher
-                .get_treestate(birthday_height.saturating_sub(1).to_string())
+                .get_treestate(treestate_height.to_string())
                 .await
                 .map_err(|e| {
-                    LegacyCode::InvalidParameter
-                        .with_message(format!("Invalid birthday height: {e}"))
+                    LegacyCode::InvalidParameter.with_message(format!(
+                        "Failed to get treestate at height {treestate_height}: {e}"
+                    ))
                 })?;
 
             TreeState {
