@@ -222,7 +222,7 @@ struct JsonRpcRequest {
     jsonrpc: Option<String>,
     method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    params: Option<serde_json::Value>,
+    params: Option<Box<serde_json::value::RawValue>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<serde_json::Value>,
 }
@@ -258,24 +258,26 @@ struct JsonRpcResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     jsonrpc: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    result: Option<serde_json::Value>,
+    result: Option<Box<serde_json::value::RawValue>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<serde_json::Value>,
+    error: Option<Box<serde_json::value::RawValue>>,
     id: serde_json::Value,
 }
 
 impl JsonRpcResponse {
     fn into_version(mut self, version: JsonRpcVersion) -> Self {
+        let json_null = || Some(serde_json::value::to_raw_value(&()).expect("valid"));
+
         match version {
             JsonRpcVersion::Bitcoind => {
                 self.jsonrpc = None;
-                self.result = self.result.or(Some(serde_json::Value::Null));
-                self.error = self.error.or(Some(serde_json::Value::Null));
+                self.result = self.result.or_else(json_null);
+                self.error = self.error.or_else(json_null);
             }
             JsonRpcVersion::Lightwalletd => {
                 self.jsonrpc = Some("1.0".into());
-                self.result = self.result.or(Some(serde_json::Value::Null));
-                self.error = self.error.or(Some(serde_json::Value::Null));
+                self.result = self.result.or_else(json_null);
+                self.error = self.error.or_else(json_null);
             }
             JsonRpcVersion::TwoPointZero => {
                 // `jsonrpsee` should be returning valid JSON-RPC 2.0 responses. However,
@@ -283,7 +285,7 @@ impl JsonRpcResponse {
                 // we map the result explicitly to `Null` when there is no error.
                 assert_eq!(self.jsonrpc.as_deref(), Some("2.0"));
                 if self.error.is_none() {
-                    self.result = self.result.or(Some(serde_json::Value::Null));
+                    self.result = self.result.or_else(json_null);
                 } else {
                     assert!(self.result.is_none());
                 }

@@ -43,7 +43,7 @@ rust-embed = "8"
 # Parsing and serialization
 hex = "0.4"
 serde = { version = "1", features = ["serde_derive"] }
-serde_json = { version = "1", features = ["arbitrary_precision"] }
+serde_json = { version = "1", features = ["arbitrary_precision", "raw_value"] }
 toml = "0.8"
 zcash_address = "0.7"
 
