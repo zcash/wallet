@@ -1,7 +1,8 @@
 use std::fmt;
 use std::sync::Arc;
 
-use jsonrpsee::tracing::info;
+use jsonrpsee::tracing::{error, info};
+use tokio::net::lookup_host;
 use tokio::sync::RwLock;
 use zaino_state::{
     config::FetchServiceConfig,
@@ -31,16 +32,64 @@ impl fmt::Debug for ChainView {
 
 impl ChainView {
     pub(crate) async fn new(config: &ZalletConfig) -> Result<(Self, TaskHandle), Error> {
-        let validator_rpc_address =
-            config
-                .indexer
-                .validator_address
-                .unwrap_or_else(|| match config.network() {
+        let resolved_validator_address = match config.indexer.validator_address.as_deref() {
+            Some(addr_str) => match lookup_host(addr_str).await {
+                Ok(mut addrs) => match addrs.next() {
+                    Some(socket_addr) => {
+                        info!(
+                            "Resolved validator_address '{}' to {}",
+                            addr_str, socket_addr
+                        );
+                        Ok(socket_addr)
+                    }
+                    None => {
+                        error!(
+                            "validator_address '{}' resolved to no IP addresses",
+                            addr_str
+                        );
+                        Err(ErrorKind::Init.context(format!(
+                            "validator_address '{}' resolved to no IP addresses",
+                            addr_str
+                        )))
+                    }
+                },
+                Err(e) => {
+                    error!("Failed to resolve validator_address '{}': {}", addr_str, e);
+                    Err(ErrorKind::Init.context(format!(
+                        "Failed to resolve validator_address '{}': {}",
+                        addr_str, e
+                    )))
+                }
+            },
+            None => {
+                // Default to localhost and standard port based on network
+                let default_port = match config.network() {
                     crate::network::Network::Consensus(
                         zcash_protocol::consensus::Network::MainNetwork,
-                    ) => "127.0.0.1:8232".parse().unwrap(),
-                    _ => "127.0.0.1:18232".parse().unwrap(),
-                });
+                    ) => 8232, // Mainnet default RPC port for Zebra/zcashd
+                    _ => 18232, // Testnet/Regtest default RPC port for Zebra/zcashd
+                };
+                let default_addr_str = format!("127.0.0.1:{}", default_port);
+                info!(
+                    "validator_address not set, defaulting to {}",
+                    default_addr_str
+                );
+                match default_addr_str.parse::<std::net::SocketAddr>() {
+                    Ok(socket_addr) => Ok(socket_addr),
+                    Err(e) => {
+                        // This should ideally not happen with a hardcoded IP and port
+                        error!(
+                            "Failed to parse default validator_address '{}': {}",
+                            default_addr_str, e
+                        );
+                        Err(ErrorKind::Init.context(format!(
+                            "Failed to parse default validator_address '{}': {}",
+                            default_addr_str, e
+                        )))
+                    }
+                }
+            }
+        }?;
 
         let db_path = config
             .indexer
@@ -49,7 +98,7 @@ impl ChainView {
             .ok_or(ErrorKind::Init.context("indexer.db_path must be set (for now)"))?;
 
         let config = FetchServiceConfig::new(
-            validator_rpc_address,
+            resolved_validator_address,
             config.indexer.validator_cookie_auth.unwrap_or(false),
             config.indexer.validator_cookie_path.clone(),
             config.indexer.validator_user.clone(),

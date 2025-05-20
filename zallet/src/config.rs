@@ -159,7 +159,7 @@ pub struct IndexerSection {
     ///
     /// If unset, connects on localhost to the standard JSON-RPC port for mainnet or
     /// testnet (as appropriate).
-    pub validator_address: Option<SocketAddr>,
+    pub validator_address: Option<String>,
 
     /// Enable validator RPC cookie authentication.
     pub validator_cookie_auth: Option<bool>,
