@@ -91,6 +91,7 @@ http-body-util.workspace = true
 hyper.workspace = true
 i18n-embed = { workspace = true, features = ["desktop-requester"] }
 i18n-embed-fl.workspace = true
+incrementalmerkletree.workspace = true
 jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 orchard.workspace = true

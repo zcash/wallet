@@ -65,8 +65,17 @@ impl Network {
             // TODO: This does not create a compatible regtest network because Zebra does
             // not have the necessary flexibility.
             Network::RegTest(local_network) => zebra_chain::parameters::Network::new_regtest(
-                local_network.nu5.map(|h| h.into()),
-                local_network.nu6.map(|h| h.into()),
+                zebra_chain::parameters::testnet::ConfiguredActivationHeights {
+                    before_overwinter: Some(1),
+                    overwinter: local_network.overwinter.map(|h| h.into()),
+                    sapling: local_network.sapling.map(|h| h.into()),
+                    blossom: local_network.blossom.map(|h| h.into()),
+                    heartwood: local_network.heartwood.map(|h| h.into()),
+                    canopy: local_network.canopy.map(|h| h.into()),
+                    nu5: local_network.nu5.map(|h| h.into()),
+                    nu6: local_network.nu6.map(|h| h.into()),
+                    nu7: None,
+                },
             ),
         }
     }
