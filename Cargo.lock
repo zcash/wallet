@@ -6005,7 +6005,7 @@ dependencies = [
 [[package]]
 name = "zaino-fetch"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=8d3cd2a23db3303c5a8b4d12c903bd14f5696ad5#8d3cd2a23db3303c5a8b4d12c903bd14f5696ad5"
+source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -6033,7 +6033,7 @@ dependencies = [
 [[package]]
 name = "zaino-proto"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=8d3cd2a23db3303c5a8b4d12c903bd14f5696ad5#8d3cd2a23db3303c5a8b4d12c903bd14f5696ad5"
+source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
 dependencies = [
  "prost",
  "tonic 0.12.3",
@@ -6044,7 +6044,7 @@ dependencies = [
 [[package]]
 name = "zaino-state"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=8d3cd2a23db3303c5a8b4d12c903bd14f5696ad5#8d3cd2a23db3303c5a8b4d12c903bd14f5696ad5"
+source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
 dependencies = [
  "async-trait",
  "chrono",
