@@ -114,3 +114,9 @@ zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "d0b3158
 zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "d0b31584a1fef42318010c8515ee4a8e69d7e85b" }
 zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "d0b31584a1fef42318010c8515ee4a8e69d7e85b" }
 zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "d0b31584a1fef42318010c8515ee4a8e69d7e85b" }
+
+# Apply https://github.com/ZcashFoundation/zebra/pull/9536 on top of what Zaino depends on.
+[patch."https://github.com/ZcashFoundation/zebra.git"]
+zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
+zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
+zebra-state = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
