@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-            fetch-depth: 0 # to fetch all commits
+          persist-credentials: false
 
       - name: Install gcloud SDK
         shell: bash
