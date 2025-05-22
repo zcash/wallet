@@ -1,5 +1,5 @@
-# --- Stage 1: Build with Rust --- (amd64)
-FROM rust:1-slim@sha256:57d415bbd61ce11e2d5f73de068103c7bd9f3188dc132c97cef4a8f62989e944 AS builder
+# --- Stage 1: Build with Rust --- (amd64) (RUST version: 1.86.0)
+FROM rust:1.86.0-slim@sha256:57d415bbd61ce11e2d5f73de068103c7bd9f3188dc132c97cef4a8f62989e944 AS builder
 
 WORKDIR /app
 
