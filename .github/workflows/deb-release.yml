@@ -97,59 +97,7 @@ jobs:
           aptly publish snapshot -architectures=amd64 -gpg-key="$key" snapshot_combined
 
 
-      - name: Create generate_index.sh script, generate index.html files and upload files to the bucket
+      - name: upload files to the bucket
         run: |
-          cat > $HOME/generate_index.sh <<'EOF'
-          #!/bin/bash
-          DIR="${1:-.}"
-          INDEX="$DIR/index.html"
-
-          cat > "$INDEX" <<EOL
-          <html>
-          <head><title>Index of /pool/main/z/zallet/</title></head>
-          <body>
-          <h1>Index of /pool/main/z/zallet/</h1><hr><pre><a href="../">../</a>
-          EOL
-
-          for entry in "$DIR"/*; do
-              [ -e "$entry" ] || continue
-              [ "$(basename "$entry")" = "index.html" ] && continue
-
-              name=$(basename "$entry")
-              href="$name"
-              mod_time=$(date -u -r "$entry" "+%d-%b-%Y %H:%M")
-
-              if [ -d "$entry" ]; then
-                  name="$name/"
-                  href="$href/"
-                  size="-"
-              else
-                  size=$(stat -c "%s" "$entry")
-              fi
-
-              printf '<a href="%s">%s</a>%*s%16s\n' \
-                  "$href" "$name" \
-                  $((60 - ${#name})) "$mod_time" "$size" >> "$INDEX"
-          done
-
-          cat >> "$INDEX" <<EOL
-          </pre><hr></body>
-          </html>
-          EOL
-          EOF
-
-          chmod +x $HOME/generate_index.sh
-          $HOME/generate_index.sh
-
-          gsutil cp gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/index.html .
-          ZALLET_LINE='<a href="zallet/">zallet/</a>                                           '"$(date -u +"%d-%b-%Y %H:%M")"'                  -'
-          grep -q '<a href="zallet/">' index.html && \
-          sed -i "s|<a href=\"zallet/\">.*</a>|$ZALLET_LINE|" index.html || \
-          sed -i "/<\/pre>/i $ZALLET_LINE" index.html
-          gsutil cp index.html  gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/index.html #debug
-
-          cd $HOME/.aptly/public/pool/main/z/zallet
-          $HOME/generate_index.sh
-          gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/ #debug
-
+          gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/* gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/.
           gsutil -q -m rsync -r $HOME/.aptly/public/dists/bookworm gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
