@@ -99,5 +99,5 @@ jobs:
 
       - name: upload files to the bucket
         run: |
-          gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/* gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/.
+          gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
           gsutil -q -m rsync -r $HOME/.aptly/public/dists/bookworm gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
