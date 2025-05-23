@@ -30,6 +30,7 @@ mod lock_wallet;
 mod openrpc;
 mod recover_accounts;
 mod unlock_wallet;
+mod view_transaction;
 mod z_send_many;
 
 #[rpc(server)]
@@ -208,6 +209,10 @@ pub(crate) trait Rpc {
 
     #[method(name = "z_listunifiedreceivers")]
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response;
+
+    /// Returns detailed shielded information about in-wallet transaction `txid`.
+    #[method(name = "z_viewtransaction")]
+    async fn view_transaction(&self, txid: &str) -> view_transaction::Response;
 
     /// Returns an array of unspent shielded notes with between minconf and maxconf
     /// (inclusive) confirmations.
@@ -434,6 +439,10 @@ impl RpcServer for RpcImpl {
 
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response {
         list_unified_receivers::call(unified_address)
+    }
+
+    async fn view_transaction(&self, txid: &str) -> view_transaction::Response {
+        view_transaction::call(self.wallet().await?.as_ref(), txid)
     }
 
     async fn list_unspent(&self) -> list_unspent::Response {

@@ -96,6 +96,7 @@ time = "0.3"
 uuid = "1"
 zcash_client_backend = "0.18"
 zcash_client_sqlite = "0.16"
+zcash_note_encryption = "0.4"
 zip32 = "0.2"
 
 # lightwalletd (temporary)
