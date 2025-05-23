@@ -6128,6 +6128,8 @@ dependencies = [
  "tonic 0.13.0",
  "tower 0.4.13",
  "tracing",
+ "tracing-log",
+ "tracing-subscriber",
  "trycmd",
  "uuid",
  "xdg",

@@ -114,6 +114,8 @@ toml.workspace = true
 tonic.workspace = true
 tower = { workspace = true, features = ["timeout"] }
 tracing.workspace = true
+tracing-log.workspace = true
+tracing-subscriber.workspace = true
 transparent.workspace = true
 uuid.workspace = true
 xdg.workspace = true
