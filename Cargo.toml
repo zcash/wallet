@@ -63,6 +63,12 @@ jsonrpsee = "0.24"
 schemars = "0.8"
 tower = "0.4"
 
+# Tracing
+console-subscriber = "0.4"
+tracing = "0.1"
+tracing-log = "0.2"
+tracing-subscriber = "0.3"
+
 # Zcash consensus
 zcash_protocol = "0.5"
 
@@ -118,6 +124,6 @@ zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "d0b
 
 # Apply https://github.com/ZcashFoundation/zebra/pull/9536 on top of what Zaino depends on.
 [patch."https://github.com/ZcashFoundation/zebra.git"]
-zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
-zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
-zebra-state = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
+zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "2d7e7d12cce41050242cc4f717534e3c62520972" }
+zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "2d7e7d12cce41050242cc4f717534e3c62520972" }
+zebra-state = { git = "https://github.com/str4d/zebra.git", rev = "2d7e7d12cce41050242cc4f717534e3c62520972" }

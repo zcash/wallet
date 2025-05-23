@@ -3,15 +3,15 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use abscissa_core::{
-    Application, FrameworkError, StandardPaths,
+    Application, Component, FrameworkError, StandardPaths,
     application::{self, AppCell},
     config::{self, CfgCell},
-    trace,
+    terminal::component::Terminal,
 };
 use abscissa_tokio::TokioComponent;
 use i18n_embed::unic_langid::LanguageIdentifier;
 
-use crate::{cli::EntryPoint, config::ZalletConfig, i18n};
+use crate::{cli::EntryPoint, components::tracing::Tracing, config::ZalletConfig, i18n};
 
 /// Application state
 pub static APP: AppCell<ZalletApp> = AppCell::new();
@@ -52,8 +52,23 @@ impl Application for ZalletApp {
         &self.state
     }
 
+    // Overridden to leave out framework components.
+    fn framework_components(
+        &mut self,
+        command: &Self::Cmd,
+    ) -> Result<Vec<Box<dyn Component<Self>>>, FrameworkError> {
+        let terminal = Terminal::new(self.term_colors(command));
+        // Don't use the framework's `Tracing` component.
+
+        Ok(vec![Box::new(terminal)])
+    }
+
     fn register_components(&mut self, command: &Self::Cmd) -> Result<(), FrameworkError> {
         let mut components = self.framework_components(command)?;
+        components.push(Box::new(
+            Tracing::new(self.term_colors(command))
+                .expect("tracing subsystem failed to initialize"),
+        ));
         components.push(Box::new(TokioComponent::from(
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -74,14 +89,6 @@ impl Application for ZalletApp {
         components.after_config(&config)?;
         self.config.set_once(config);
         Ok(())
-    }
-
-    fn tracing_config(&self, command: &EntryPoint) -> trace::Config {
-        if command.verbose {
-            trace::Config::verbose()
-        } else {
-            trace::Config::default()
-        }
     }
 }
 
