@@ -59,7 +59,7 @@ pub(crate) async fn spawn(
 
     let rpc_module = rpc_impl.into_rpc();
 
-    let server_task = tokio::spawn(async move {
+    let server_task = crate::spawn!("JSON-RPC server", async move {
         server_instance.start(rpc_module).stopped().await;
         Ok(())
     });

@@ -22,6 +22,7 @@ mod error;
 mod i18n;
 pub mod network;
 mod prelude;
+mod task;
 
 // Needed for the `Component` derive to work.
 use abscissa_core::{Application, Version, component};
