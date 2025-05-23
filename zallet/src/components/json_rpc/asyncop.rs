@@ -119,40 +119,46 @@ impl AsyncOperation {
 
         let handle = data.clone();
 
-        tokio::spawn(async move {
-            // Record that the task has started.
-            {
-                let mut data = handle.write().await;
-                if matches!(data.state, OperationState::Cancelled) {
-                    return;
+        crate::spawn!(
+            context
+                .as_ref()
+                .map(|context| context.method)
+                .unwrap_or("AsyncOp"),
+            async move {
+                // Record that the task has started.
+                {
+                    let mut data = handle.write().await;
+                    if matches!(data.state, OperationState::Cancelled) {
+                        return;
+                    }
+                    data.state = OperationState::Executing;
+                    data.start_time = Some(SystemTime::now());
                 }
-                data.state = OperationState::Executing;
-                data.start_time = Some(SystemTime::now());
+
+                // Run the async task.
+                let res = f.await;
+                let end_time = SystemTime::now();
+
+                // Map the concrete task result into a generic JSON blob.
+                let res = res.map(|ret| {
+                    serde_json::from_str(
+                        &serde_json::to_string(&ret)
+                            .expect("async return values should be serializable to JSON"),
+                    )
+                    .expect("round trip should succeed")
+                });
+
+                // Record the result.
+                let mut data = handle.write().await;
+                data.state = if res.is_ok() {
+                    OperationState::Success
+                } else {
+                    OperationState::Failed
+                };
+                data.end_time = Some(end_time);
+                data.result = Some(res);
             }
-
-            // Run the async task.
-            let res = f.await;
-            let end_time = SystemTime::now();
-
-            // Map the concrete task result into a generic JSON blob.
-            let res = res.map(|ret| {
-                serde_json::from_str(
-                    &serde_json::to_string(&ret)
-                        .expect("async return values should be serializable to JSON"),
-                )
-                .expect("round trip should succeed")
-            });
-
-            // Record the result.
-            let mut data = handle.write().await;
-            data.state = if res.is_ok() {
-                OperationState::Success
-            } else {
-                OperationState::Failed
-            };
-            data.end_time = Some(end_time);
-            data.result = Some(res);
-        });
+        );
 
         Self {
             operation_id: OperationId::new(),

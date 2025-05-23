@@ -328,7 +328,7 @@ impl KeyStore {
         let identities = self.identities.clone();
         *relock_task = Some((
             SystemTime::now() + duration,
-            tokio::spawn(async move {
+            crate::spawn!("Keystore relock", async move {
                 time::sleep(duration).await;
                 identities.write().await.clear();
             }),

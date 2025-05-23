@@ -385,7 +385,7 @@ async fn run(
 
     let prover = LocalTxProver::bundled();
 
-    let (wallet, txids) = tokio::task::spawn_blocking(move || {
+    let (wallet, txids) = crate::spawn_blocking!("z_sendmany prover", move || {
         create_proposed_transactions::<_, _, Infallible, _, Infallible, _>(
             wallet.as_mut(),
             &params,
