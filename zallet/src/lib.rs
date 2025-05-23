@@ -23,6 +23,9 @@ mod i18n;
 pub mod network;
 mod prelude;
 
+// Needed for the `Component` derive to work.
+use abscissa_core::{Application, Version, component};
+
 /// A macro to obtain localized Zallet messages and optionally their attributes, and check
 /// the `message_id`, `attribute_id` and arguments at compile time.
 ///
