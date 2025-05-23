@@ -99,6 +99,30 @@ err-migrate-unknown-zcashd-option = Unknown {-zcashd} option '{$option}'
 err-failed-seed-fingerprinting =
     Zallet was unable to import invalid seed data, likely due to the seed having
     an invalid length.
+err-migrate-wallet-bdb-parse = 
+    An error occurred in parsing the {-zcashd} wallet file at '{$path}': '{$err}'
+err-migrate-wallet-db-dump = 
+    An error occurred in extracting wallet data from '{$path}': '{$err}'
+err-migrate-regtest = 
+    Migration of regtest wallets is not yet supported.
+err-migrate-invalid-mnemonic = 
+    The {-zcashd} wallet file at '{$path}' contained invalid mnemonic seed phrase
+    data and may be corrupt: '{$err}'
+err-migrate-wallet-storage =
+    An database error occurred in wallet migration. This is indicative of a
+    programming error; please report the following error to (TBD): '{$err}'
+err-migrate-invalid-chain-data =
+    Invalid chain data was encountered in wallet migration. This is indicative of a
+    programming error; please report the following error to (TBD): '{$err}'
+err-migrate-invalid-account-id =
+    Error encountered in wallet migration: '{$account_id}' is not a valid ZIP
+    32 account identifier.
+err-migrate-wallet-key-decoding =
+    An error occurred decoding key material: '{$err}'.
+err-migrate-wallet-tx-fetch =
+    An error occurred fetching transaction data: '{$err}'.
+err-migrate-wallet-data-parse=
+    An error occurred parsing zcashd wallet data: '{$err}'.
 
 err-ux-A = Did {-zallet} not do what you expected? Could the error be more useful?
 err-ux-B = Tell us
