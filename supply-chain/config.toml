@@ -290,6 +290,14 @@ criteria = "safe-to-deploy"
 version = "0.15.11"
 criteria = "safe-to-deploy"
 
+[[exemptions.console-api]]
+version = "0.8.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.console-subscriber]]
+version = "0.4.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.const-oid]]
 version = "0.9.6"
 criteria = "safe-to-deploy"
@@ -580,6 +588,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.hashlink]]
 version = "0.9.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.hdrhistogram]]
+version = "7.5.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.hermit-abi]]
