@@ -8,7 +8,7 @@ use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
 use zcash_protocol::{
     TxId,
-    value::{BalanceError, COIN, Zatoshis},
+    value::{BalanceError, COIN, ZatBalance, Zatoshis},
 };
 use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
 
@@ -155,6 +155,11 @@ pub(super) fn zatoshis_from_value(value: &JsonValue) -> RpcResult<Zatoshis> {
 // TODO: https://github.com/zcash/wallet/issues/15
 pub(super) fn value_from_zatoshis(value: Zatoshis) -> f64 {
     (u64::from(value) as f64) / (COIN as f64)
+}
+
+// TODO: https://github.com/zcash/wallet/issues/15
+pub(super) fn value_from_zat_balance(value: ZatBalance) -> f64 {
+    (i64::from(value) as f64) / (COIN as f64)
 }
 
 /// Upper bound for mantissa.
