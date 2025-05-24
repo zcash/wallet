@@ -32,5 +32,8 @@ FROM gcr.io/distroless/cc AS runtime
 COPY --link --from=builder /usr/local/bin/zallet /usr/local/bin/
 
 # USER nonroot (UID 65532) — for K8s, use runAsUser: 65532
-USER nonroot 
+USER nonroot
+
+WORKDIR /var/lib/zallet
+
 ENTRYPOINT ["zallet"]
