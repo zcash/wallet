@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+# --- Configuration & Defaults ---
+# Path configurations with script-defined defaults if not overridden by user.
+: "${ZALLET_CONF_PATH:=/etc/zallet/zallet.toml}"
+: "${ZALLET_DATA_DIR:=${HOME}/.data}"
+: "${RUST_LOG:=info}"  # Default log level
+
+# --- Helper Functions ---
+# Ensure directory exists with correct ownership
+ensure_dir_owned() {
+    local dir_path="$1"
+    if [[ ! -d "${dir_path}" ]]; then
+        mkdir -p "${dir_path}" || { echo "ERROR: Failed to create directory: ${dir_path}"; exit 1; }
+    fi
+    if [[ "$(id -u)" == "0" ]]; then
+        if ! chown -R "${UID}:${GID}" "${dir_path}" >/dev/null 2>&1; then
+            echo "WARNING: Failed to set recursive ownership (chown -R ${UID}:${GID}) for directory '${dir_path}'." >&2
+            echo "         This could be due to read-only mounts or other permission issues." >&2
+            echo "         The application may proceed, but could misbehave or fail to start correctly if permissions are insufficient." >&2
+            # As a fallback, try to chown only the directory itself, not recursively.
+            if ! chown "${UID}:${GID}" "${dir_path}" >/dev/null 2>&1; then
+                echo "WARNING: Failed to set ownership (chown ${UID}:${GID}) for the directory '${dir_path}' itself." >&2
+            else
+                echo "INFO: Successfully set ownership (chown ${UID}:${GID}) for the directory '${dir_path}' itself (non-recursive)." >&2
+            fi
+        fi
+    fi
+}
+
+# Check if identity file exists and has correct permissions
+check_identity_file() {
+    local identity_file="$1"
+    local dir_path="$(dirname "$identity_file")"
+    
+    # Ensure parent directory exists
+    ensure_dir_owned "$dir_path"
+
+    if [[ ! -f "${identity_file}" ]]; then
+        echo "ERROR: Identity file not found at ${identity_file}"
+        echo ""
+        echo "This file is required for wallet encryption and must be created outside the container."
+        echo "The identity file contains cryptographic keys needed to encrypt and decrypt your wallet material."
+        exit 1
+    else
+        # File exists, check permissions
+        if [[ "$(id -u)" == "0" ]]; then
+            # Ensure proper ownership and permissions
+            if ! chown "${UID}:${GID}" "${identity_file}" >/dev/null 2>&1; then
+                echo "WARNING: Failed to set ownership (chown ${UID}:${GID}) for identity file '${identity_file}'." >&2
+                echo "         The application may proceed, but could face issues accessing or securing the identity file." >&2
+            fi
+            # Attempt to set permissions, but don't exit if it fails (e.g., read-only mount)
+            chmod 600 "${identity_file}" || echo "WARNING: Failed to set permissions (chmod 600) for identity file '${identity_file}'. This is expected if the file is on a read-only mount."
+        fi
+        echo "INFO: Using existing identity file: ${identity_file}"
+    fi
+}
+
+# Generate config file from environment variables if it doesn't exist
+# or if key configuration environment variables are set (indicating an intent to override).
+generate_config_if_needed() {
+  # If key configuration variables (like for indexer or RPC) are NOT set via environment,
+  # AND an existing config file is present and readable, then use the existing file.
+  # Otherwise, always generate/overwrite the config from environment variables.
+  if [[ -z "${ZALLET_INDEXER_VALIDATOR_ADDRESS}" && \
+        -z "${ZALLET_RPC_BIND}" && \
+        -f "${ZALLET_CONF_PATH}" && -r "${ZALLET_CONF_PATH}" ]]; then
+    echo "INFO: Using existing config file (key env vars ZALLET_INDEXER_VALIDATOR_ADDRESS, ZALLET_RPC_BIND not set): ${ZALLET_CONF_PATH}"
+    return
+  fi
+
+  # If we reach here, it means either key env vars ARE set, or no suitable existing config file was found/chosen.
+  # In these cases, we proceed to generate. If a file exists and key vars are set, it will be overwritten.
+  if [[ -f "${ZALLET_CONF_PATH}" ]]; then
+    echo "INFO: Overwriting existing Zallet config at ${ZALLET_CONF_PATH} with values from environment variables."
+  else
+    echo "INFO: Generating Zallet config at ${ZALLET_CONF_PATH} from environment variables (file not found or override condition met)."
+  fi
+
+  local wallet_db="${ZALLET_DATA_DIR}/wallet.db"
+  local indexer_db_path="${ZALLET_DATA_DIR}/zaino_db"
+  local keystore_identity="${ZALLET_DATA_DIR}/identity.txt"
+
+  # Determine the correct network string for zallet.toml
+  local network_config_value
+  case "${ZALLET_NETWORK}" in
+    "Mainnet"|"mainnet")
+      network_config_value="main"
+      ;;
+    "Testnet"|"testnet")
+      network_config_value="test"
+      ;;
+    "Regtest"|"regtest")
+      network_config_value="regtest"
+      ;;
+    *)
+      if [[ -n "${ZALLET_NETWORK}" ]]; then # If ZALLET_NETWORK is set but not matched
+          echo "WARNING: Unrecognized ZALLET_NETWORK value '${ZALLET_NETWORK}'. Defaulting network to 'main' in zallet.toml." >&2
+      fi
+      network_config_value="main" # Default if unset, empty, or unrecognized
+      ;;
+  esac
+
+  cat >"${ZALLET_CONF_PATH}" <<EOF
+# Auto-generated by entrypoint.sh
+network = "${network_config_value}"
+wallet_db = "${wallet_db}"
+
+# Top-level optional fields
+${ZALLET_BROADCAST:+broadcast = ${ZALLET_BROADCAST}}
+${ZALLET_EXPORT_DIR:+export_dir = "${ZALLET_EXPORT_DIR}"}
+${ZALLET_NOTIFY:+notify = "${ZALLET_NOTIFY}"}
+${ZALLET_REQUIRE_BACKUP:+require_backup = ${ZALLET_REQUIRE_BACKUP}}
+
+[builder]
+${ZALLET_BUILDER_SPEND_ZEROCONF_CHANGE:+spend_zeroconf_change = ${ZALLET_BUILDER_SPEND_ZEROCONF_CHANGE}}
+${ZALLET_BUILDER_TX_EXPIRY_DELTA:+tx_expiry_delta = ${ZALLET_BUILDER_TX_EXPIRY_DELTA}}
+
+[indexer]
+db_path = "${indexer_db_path}"
+${ZALLET_INDEXER_VALIDATOR_ADDRESS:+validator_address = \"${ZALLET_INDEXER_VALIDATOR_ADDRESS}\"}
+${ZALLET_INDEXER_VALIDATOR_USER:+validator_user = \"${ZALLET_INDEXER_VALIDATOR_USER}\"}
+${ZALLET_INDEXER_VALIDATOR_PASSWORD:+validator_password = \"${ZALLET_INDEXER_VALIDATOR_PASSWORD}\"}
+${ZALLET_INDEXER_VALIDATOR_COOKIE_AUTH:+validator_cookie_auth = ${ZALLET_INDEXER_VALIDATOR_COOKIE_AUTH}}
+${ZALLET_INDEXER_VALIDATOR_COOKIE_PATH:+validator_cookie_path = "${ZALLET_INDEXER_VALIDATOR_COOKIE_PATH}"}
+
+[keystore]
+identity = "${keystore_identity}"
+
+[limits]
+${ZALLET_LIMITS_ORCHARD_ACTIONS:+orchard_actions = ${ZALLET_LIMITS_ORCHARD_ACTIONS}}
+
+[rpc]
+# To enable RPC, set ZALLET_RPC_BIND, e.g., ZALLET_RPC_BIND="0.0.0.0:28232"
+# If ZALLET_RPC_BIND is set, RPC will be enabled.
+${ZALLET_RPC_BIND:+bind = [\"${ZALLET_RPC_BIND}\"]}
+${ZALLET_RPC_TIMEOUT:+timeout = ${ZALLET_RPC_TIMEOUT}}
+EOF
+    if [[ "$(id -u)" == "0" ]]; then
+        chown "${UID}:${GID}" "${ZALLET_CONF_PATH}"
+    fi
+
+    echo "---- DEBUG: Start of generated ${ZALLET_CONF_PATH} -----"
+    cat "${ZALLET_CONF_PATH}"
+    echo "---- DEBUG: End of generated ${ZALLET_CONF_PATH} -----"
+    
+    # Check identity file existence and permissions (but don't generate it)
+    check_identity_file "${keystore_identity}"
+}
+
+# --- Main Execution ---
+
+# 1. Ensure essential directories exist and have correct ownership
+#    This uses the UID/GID (user-provided or defaulted).
+ensure_dir_owned "${ZALLET_DATA_DIR}"
+ensure_dir_owned "${HOME}"
+ensure_dir_owned "$(dirname "${ZALLET_CONF_PATH}")"
+
+# 2. Generate config file if it doesn't exist
+generate_config_if_needed
+
+# 3. Display logging information
+echo "INFO: Using log level: ${RUST_LOG}"
+echo "      To increase log detail, restart with RUST_LOG=debug or RUST_LOG=trace"
+echo "      Example: RUST_LOG=debug,zallet=trace docker run zfnd/zallet"
+
+# 4. Determine command to run
+final_cmd=()
+declare -a zallet_base_cmd=("zallet" "-c" "${ZALLET_CONF_PATH}")
+
+# Dockerfile has: ENTRYPOINT ["entrypoint.sh"], CMD ["zallet"]
+# This means:
+# 1. If `docker run <image>` is used (no args), entrypoint.sh receives "zallet" as $1.
+# 2. If `docker run <image> foo bar` is used, entrypoint.sh receives "foo" as $1, "bar" as $2.
+
+case "$1" in
+    # Case A: $1 is "zallet" or starts with an option (e.g., --verbose)
+    # This covers both CMD default, explicit "zallet", or options meant for zallet
+    "zallet" | --* | -*)
+        # Determine which arguments are intended for the zallet binary
+        if [[ "$1" == "zallet" ]]; then
+            declare -a zallet_args=("${@:2}") # Skip 'zallet', use remaining args
+        else
+            declare -a zallet_args=("$@") # Option first, use all args as-is
+        fi
+
+        # Check if a subcommand (non-option argument) is present in zallet_args
+        subcommand_present=false
+        for arg in "${zallet_args[@]}"; do
+            if [[ ! "$arg" =~ ^- ]]; then # Not an option, assume it's a subcommand
+                subcommand_present=true
+                break
+            fi
+        done
+
+        if [[ "$subcommand_present" == true ]]; then
+            # A subcommand was provided, use the arguments as determined
+            final_cmd=("${zallet_base_cmd[@]}" "${zallet_args[@]}")
+        else
+            # No subcommand found, default to "start"
+            final_cmd=("${zallet_base_cmd[@]}" "${zallet_args[@]}" "start")
+        fi
+        ;;
+
+    # Case B: All other commands (e.g., "bash", "ls", or subcommand typed directly)
+    # Run as-is. To use zallet subcommands, user must prefix with "zallet"
+    *)
+        final_cmd=("$@")
+        ;;
+esac
+
+# 5. Execute command as the target user
+echo "INFO: Executing: gosu ${ZALLET_USER} ${final_cmd[*]}"
+export RUST_LOG
+exec gosu "${ZALLET_USER}" "${final_cmd[@]}"
