@@ -482,6 +482,10 @@ async fn data_requests(
         for request in requests {
             match request {
                 TransactionDataRequest::GetStatus(txid) => {
+                    if txid.is_coinbase() {
+                        continue;
+                    }
+
                     info!("Getting status of {txid}");
                     let status = match chain.get_raw_transaction(txid.to_string(), Some(1)).await {
                         // TODO: Zaino should have a Rust API for fetching tx details,
@@ -501,6 +505,10 @@ async fn data_requests(
                     db_data.set_transaction_status(txid, status)?;
                 }
                 TransactionDataRequest::Enhancement(txid) => {
+                    if txid.is_coinbase() {
+                        continue;
+                    }
+
                     info!("Enhancing {txid}");
                     let tx = match chain.get_raw_transaction(txid.to_string(), Some(1)).await {
                         // TODO: Zaino should have a Rust API for fetching tx details,
