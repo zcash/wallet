@@ -1,8 +1,8 @@
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
-use tokio::time;
+use tokio::{sync::Notify, time};
 use transparent::{
     address::Script,
     bundle::{OutPoint, TxOut},
@@ -62,11 +62,20 @@ impl WalletSync {
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let starting_tip = initialize(chain, &params, db_data.as_mut()).await?;
+        let tip_change_signal_source = Arc::new(Notify::new());
+        let tip_change_signal_receiver = tip_change_signal_source.clone();
 
         // Spawn the ongoing sync tasks.
         let chain = chain_view.subscribe().await?.inner();
         let steady_state_task = tokio::spawn(async move {
-            steady_state(&chain, &params, db_data.as_mut(), starting_tip).await?;
+            steady_state(
+                &chain,
+                &params,
+                db_data.as_mut(),
+                starting_tip,
+                tip_change_signal_source,
+            )
+            .await?;
             Ok(())
         });
 
@@ -87,7 +96,7 @@ impl WalletSync {
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let data_requests_task = tokio::spawn(async move {
-            data_requests(chain, &params, db_data.as_mut()).await?;
+            data_requests(chain, &params, db_data.as_mut(), tip_change_signal_receiver).await?;
             Ok(())
         });
 
@@ -182,6 +191,7 @@ async fn steady_state(
     params: &Network,
     db_data: &mut DbConnection,
     mut prev_tip: ChainBlock,
+    tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
     info!("Steady-state sync task started");
     let mut current_tip = steps::get_chain_tip(chain).await?;
@@ -192,6 +202,7 @@ async fn steady_state(
 
     loop {
         info!("New chain tip: {} {}", current_tip.height, current_tip.hash);
+        tip_change_signal.notify_one();
 
         // Figure out the diff between the previous and current chain tips.
         let fork_point = steps::find_fork(chain, prev_tip, current_tip).await?;
@@ -454,27 +465,20 @@ async fn data_requests(
     chain: FetchServiceSubscriber,
     params: &Network,
     db_data: &mut DbConnection,
+    tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
-    let mut interval = time::interval(Duration::from_secs(10));
-    interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    // The first tick completes immediately. We want to use it for a conditional delay, so
-    // get that out of the way.
-    interval.tick().await;
-
-    // TODO: Remove this once https://github.com/zcash/librustzcash/issues/1805
-    // is implemented and used by Zallet.
-    let mut hotloop_preventer = time::interval(Duration::from_secs(1));
     loop {
-        hotloop_preventer.tick().await;
+        // Wait for the chain tip to advance
+        tip_change_signal.notified().await;
 
         let requests = db_data.transaction_data_requests()?;
         if requests.is_empty() {
             // Wait for new requests.
-            debug!("No transaction data requests, sleeping");
-            interval.tick().await;
+            debug!("No transaction data requests, sleeping until the chain tip changes.");
             continue;
         }
 
+        info!("{} transaction data requests to service", requests.len());
         for request in requests {
             match request {
                 TransactionDataRequest::GetStatus(txid) => {
@@ -549,6 +553,23 @@ async fn data_requests(
                     }
                 }
                 TransactionDataRequest::TransactionsInvolvingAddress(req) => {
+                    info!(
+                        "Checking for new UTXOs at address {}",
+                        req.address().encode(params)
+                    );
+
+                    // nb: Zallet is a full node wallet with an index; we can safely look up
+                    // information immediately without exposing correlations between addresses to
+                    // untrusted parties, so we can ignore the `request_at` field.
+
+                    // TODO: we're making the *large* assumption that the chain data doesn't update
+                    // between the multiple chain calls in this method. Ideally, Zaino will give us
+                    // a "transactional" API so that we can ensure internal consistency; for now,
+                    // we pick the chain height as of the start of evaluation as the "evaluated-at"
+                    // height for this data request, in order to not overstate the height for which
+                    // all observations are valid.
+                    let chain_tip = chain.chain_height().await?;
+
                     let address = req.address().encode(params);
                     debug!(
                         tx_status_filter = ?req.tx_status_filter(),
@@ -646,6 +667,8 @@ async fn data_requests(
 
                         decrypt_and_store_transaction(params, db_data, &tx, mined_height)?;
                     }
+
+                    db_data.notify_address_checked(req, chain_tip.into())?;
                 }
             }
         }
