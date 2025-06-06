@@ -63,7 +63,8 @@ impl WalletSync {
         let mut db_data = db.handle().await?;
         let starting_tip = initialize(chain, &params, db_data.as_mut()).await?;
         let tip_change_signal_source = Arc::new(Notify::new());
-        let tip_change_signal_receiver = tip_change_signal_source.clone();
+        let poll_tip_change_signal_receiver = tip_change_signal_source.clone();
+        let req_tip_change_signal_receiver = tip_change_signal_source.clone();
 
         // Spawn the ongoing sync tasks.
         let chain = chain_view.subscribe().await?.inner();
@@ -89,14 +90,26 @@ impl WalletSync {
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let poll_transparent_task = tokio::spawn(async move {
-            poll_transparent(chain, &params, db_data.as_mut()).await?;
+            poll_transparent(
+                chain,
+                &params,
+                db_data.as_mut(),
+                poll_tip_change_signal_receiver,
+            )
+            .await?;
             Ok(())
         });
 
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let data_requests_task = tokio::spawn(async move {
-            data_requests(chain, &params, db_data.as_mut(), tip_change_signal_receiver).await?;
+            data_requests(
+                chain,
+                &params,
+                db_data.as_mut(),
+                req_tip_change_signal_receiver,
+            )
+            .await?;
             Ok(())
         });
 
@@ -397,10 +410,14 @@ async fn poll_transparent(
     chain: FetchServiceSubscriber,
     params: &Network,
     db_data: &mut DbConnection,
+    tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
     info!("Transparent address polling sync task started");
 
     loop {
+        // Wait for the chain tip to advance
+        tip_change_signal.notified().await;
+
         // Collect all of the wallet's non-ephemeral transparent addresses. We do this
         // fresh every loop to ensure we incorporate changes to the address set.
         //
@@ -415,12 +432,6 @@ async fn poll_transparent(
             .into_iter()
             .flat_map(|m| m.into_keys().map(|addr| addr.encode(params)))
             .collect();
-
-        // Open a mempool stream, which we use for its side-effect: notifying us of
-        // changes to the UTXO set (either due to a new mempool transaction, or the chain
-        // tip changing).
-        // TODO: Alter this once Zaino supports transactional chain view queries.
-        let mut mempool_stream = chain.get_mempool_stream().await?;
 
         // Fetch all mined UTXOs.
         // TODO: I really want to use the chaininfo-aware version (which Zaino doesn't
@@ -449,12 +460,6 @@ async fn poll_transparent(
 
             db_data.put_received_transparent_utxo(&output)?;
         }
-
-        // Now wait on the chain tip to change.
-        // TODO: Once Zaino has an index over the mempool, monitor it for changes to the
-        // unmined UTXO set (which we can't get directly from the stream without building
-        // an index because existing mempool txs can be spent within the mempool).
-        while mempool_stream.next().await.is_some() {}
     }
 }
 
