@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
 use std::num::{NonZeroU32, NonZeroUsize};
 
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use zaino_state::FetchServiceSubscriber;
 use zcash_address::{ZcashAddress, unified};
+use zcash_client_backend::data_api::wallet::SpendingKeys;
 use zcash_client_backend::{
     data_api::{
         Account,
@@ -230,11 +231,11 @@ pub(crate) async fn call(
 /// Errors in transaction construction will throw.
 ///
 /// Notes:
-/// 1. #1159 Currently there is no limit set on the number of elements, which could
-///     make the tx too large.
-/// 2. #1360 Note selection is not optimal.
-/// 3. #1277 Spendable notes are not locked, so an operation running in parallel
-///    could also try to use them.
+/// * #1159 Currently there is no limit set on the number of elements, which could
+///   make the tx too large.
+/// * #1360 Note selection is not optimal.
+/// * #1277 Spendable notes are not locked, so an operation running in parallel
+///   could also try to use them.
 async fn run(
     mut wallet: DbHandle,
     chain: FetchServiceSubscriber,
@@ -391,7 +392,7 @@ async fn run(
             &params,
             &prover,
             &prover,
-            &usk,
+            &SpendingKeys::new(&usk, &HashMap::new()),
             OvkPolicy::Sender,
             &proposal,
         )

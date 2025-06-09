@@ -1,8 +1,8 @@
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
-use tokio::time;
+use tokio::{sync::Notify, time};
 use transparent::{
     address::Script,
     bundle::{OutPoint, TxOut},
@@ -62,11 +62,21 @@ impl WalletSync {
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let starting_tip = initialize(chain, &params, db_data.as_mut()).await?;
+        let tip_change_signal_source = Arc::new(Notify::new());
+        let poll_tip_change_signal_receiver = tip_change_signal_source.clone();
+        let req_tip_change_signal_receiver = tip_change_signal_source.clone();
 
         // Spawn the ongoing sync tasks.
         let chain = chain_view.subscribe().await?.inner();
         let steady_state_task = tokio::spawn(async move {
-            steady_state(&chain, &params, db_data.as_mut(), starting_tip).await?;
+            steady_state(
+                &chain,
+                &params,
+                db_data.as_mut(),
+                starting_tip,
+                tip_change_signal_source,
+            )
+            .await?;
             Ok(())
         });
 
@@ -80,14 +90,26 @@ impl WalletSync {
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let poll_transparent_task = tokio::spawn(async move {
-            poll_transparent(chain, &params, db_data.as_mut()).await?;
+            poll_transparent(
+                chain,
+                &params,
+                db_data.as_mut(),
+                poll_tip_change_signal_receiver,
+            )
+            .await?;
             Ok(())
         });
 
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let data_requests_task = tokio::spawn(async move {
-            data_requests(chain, &params, db_data.as_mut()).await?;
+            data_requests(
+                chain,
+                &params,
+                db_data.as_mut(),
+                req_tip_change_signal_receiver,
+            )
+            .await?;
             Ok(())
         });
 
@@ -182,6 +204,7 @@ async fn steady_state(
     params: &Network,
     db_data: &mut DbConnection,
     mut prev_tip: ChainBlock,
+    tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
     info!("Steady-state sync task started");
     let mut current_tip = steps::get_chain_tip(chain).await?;
@@ -192,6 +215,7 @@ async fn steady_state(
 
     loop {
         info!("New chain tip: {} {}", current_tip.height, current_tip.hash);
+        tip_change_signal.notify_one();
 
         // Figure out the diff between the previous and current chain tips.
         let fork_point = steps::find_fork(chain, prev_tip, current_tip).await?;
@@ -386,10 +410,14 @@ async fn poll_transparent(
     chain: FetchServiceSubscriber,
     params: &Network,
     db_data: &mut DbConnection,
+    tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
     info!("Transparent address polling sync task started");
 
     loop {
+        // Wait for the chain tip to advance
+        tip_change_signal.notified().await;
+
         // Collect all of the wallet's non-ephemeral transparent addresses. We do this
         // fresh every loop to ensure we incorporate changes to the address set.
         //
@@ -399,17 +427,11 @@ async fn poll_transparent(
         let addresses = db_data
             .get_account_ids()?
             .into_iter()
-            .map(|account| db_data.get_transparent_receivers(account, true))
+            .map(|account| db_data.get_transparent_receivers(account, true, true))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flat_map(|m| m.into_keys().map(|addr| addr.encode(params)))
             .collect();
-
-        // Open a mempool stream, which we use for its side-effect: notifying us of
-        // changes to the UTXO set (either due to a new mempool transaction, or the chain
-        // tip changing).
-        // TODO: Alter this once Zaino supports transactional chain view queries.
-        let mut mempool_stream = chain.get_mempool_stream().await?;
 
         // Fetch all mined UTXOs.
         // TODO: I really want to use the chaininfo-aware version (which Zaino doesn't
@@ -438,12 +460,6 @@ async fn poll_transparent(
 
             db_data.put_received_transparent_utxo(&output)?;
         }
-
-        // Now wait on the chain tip to change.
-        // TODO: Once Zaino has an index over the mempool, monitor it for changes to the
-        // unmined UTXO set (which we can't get directly from the stream without building
-        // an index because existing mempool txs can be spent within the mempool).
-        while mempool_stream.next().await.is_some() {}
     }
 }
 
@@ -454,30 +470,27 @@ async fn data_requests(
     chain: FetchServiceSubscriber,
     params: &Network,
     db_data: &mut DbConnection,
+    tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
-    let mut interval = time::interval(Duration::from_secs(10));
-    interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    // The first tick completes immediately. We want to use it for a conditional delay, so
-    // get that out of the way.
-    interval.tick().await;
-
-    // TODO: Remove this once https://github.com/zcash/librustzcash/issues/1805
-    // is implemented and used by Zallet.
-    let mut hotloop_preventer = time::interval(Duration::from_secs(1));
     loop {
-        hotloop_preventer.tick().await;
+        // Wait for the chain tip to advance
+        tip_change_signal.notified().await;
 
         let requests = db_data.transaction_data_requests()?;
         if requests.is_empty() {
             // Wait for new requests.
-            debug!("No transaction data requests, sleeping");
-            interval.tick().await;
+            debug!("No transaction data requests, sleeping until the chain tip changes.");
             continue;
         }
 
+        info!("{} transaction data requests to service", requests.len());
         for request in requests {
             match request {
                 TransactionDataRequest::GetStatus(txid) => {
+                    if txid.is_coinbase() {
+                        continue;
+                    }
+
                     info!("Getting status of {txid}");
                     let status = match chain.get_raw_transaction(txid.to_string(), Some(1)).await {
                         // TODO: Zaino should have a Rust API for fetching tx details,
@@ -497,6 +510,10 @@ async fn data_requests(
                     db_data.set_transaction_status(txid, status)?;
                 }
                 TransactionDataRequest::Enhancement(txid) => {
+                    if txid.is_coinbase() {
+                        continue;
+                    }
+
                     info!("Enhancing {txid}");
                     let tx = match chain.get_raw_transaction(txid.to_string(), Some(1)).await {
                         // TODO: Zaino should have a Rust API for fetching tx details,
@@ -548,39 +565,44 @@ async fn data_requests(
                             .set_transaction_status(txid, TransactionStatus::TxidNotRecognized)?;
                     }
                 }
-                TransactionDataRequest::TransactionsInvolvingAddress {
-                    address,
-                    block_range_start,
-                    block_range_end,
-                    request_at,
-                    tx_status_filter,
-                    output_status_filter,
-                } => {
-                    let address = address.encode(params);
+                TransactionDataRequest::TransactionsInvolvingAddress(req) => {
+                    info!(
+                        "Checking for new UTXOs at address {}",
+                        req.address().encode(params)
+                    );
+
+                    // nb: Zallet is a full node wallet with an index; we can safely look up
+                    // information immediately without exposing correlations between addresses to
+                    // untrusted parties, so we can ignore the `request_at` field.
+
+                    // TODO: we're making the *large* assumption that the chain data doesn't update
+                    // between the multiple chain calls in this method. Ideally, Zaino will give us
+                    // a "transactional" API so that we can ensure internal consistency; for now,
+                    // we pick the chain height as of the start of evaluation as the "evaluated-at"
+                    // height for this data request, in order to not overstate the height for which
+                    // all observations are valid.
+                    let chain_tip = chain.chain_height().await?;
+
+                    let address = req.address().encode(params);
                     debug!(
-                        tx_status_filter = ?tx_status_filter,
-                        output_status_filter = ?output_status_filter,
+                        tx_status_filter = ?req.tx_status_filter(),
+                        output_status_filter = ?req.output_status_filter(),
                         "Fetching transactions involving {address} in range {}..{}",
-                        block_range_start,
-                        block_range_end.map(|h| h.to_string()).unwrap_or_default(),
+                        req.block_range_start(),
+                        req.block_range_end().map(|h| h.to_string()).unwrap_or_default(),
                     );
 
                     let request = GetAddressTxIdsRequest::from_parts(
                         vec![address.clone()],
-                        block_range_start.into(),
-                        block_range_end.map(u32::from).unwrap_or(0),
+                        req.block_range_start().into(),
+                        req.block_range_end().map(u32::from).unwrap_or(0),
                     );
 
-                    // Zallet is a full node wallet with an index; we can safely look up
-                    // information immediately without exposing correlations between
-                    // addresses to untrusted parties.
-                    let _ = request_at;
-
-                    let txs_with_unspent_outputs = match output_status_filter {
+                    let txs_with_unspent_outputs = match req.output_status_filter() {
                         OutputStatusFilter::Unspent => {
                             let request = GetAddressUtxosArg {
                                 addresses: vec![address],
-                                start_height: block_range_start.into(),
+                                start_height: req.block_range_start().into(),
                                 max_entries: 0,
                             };
                             Some(
@@ -614,7 +636,7 @@ async fn data_requests(
                         let mined_height = tx.height.map(BlockHeight::from_u32);
 
                         // Ignore transactions that don't match the status filter.
-                        match (&tx_status_filter, mined_height) {
+                        match (&req.tx_status_filter(), mined_height) {
                             (TransactionStatusFilter::Mined, None)
                             | (TransactionStatusFilter::Mempool, Some(_)) => continue,
                             _ => (),
@@ -658,6 +680,8 @@ async fn data_requests(
 
                         decrypt_and_store_transaction(params, db_data, &tx, mined_height)?;
                     }
+
+                    db_data.notify_address_checked(req, chain_tip.into())?;
                 }
             }
         }
