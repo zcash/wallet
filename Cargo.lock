@@ -6127,6 +6127,7 @@ dependencies = [
  "toml 0.8.20",
  "tonic 0.13.0",
  "tower 0.4.13",
+ "tracing",
  "trycmd",
  "uuid",
  "xdg",
