@@ -13,10 +13,11 @@ use zcash_client_backend::{
     data_api::{
         OutputStatusFilter, TransactionDataRequest, TransactionStatus, TransactionStatusFilter,
         WalletRead, WalletWrite,
-        chain::{BlockCache, scan_cached_blocks},
+        chain::{self, BlockCache, scan_cached_blocks},
         scanning::{ScanPriority, ScanRange},
         wallet::decrypt_and_store_transaction,
     },
+    scanning::ScanError,
     wallet::WalletTransparentOutput,
 };
 use zcash_keys::encoding::AddressCodec;
@@ -144,14 +145,23 @@ async fn initialize(
         // Scan the downloaded blocks.
         tokio::task::block_in_place(|| {
             info!("Scanning {}", scan_range);
-            scan_cached_blocks(
+            match scan_cached_blocks(
                 params,
                 &db_cache,
                 db_data,
                 scan_range.block_range().start,
                 &from_state,
                 scan_range.len(),
-            )
+            ) {
+                Ok(_) => Ok(()),
+                Err(chain::error::Error::Scan(ScanError::PrevHashMismatch { at_height })) => {
+                    db_data
+                        .truncate_to_height(at_height - 10)
+                        .map_err(chain::error::Error::Wallet)?;
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
         })?;
 
         // Delete the now-scanned blocks.
