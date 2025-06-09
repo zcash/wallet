@@ -40,6 +40,9 @@ i18n-embed = { version = "0.15", features = ["fluent-system"] }
 i18n-embed-fl = "0.9"
 rust-embed = "8"
 
+# Logging
+tracing = { version = "0.1", features = ["attributes"] }
+
 # Parsing and serialization
 hex = "0.4"
 serde = { version = "1", features = ["serde_derive"] }
