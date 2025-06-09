@@ -65,28 +65,28 @@ impl WalletSync {
 
         // Spawn the ongoing sync tasks.
         let chain = chain_view.subscribe().await?.inner();
-        let steady_state_task = tokio::spawn(async move {
+        let steady_state_task = crate::spawn!("Steady state sync", async move {
             steady_state(&chain, &params, db_data.as_mut(), starting_tip).await?;
             Ok(())
         });
 
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
-        let recover_history_task = tokio::spawn(async move {
+        let recover_history_task = crate::spawn!("Recover history", async move {
             recover_history(chain, &params, db_data.as_mut(), 1000).await?;
             Ok(())
         });
 
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
-        let poll_transparent_task = tokio::spawn(async move {
+        let poll_transparent_task = crate::spawn!("Poll transparent", async move {
             poll_transparent(chain, &params, db_data.as_mut()).await?;
             Ok(())
         });
 
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
-        let data_requests_task = tokio::spawn(async move {
+        let data_requests_task = crate::spawn!("Data requests", async move {
             data_requests(chain, &params, db_data.as_mut()).await?;
             Ok(())
         });

@@ -128,7 +128,7 @@ impl ChainView {
         };
 
         // Spawn a task that stops the indexer when appropriate internal signals occur.
-        let task = tokio::spawn(async move {
+        let task = crate::spawn!("Indexer shutdown", async move {
             let mut server_interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(100));
 

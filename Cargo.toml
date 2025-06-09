@@ -40,9 +40,6 @@ i18n-embed = { version = "0.15", features = ["fluent-system"] }
 i18n-embed-fl = "0.9"
 rust-embed = "8"
 
-# Logging
-tracing = { version = "0.1", features = ["attributes"] }
-
 # Parsing and serialization
 hex = "0.4"
 serde = { version = "1", features = ["serde_derive"] }
@@ -65,6 +62,12 @@ hyper = "1"
 jsonrpsee = "0.24"
 schemars = "0.8"
 tower = "0.4"
+
+# Tracing
+console-subscriber = "0.4"
+tracing = { version = "0.1", features = ["attributes"] }
+tracing-log = "0.2"
+tracing-subscriber = "0.3"
 
 # Zcash consensus
 zcash_protocol = "0.5"
@@ -119,8 +122,10 @@ zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "d
 zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "d0b31584a1fef42318010c8515ee4a8e69d7e85b" }
 zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "d0b31584a1fef42318010c8515ee4a8e69d7e85b" }
 
-# Apply https://github.com/ZcashFoundation/zebra/pull/9536 on top of what Zaino depends on.
+# Apply PRs on top of what Zaino depends on:
+# - https://github.com/ZcashFoundation/zebra/pull/9536
+# - https://github.com/ZcashFoundation/zebra/pull/9547
 [patch."https://github.com/ZcashFoundation/zebra.git"]
-zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
-zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
-zebra-state = { git = "https://github.com/str4d/zebra.git", rev = "a77de50caef234e13ccf74452a6c010b65f48e82" }
+zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "694d11c7acec1b8bb972765e9b98333f699cc76e" }
+zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "694d11c7acec1b8bb972765e9b98333f699cc76e" }
+zebra-state = { git = "https://github.com/str4d/zebra.git", rev = "694d11c7acec1b8bb972765e9b98333f699cc76e" }

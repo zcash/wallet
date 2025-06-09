@@ -12,6 +12,7 @@ pub(crate) mod database;
 pub(crate) mod json_rpc;
 pub(crate) mod keystore;
 pub(crate) mod sync;
+pub(crate) mod tracing;
 
 /// A handle to a background task spawned by a component.
 ///

@@ -114,6 +114,8 @@ toml.workspace = true
 tonic.workspace = true
 tower = { workspace = true, features = ["timeout"] }
 tracing.workspace = true
+tracing-log.workspace = true
+tracing-subscriber.workspace = true
 transparent.workspace = true
 uuid.workspace = true
 xdg.workspace = true
@@ -141,6 +143,8 @@ zebra-rpc.workspace = true
 zebra-state.workspace = true
 zip32.workspace = true
 
+console-subscriber = { workspace = true, optional = true }
+
 [build-dependencies]
 clap = { workspace = true, features = ["string", "unstable-styles"] }
 clap_complete = "4"
@@ -159,5 +163,20 @@ regex = "1.4"
 tempfile = "3"
 trycmd = "0.14"
 
+[features]
+## `tokio-console` support
+##
+## To activate this feature, run:
+## ```sh
+## RUSTFLAGS="--cfg=tokio_unstable" cargo build --features tokio-console
+## ```
+##
+## For more details, see:
+## https://github.com/tokio-rs/console/blob/main/console-subscriber/README.md#enabling-tokio-instrumentation
+tokio-console = ["dep:console-subscriber", "tokio/tracing"]
+
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(outside_buildscript)'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(outside_buildscript)',
+    'cfg(tokio_unstable)',
+] }
