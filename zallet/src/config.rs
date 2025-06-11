@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
-use extruct::Fields;
 use serde::{Deserialize, Serialize};
 use zcash_protocol::consensus::NetworkType;
 
@@ -19,7 +18,7 @@ use crate::network::{Network, RegTestNuParam};
 /// default value (which may change over time), and a user explicitly configuring an
 /// option with the current default value (which should be preserved). The sole exception
 /// to this is `network`, which cannot change for the lifetime of the wallet.
-#[derive(Clone, Debug, Deserialize, Serialize, Fields, DocumentedFields)]
+#[derive(Clone, Debug, Deserialize, Serialize, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
     /// Whether the wallet should broadcast transactions.
@@ -115,7 +114,7 @@ impl ZalletConfig {
 }
 
 /// Transaction builder configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct BuilderSection {
     /// Whether to spend unconfirmed transparent change when sending transactions.
@@ -151,7 +150,7 @@ impl BuilderSection {
 }
 
 /// Indexer configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct IndexerSection {
     /// IP address and port of the JSON-RPC interface for the full node / validator being
@@ -180,7 +179,7 @@ pub struct IndexerSection {
 }
 
 /// Key store configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct KeyStoreSection {
     /// Path to the age identity file that encrypts key material.
@@ -189,7 +188,7 @@ pub struct KeyStoreSection {
 }
 
 /// Limits configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct LimitsSection {
     /// The maximum number of Orchard actions permitted in a constructed transaction.
@@ -206,7 +205,7 @@ impl LimitsSection {
 }
 
 /// RPC configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, Fields, DocumentedFields)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct RpcSection {
     /// Addresses to listen for JSON-RPC connections.
@@ -360,7 +359,7 @@ impl ZalletConfig {
 "
         .to_owned();
 
-        fn write_section<'a, T: Documented + Fields + DocumentedFields>(
+        fn write_section<'a, T: Documented + DocumentedFields>(
             config: &mut String,
             section_name: &'static str,
             sec_def: impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
@@ -372,7 +371,7 @@ impl ZalletConfig {
             writeln!(config, "[{}]", section_name).unwrap();
             writeln!(config).unwrap();
 
-            for field_name in T::fields() {
+            for field_name in T::FIELD_NAMES {
                 write_field::<T>(config, field_name, false, sec_def(section_name, field_name));
             }
         }
@@ -410,7 +409,7 @@ impl ZalletConfig {
             writeln!(config).unwrap();
         }
 
-        for field_name in Self::fields() {
+        for field_name in Self::FIELD_NAMES {
             match *field_name {
                 BUILDER => write_section::<BuilderSection>(&mut config, field_name, sec_def),
                 INDEXER => write_section::<IndexerSection>(&mut config, field_name, sec_def),

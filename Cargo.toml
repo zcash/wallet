@@ -22,8 +22,7 @@ futures = "0.3"
 tokio = "1"
 
 # Documentation
-documented = "0.3"
-extruct = "0.2"
+documented = "0.9"
 phf = "0.11"
 
 # Filesystem
