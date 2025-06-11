@@ -126,6 +126,10 @@ criteria = "safe-to-deploy"
 version = "1.1.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.automod]]
+version = "1.0.15"
+criteria = "safe-to-run"
+
 [[exemptions.axum]]
 version = "0.7.9"
 criteria = "safe-to-deploy"
@@ -1311,7 +1315,7 @@ version = "1.15.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.snapbox]]
-version = "0.4.17"
+version = "0.6.21"
 criteria = "safe-to-run"
 
 [[exemptions.snapbox-macros]]
@@ -1459,7 +1463,7 @@ version = "0.3.19"
 criteria = "safe-to-deploy"
 
 [[exemptions.trycmd]]
-version = "0.14.21"
+version = "0.15.9"
 criteria = "safe-to-run"
 
 [[exemptions.type-map]]
