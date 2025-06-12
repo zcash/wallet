@@ -74,6 +74,7 @@ impl Network {
                     canopy: local_network.canopy.map(|h| h.into()),
                     nu5: local_network.nu5.map(|h| h.into()),
                     nu6: local_network.nu6.map(|h| h.into()),
+                    nu6_1: None,
                     nu7: None,
                 },
             ),

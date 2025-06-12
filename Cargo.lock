@@ -303,6 +303,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
+name = "automod"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebb4bd301db2e2ca1f5be131c24eb8ebf2d9559bc3744419e93baf8ddea7e670"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.100",
+]
+
+[[package]]
 name = "axum"
 version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -964,6 +975,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "cookie"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1180,6 +1200,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dcbor"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "402f083d3c2daef249d4c06ef827c8b743ab88536f73dae52201f4de5abb0354"
+dependencies = [
+ "chrono",
+ "half",
+ "hex",
+ "paste",
+ "thiserror 1.0.69",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "deadpool"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1304,22 +1338,27 @@ dependencies = [
 
 [[package]]
 name = "documented"
-version = "0.3.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2f2016be31b2ee8ca5950d0b985e53d2802bbe646634e41cdf70f668fc66049"
+checksum = "bc6db32f0995bc4553d2de888999075acd0dbeef75ba923503f6a724263dc6f3"
 dependencies = [
- "documented-derive",
+ "documented-macros",
  "phf",
  "thiserror 1.0.69",
 ]
 
 [[package]]
-name = "documented-derive"
-version = "0.3.0"
+name = "documented-macros"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83095afc77f3f21d50be46d608d0a1cfa463cc97e4f3aedab871d6e0baf91870"
+checksum = "a394bb35929b58f9a5fd418f7c6b17a4b616efcc1e53e6995ca123948f87e5fa"
 dependencies = [
+ "convert_case",
+ "itertools 0.13.0",
+ "optfield",
+ "proc-macro2",
  "quote",
+ "strum",
  "syn 2.0.100",
 ]
 
@@ -1393,7 +1432,7 @@ dependencies = [
 [[package]]
 name = "equihash"
 version = "0.2.2"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "blake2b_simd",
  "core2",
@@ -1417,34 +1456,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "extruct"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7e37eaa7b51e9ccab34423bb821c46c50220f3b60b6220da2d90ecca833b895"
-dependencies = [
- "extruct-core",
- "extruct-macros",
-]
-
-[[package]]
-name = "extruct-core"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d8ca7ccf6cc8af0936caebde2621d753baf10b698fec1712d1442b84c6ececd"
-
-[[package]]
-name = "extruct-macros"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5ebdc9a5b303013598ecaab883646e97b58eb1e58bf55bf751784df2a06eb65"
-dependencies = [
- "extruct-core",
- "proc-macro2",
- "quote",
- "syn 2.0.100",
-]
-
-[[package]]
 name = "eyre"
 version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1457,7 +1468,7 @@ dependencies = [
 [[package]]
 name = "f4jumble"
 version = "0.1.1"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "blake2b_simd",
 ]
@@ -1824,6 +1835,16 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "half"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "459196ed295495a68f7d7fe1d84f6c4b7ff0e21fe3017b2f283c6fac3ad803c9"
+dependencies = [
+ "cfg-if",
+ "crunchy",
 ]
 
 [[package]]
@@ -2384,6 +2405,15 @@ name = "impl-codec"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba6a270039626615617f3f36d15fc827041df3b78c439da2cadfa47455a77f2f"
+dependencies = [
+ "parity-scale-codec",
+]
+
+[[package]]
+name = "impl-codec"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d40b9d5e17727407e55028eafc22b2dc68781786e6d7eb8a21103f5058e3a14"
 dependencies = [
  "parity-scale-codec",
 ]
@@ -3106,6 +3136,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
+name = "optfield"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa59f025cde9c698fcb4fcb3533db4621795374065bee908215263488f2d2a1d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.100",
+]
+
+[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3158,9 +3199,9 @@ dependencies = [
 
 [[package]]
 name = "os_pipe"
-version = "1.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ffd2b0a5634335b135d5728d84c5e0fd726954b87111f7506a61c502280d982"
+checksum = "db335f4760b14ead6290116f2427bf33a14d4f0617d49f78a246de10c1831224"
 dependencies = [
  "libc",
  "windows-sys 0.59.0",
@@ -3263,6 +3304,12 @@ dependencies = [
  "static_assertions",
  "subtle",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pbkdf2"
@@ -3444,8 +3491,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b34d9fd68ae0b74a41b21c03c2f62847aa0ffea044eee893b4c140b37e244e2"
 dependencies = [
  "fixed-hash",
- "impl-codec",
+ "impl-codec 0.6.0",
  "uint 0.9.5",
+]
+
+[[package]]
+name = "primitive-types"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d15600a7d856470b7d278b3fe0e311fe28c2526348549f8ef2ff7db3299c87f5"
+dependencies = [
+ "fixed-hash",
+ "impl-codec 0.7.1",
+ "uint 0.10.0",
 ]
 
 [[package]]
@@ -3834,6 +3892,26 @@ dependencies = [
  "getrandom 0.2.15",
  "libredox",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "ref-cast"
+version = "1.0.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a0ae411dbe946a674d89546582cea4ba2bb8defac896622d6496f14c23ba5cf"
+dependencies = [
+ "ref-cast-impl",
+]
+
+[[package]]
+name = "ref-cast-impl"
+version = "1.0.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1165225c21bff1f3bbce98f5a1f889949bc902d3575308cc7b0de30b4f6d27c7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.100",
 ]
 
 [[package]]
@@ -4227,11 +4305,12 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "0.8.22"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fbf2ae1b8bc8e02df939598064d22402220cd5bbcca1c76f7d6a310974d5615"
+checksum = "4cd191f9397d57d581cddd31014772520aa448f65ef991055d7f61582c65165f"
 dependencies = [
  "dyn-clone",
+ "ref-cast",
  "schemars_derive",
  "serde",
  "serde_json",
@@ -4239,9 +4318,9 @@ dependencies = [
 
 [[package]]
 name = "schemars_derive"
-version = "0.8.22"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32e265784ad618884abaea0600a9adf15393368d840e0222d101a072f3f7534d"
+checksum = "5016d94c77c6d32f0b8e08b781f7dc8a90c2007d4e77472cc2807bc10a8438fe"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4574,9 +4653,9 @@ checksum = "8917285742e9f3e1683f0a9c4e6b57960b7314d0b08d30d1ecd426713ee2eee9"
 
 [[package]]
 name = "snapbox"
-version = "0.4.17"
+version = "0.6.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b831b6e80fbcd2889efa75b185d24005f85981431495f995292b25836519d84"
+checksum = "96dcfc4581e3355d70ac2ee14cfdf81dce3d85c85f1ed9e2c1d3013f53b3436b"
 dependencies = [
  "anstream",
  "anstyle",
@@ -4591,7 +4670,7 @@ dependencies = [
  "tempfile",
  "wait-timeout",
  "walkdir",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4662,6 +4741,28 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "strum"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.100",
+]
 
 [[package]]
 name = "subtle"
@@ -5097,7 +5198,7 @@ dependencies = [
 [[package]]
 name = "tower-batch-control"
 version = "0.2.41-beta.22"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "futures",
  "futures-core",
@@ -5113,7 +5214,7 @@ dependencies = [
 [[package]]
 name = "tower-fallback"
 version = "0.2.41-beta.22"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "futures-core",
  "pin-project",
@@ -5223,10 +5324,12 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "trycmd"
-version = "0.14.21"
+version = "0.15.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d41014f614932fff67cd3b780e0eb0ecb14e698a831a0e555ef2a5137be968d5"
+checksum = "a8b5cf29388862aac065d6597ac9c8e842d1cc827cb50f7c32f11d29442eaae4"
 dependencies = [
+ "anstream",
+ "automod",
  "glob",
  "humantime",
  "humantime-serde",
@@ -5309,6 +5412,12 @@ checksum = "5033c97c4262335cded6d6fc3e5c18ab755e1a3dc96376350f3d8e9f009ad956"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "unicode-segmentation"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6ccf251212114b54433ec949fd6a7841275f9ada20dddd2f29e9ceea4501493"
 
 [[package]]
 name = "unicode-xid"
@@ -6057,7 +6166,7 @@ dependencies = [
 [[package]]
 name = "zaino-fetch"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
+source = "git+https://github.com/zingolabs/zaino.git?rev=4827c1347d5657fc89c8d3a96ec231bd15f82450#4827c1347d5657fc89c8d3a96ec231bd15f82450"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -6085,7 +6194,7 @@ dependencies = [
 [[package]]
 name = "zaino-proto"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
+source = "git+https://github.com/zingolabs/zaino.git?rev=4827c1347d5657fc89c8d3a96ec231bd15f82450#4827c1347d5657fc89c8d3a96ec231bd15f82450"
 dependencies = [
  "prost",
  "tonic 0.12.3",
@@ -6096,11 +6205,12 @@ dependencies = [
 [[package]]
 name = "zaino-state"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
+source = "git+https://github.com/zingolabs/zaino.git?rev=4827c1347d5657fc89c8d3a96ec231bd15f82450#4827c1347d5657fc89c8d3a96ec231bd15f82450"
 dependencies = [
  "async-trait",
  "chrono",
  "dashmap",
+ "dcbor",
  "futures",
  "hex",
  "http",
@@ -6109,6 +6219,7 @@ dependencies = [
  "lazy-regex",
  "lmdb",
  "nonempty",
+ "primitive-types 0.13.1",
  "prost",
  "serde",
  "serde_json",
@@ -6122,6 +6233,8 @@ dependencies = [
  "whoami",
  "zaino-fetch",
  "zaino-proto",
+ "zcash_primitives",
+ "zcash_protocol",
  "zebra-chain",
  "zebra-rpc",
  "zebra-state",
@@ -6144,7 +6257,6 @@ dependencies = [
  "deadpool-sqlite",
  "deadpool-sync",
  "documented",
- "extruct",
  "flate2",
  "futures",
  "hex",
@@ -6207,7 +6319,7 @@ dependencies = [
 [[package]]
 name = "zcash_address"
 version = "0.7.1"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "bech32 0.11.0",
  "bs58",
@@ -6220,7 +6332,7 @@ dependencies = [
 [[package]]
 name = "zcash_client_backend"
 version = "0.18.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -6268,7 +6380,7 @@ dependencies = [
 [[package]]
 name = "zcash_client_sqlite"
 version = "0.16.2"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "bip32",
  "bitflags 2.9.0",
@@ -6310,7 +6422,7 @@ dependencies = [
 [[package]]
 name = "zcash_encoding"
 version = "0.3.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "core2",
  "nonempty",
@@ -6319,17 +6431,17 @@ dependencies = [
 [[package]]
 name = "zcash_history"
 version = "0.4.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "blake2b_simd",
  "byteorder",
- "primitive-types",
+ "primitive-types 0.12.2",
 ]
 
 [[package]]
 name = "zcash_keys"
-version = "0.8.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+version = "0.8.1"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "bech32 0.11.0",
  "bip32",
@@ -6370,7 +6482,7 @@ dependencies = [
 [[package]]
 name = "zcash_primitives"
 version = "0.22.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "bip32",
  "blake2b_simd",
@@ -6411,7 +6523,7 @@ dependencies = [
 [[package]]
 name = "zcash_proofs"
 version = "0.22.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -6434,7 +6546,7 @@ dependencies = [
 [[package]]
 name = "zcash_protocol"
 version = "0.5.1"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "core2",
  "document-features",
@@ -6464,7 +6576,7 @@ dependencies = [
 [[package]]
 name = "zcash_transparent"
 version = "0.2.3"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "bip32",
  "blake2b_simd",
@@ -6487,7 +6599,7 @@ dependencies = [
 [[package]]
 name = "zebra-chain"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "bech32 0.11.0",
  "bitflags 2.9.0",
@@ -6512,7 +6624,7 @@ dependencies = [
  "lazy_static",
  "num-integer",
  "orchard",
- "primitive-types",
+ "primitive-types 0.12.2",
  "rand_core 0.6.4",
  "rayon",
  "reddsa",
@@ -6545,7 +6657,7 @@ dependencies = [
 [[package]]
 name = "zebra-consensus"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -6581,7 +6693,7 @@ dependencies = [
 [[package]]
 name = "zebra-network"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "bitflags 2.9.0",
  "byteorder",
@@ -6617,7 +6729,7 @@ dependencies = [
 [[package]]
 name = "zebra-node-services"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "color-eyre",
  "jsonrpsee-types",
@@ -6631,7 +6743,7 @@ dependencies = [
 [[package]]
 name = "zebra-rpc"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -6667,7 +6779,7 @@ dependencies = [
 [[package]]
 name = "zebra-script"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "thiserror 2.0.12",
  "zcash_script",
@@ -6677,7 +6789,7 @@ dependencies = [
 [[package]]
 name = "zebra-state"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "bincode",
  "chrono",
@@ -6825,7 +6937,7 @@ dependencies = [
 [[package]]
 name = "zip321"
 version = "0.3.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=d0b31584a1fef42318010c8515ee4a8e69d7e85b#d0b31584a1fef42318010c8515ee4a8e69d7e85b"
+source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d188207e2aa663d66163faa64c#b3727870470e58d188207e2aa663d66163faa64c"
 dependencies = [
  "base64 0.22.1",
  "nom",
