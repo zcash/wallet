@@ -5148,7 +5148,7 @@ dependencies = [
 [[package]]
 name = "tower-batch-control"
 version = "0.2.41-beta.22"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "futures",
  "futures-core",
@@ -5164,7 +5164,7 @@ dependencies = [
 [[package]]
 name = "tower-fallback"
 version = "0.2.41-beta.22"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "futures-core",
  "pin-project",
@@ -6545,7 +6545,7 @@ dependencies = [
 [[package]]
 name = "zebra-chain"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "bech32 0.11.0",
  "bitflags 2.9.0",
@@ -6603,7 +6603,7 @@ dependencies = [
 [[package]]
 name = "zebra-consensus"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -6639,7 +6639,7 @@ dependencies = [
 [[package]]
 name = "zebra-network"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "bitflags 2.9.0",
  "byteorder",
@@ -6675,7 +6675,7 @@ dependencies = [
 [[package]]
 name = "zebra-node-services"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "color-eyre",
  "jsonrpsee-types",
@@ -6689,7 +6689,7 @@ dependencies = [
 [[package]]
 name = "zebra-rpc"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -6725,7 +6725,7 @@ dependencies = [
 [[package]]
 name = "zebra-script"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "thiserror 2.0.12",
  "zcash_script",
@@ -6735,7 +6735,7 @@ dependencies = [
 [[package]]
 name = "zebra-state"
 version = "1.0.0-beta.46"
-source = "git+https://github.com/str4d/zebra.git?rev=694d11c7acec1b8bb972765e9b98333f699cc76e#694d11c7acec1b8bb972765e9b98333f699cc76e"
+source = "git+https://github.com/str4d/zebra.git?rev=c8be9944cf7669bbea108b99efe6af656e67ceef#c8be9944cf7669bbea108b99efe6af656e67ceef"
 dependencies = [
  "bincode",
  "chrono",

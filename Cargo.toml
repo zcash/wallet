@@ -124,7 +124,10 @@ zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "b37
 # Apply PRs on top of what Zaino depends on:
 # - https://github.com/ZcashFoundation/zebra/pull/9536
 # - https://github.com/ZcashFoundation/zebra/pull/9547
+# - https://github.com/ZcashFoundation/zebra/pull/9484
+# - Everything prior to https://github.com/ZcashFoundation/zebra/pull/9539 which changes
+#   the public API.
 [patch."https://github.com/ZcashFoundation/zebra.git"]
-zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "694d11c7acec1b8bb972765e9b98333f699cc76e" }
-zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "694d11c7acec1b8bb972765e9b98333f699cc76e" }
-zebra-state = { git = "https://github.com/str4d/zebra.git", rev = "694d11c7acec1b8bb972765e9b98333f699cc76e" }
+zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "c8be9944cf7669bbea108b99efe6af656e67ceef" }
+zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "c8be9944cf7669bbea108b99efe6af656e67ceef" }
+zebra-state = { git = "https://github.com/str4d/zebra.git", rev = "c8be9944cf7669bbea108b99efe6af656e67ceef" }
