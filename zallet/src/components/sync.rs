@@ -7,8 +7,11 @@ use transparent::{
     address::Script,
     bundle::{OutPoint, TxOut},
 };
+use zaino_fetch::jsonrpsee::error::JsonRpSeeConnectorError;
 use zaino_proto::proto::service::GetAddressUtxosArg;
-use zaino_state::{FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer};
+use zaino_state::{
+    FetchServiceError, FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer,
+};
 use zcash_client_backend::{
     data_api::{
         OutputStatusFilter, TransactionDataRequest, TransactionStatus, TransactionStatusFilter,
@@ -489,8 +492,15 @@ async fn data_requests(
                             .map(BlockHeight::from_u32)
                             .map(TransactionStatus::Mined)
                             .unwrap_or(TransactionStatus::NotInMainChain),
-                        // TODO: Detect error corresponding to
-                        // `TransactionStatus::TxidNotRecognized`.
+                        // TODO: Zaino is not correctly parsing the error response, so we
+                        // can't look for `LegacyCode::InvalidAddressOrKey`. Instead match
+                        // on these three possible error messages:
+                        // - "No such mempool or blockchain transaction" (zcashd -txindex)
+                        // - "No such mempool transaction." (zcashd)
+                        // - "No such mempool or main chain transaction" (zebrad)
+                        Err(FetchServiceError::JsonRpcConnectorError(
+                            JsonRpSeeConnectorError::JsonRpSeeClientError(e),
+                        )) if e.contains("No such mempool") => TransactionStatus::TxidNotRecognized,
                         Err(e) => return Err(e.into()),
                     };
 
@@ -536,8 +546,15 @@ async fn data_requests(
 
                             Some((tx, mined_height))
                         }
-                        // TODO: Detect error corresponding to
-                        // `TransactionStatus::TxidNotRecognized`.
+                        // TODO: Zaino is not correctly parsing the error response, so we
+                        // can't look for `LegacyCode::InvalidAddressOrKey`. Instead match
+                        // on these three possible error messages:
+                        // - "No such mempool or blockchain transaction" (zcashd -txindex)
+                        // - "No such mempool transaction." (zcashd)
+                        // - "No such mempool or main chain transaction" (zebrad)
+                        Err(FetchServiceError::JsonRpcConnectorError(
+                            JsonRpSeeConnectorError::JsonRpSeeClientError(e),
+                        )) if e.contains("No such mempool") => None,
                         Err(e) => return Err(e.into()),
                     };
 
