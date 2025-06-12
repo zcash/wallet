@@ -59,7 +59,7 @@ rpassword = "7"
 http-body-util = "0.1"
 hyper = "1"
 jsonrpsee = "0.24"
-schemars = "0.8"
+schemars = "0.9"
 tower = "0.4"
 
 # Tracing

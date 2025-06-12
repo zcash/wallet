@@ -911,7 +911,7 @@ version = "0.4.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.os_pipe]]
-version = "1.2.1"
+version = "1.2.2"
 criteria = "safe-to-run"
 
 [[exemptions.owo-colors]]
@@ -1102,6 +1102,14 @@ criteria = "safe-to-deploy"
 version = "0.4.3"
 criteria = "safe-to-deploy"
 
+[[exemptions.ref-cast]]
+version = "1.0.24"
+criteria = "safe-to-deploy"
+
+[[exemptions.ref-cast-impl]]
+version = "1.0.24"
+criteria = "safe-to-deploy"
+
 [[exemptions.regex]]
 version = "1.11.1"
 criteria = "safe-to-deploy"
@@ -1215,11 +1223,11 @@ version = "1.0.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.schemars]]
-version = "0.8.22"
+version = "0.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.schemars_derive]]
-version = "0.8.22"
+version = "0.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.schemerz]]

@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
+use std::borrow::Cow;
 
 use documented::Documented;
 use jsonrpsee::core::{JsonValue, RpcResult};
-use schemars::{JsonSchema, SchemaGenerator, r#gen::SchemaSettings, schema::Schema};
+use schemars::{JsonSchema, Schema, SchemaGenerator, generate::SchemaSettings};
 use serde::Serialize;
 
 // Imports to work around deficiencies in the build script.
@@ -117,7 +117,7 @@ impl Generator {
 
     fn into_components(mut self) -> Components {
         Components {
-            schemas: self.inner.take_definitions(),
+            schemas: self.inner.take_definitions(false),
         }
     }
 }
@@ -132,8 +132,8 @@ pub(crate) struct OpenRpc {
 }
 
 impl JsonSchema for OpenRpc {
-    fn schema_name() -> String {
-        "OpenRPC Schema".into()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("OpenRPC Schema")
     }
 
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
@@ -175,7 +175,7 @@ pub(super) struct ContentDescriptor {
 
 #[derive(Clone, Debug, Serialize)]
 struct Components {
-    schemas: BTreeMap<String, Schema>,
+    schemas: serde_json::Map<String, JsonValue>,
 }
 
 fn is_false(b: &bool) -> bool {
