@@ -10,17 +10,13 @@ use serde::Serialize;
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
-        Account, AccountPurpose, InputSource, NullifierQuery, TargetValue, WalletRead,
-        wallet::ConfirmationsPolicy,
+        Account, AccountPurpose, InputSource, NullifierQuery, WalletRead, wallet::TargetHeight,
     },
     encoding::AddressCodec,
     fees::{orchard::InputView as _, sapling::InputView as _},
     wallet::NoteId,
 };
-use zcash_protocol::{
-    ShieldedProtocol,
-    value::{MAX_MONEY, Zatoshis},
-};
+use zcash_protocol::{ShieldedProtocol, consensus::BlockHeight};
 use zip32::Scope;
 
 use crate::components::{
@@ -58,6 +54,9 @@ pub(crate) struct UnspentNote {
     /// `true` if note can be spent by wallet, `false` if address is watchonly.
     spendable: bool,
 
+    /// The UUID for the wallet account that received this note.
+    account_uuid: String,
+
     /// The unified account ID, if applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     account: Option<u32>,
@@ -86,18 +85,65 @@ pub(crate) struct UnspentNote {
     change: Option<bool>,
 }
 
-pub(crate) fn call(wallet: &DbConnection) -> Response {
-    let target_height = match wallet
-        .get_target_and_anchor_heights(NonZeroU32::MIN)
-        .map_err(|e| {
-            RpcError::owned(
-                LegacyCode::Database.into(),
-                "WalletDb::block_max_scanned failed",
-                Some(format!("{e}")),
-            )
-        })? {
-        Some((h, _)) => h,
-        None => return Ok(ResultType(vec![])),
+pub(super) const PARAM_MINCONF_DESC: &str =
+    "Only include outputs of transactions confirmed at least this many times.";
+pub(super) const PARAM_MAXCONF_DESC: &str =
+    "Only include outputs of transactions confirmed at most this many times.";
+pub(super) const PARAM_INCLUDE_WATCH_ONLY_DESC: &str =
+    "Also include outputs received at watch-only addresses.";
+pub(super) const PARAM_ADDRESSES_DESC: &str =
+    "If non-empty, only outputs received by the provided addresses will be returned.";
+pub(super) const PARAM_AS_OF_HEIGHT_DESC: &str = "Execute the query as if it were run when the blockchain was at the height specified by this argument.";
+
+// FIXME: the following parameters are not yet properly supported
+// * maxconf
+// * include_watch_only
+// * addresses
+pub(crate) fn call(
+    wallet: &DbConnection,
+    minconf: Option<u32>,
+    _maxconf: Option<u32>,
+    _include_watch_only: Option<bool>,
+    _addresses: Option<Vec<String>>,
+    as_of_height: Option<u32>,
+) -> Response {
+    let minconf = minconf.unwrap_or(1);
+    //let include_watch_only = include_watch_only.unwrap_or(false);
+    //let addresses = addresses
+    //    .unwrap_or(vec![])
+    //    .iter()
+    //    .map(|addr| {
+    //        Address::decode(wallet.params(), &addr).ok_or_else(|| {
+    //            RpcError::owned(
+    //                LegacyCode::InvalidParameter.into(),
+    //                "Not a valid Zcash address",
+    //                Some(addr),
+    //            )
+    //        })
+    //    })
+    //    .collect::<Result<Vec<Address>, _>>()?;
+
+    let target_height = match as_of_height.map_or_else(
+        || {
+            wallet
+                .get_target_and_anchor_heights(NonZeroU32::MIN)
+                .map_or_else(
+                    |e| {
+                        Err(RpcError::owned(
+                            LegacyCode::Database.into(),
+                            "WalletDb::block_max_scanned failed",
+                            Some(format!("{e}")),
+                        ))
+                    },
+                    |h_opt| Ok(h_opt.map(|(h, _)| h)),
+                )
+        },
+        |h| Ok(Some(TargetHeight::from(BlockHeight::from(h + 1)))),
+    )? {
+        Some(h) => h,
+        None => {
+            return Ok(ResultType(vec![]));
+        }
     };
 
     let mut unspent_notes = vec![];
@@ -131,18 +177,16 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
             .map(|derivation| u32::from(derivation.account_index()));
 
         let notes = wallet
-            .select_spendable_notes(
+            .select_unspent_notes(
                 account_id,
-                TargetValue::AtLeast(Zatoshis::const_from_u64(MAX_MONEY)),
                 &[ShieldedProtocol::Sapling, ShieldedProtocol::Orchard],
                 target_height,
-                ConfirmationsPolicy::new_symmetrical(NonZeroU32::MIN, true),
                 &[],
             )
             .map_err(|e| {
                 RpcError::owned(
                     LegacyCode::Database.into(),
-                    "WalletDb::select_spendable_notes failed",
+                    "WalletDb::select_unspent_notes failed",
                     Some(format!("{e}")),
                 )
             })?;
@@ -182,19 +226,29 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                 .unwrap_or(("TODO: Always enhance every note".into(), None)))
         };
 
-        for note in notes.sapling() {
-            let confirmations = wallet
-                .get_tx_height(*note.txid())
-                .map_err(|e| {
-                    RpcError::owned(
-                        LegacyCode::Database.into(),
-                        "WalletDb::get_tx_height failed",
-                        Some(format!("{e}")),
-                    )
-                })?
-                .map(|h| target_height - h)
-                .unwrap_or(0);
+        let get_mined_height = |txid| {
+            wallet.get_tx_height(txid).map_err(|e| {
+                RpcError::owned(
+                    LegacyCode::Database.into(),
+                    "WalletDb::get_tx_height failed",
+                    Some(format!("{e}")),
+                )
+            })
+        };
 
+        for note in notes.sapling() {
+            let tx_mined_height = get_mined_height(*note.txid())?;
+
+            // skip notes that do not have sufficient confirmations according to minconf
+            if tx_mined_height
+                .iter()
+                .any(|h| *h > target_height.saturating_sub(minconf))
+            {
+                continue;
+            }
+
+            let confirmations = tx_mined_height
+                .map_or(0, |h| u32::from(target_height.saturating_sub(u32::from(h))));
             let is_internal = note.spending_key_scope() == Scope::Internal;
 
             let (memo, memo_str) =
@@ -240,6 +294,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                 outindex: note.output_index(),
                 confirmations,
                 spendable,
+                account_uuid: account_id.expose_uuid().to_string(),
                 account,
                 // TODO: Ensure we generate the same kind of shielded address as `zcashd`.
                 address: (!is_internal).then(|| note.note().recipient().encode(wallet.params())),
@@ -251,18 +306,18 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
         }
 
         for note in notes.orchard() {
-            let confirmations = wallet
-                .get_tx_height(*note.txid())
-                .map_err(|e| {
-                    RpcError::owned(
-                        LegacyCode::Database.into(),
-                        "WalletDb::get_tx_height failed",
-                        Some(format!("{e}")),
-                    )
-                })?
-                .map(|h| target_height - h)
-                .unwrap_or(0);
+            let tx_mined_height = get_mined_height(*note.txid())?;
 
+            // skip notes that do not have sufficient confirmations according to minconf
+            if tx_mined_height
+                .iter()
+                .any(|h| *h > target_height.saturating_sub(minconf))
+            {
+                continue;
+            }
+
+            let confirmations = tx_mined_height
+                .map_or(0, |h| u32::from(target_height.saturating_sub(u32::from(h))));
             let is_internal = note.spending_key_scope() == Scope::Internal;
 
             let (memo, memo_str) =
@@ -274,6 +329,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                 outindex: note.output_index(),
                 confirmations,
                 spendable,
+                account_uuid: account_id.expose_uuid().to_string(),
                 account,
                 // TODO: Ensure we generate the same kind of shielded address as `zcashd`.
                 address: (!is_internal).then(|| {

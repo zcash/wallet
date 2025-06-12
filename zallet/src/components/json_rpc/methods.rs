@@ -255,9 +255,31 @@ pub(crate) trait Rpc {
     /// returned, even though they are not immediately spendable.
     ///
     /// # Arguments
-    /// - `minconf` (default = 1)
+    /// - `minconf`: Select outputs with at least this many confirmations (default = 1)
+    /// - `maxconf`: Select outputs with at most this many confirmations (default = unlimited).
+    /// - `include_watch_only`: Include notes/utxos for which the wallet does not provide spending
+    ///   capability (default = false).
+    /// - `addresses`: A list of addresses for which to retrieve UTXOs. For shielded addresses that
+    ///   correspond to a unified account, unspent notes belonging to that account are returned
+    ///   irrespective of whether the provided address's diversifier corresponds to the diversifier
+    ///   of the address that received the funds. If this parameter is omitted or empty, all notes
+    ///   are returned, irrespective of account. (default = None)
+    /// - `as_of_height`: Execute the query as if it were run when the blockchain was at the height
+    ///   specified by this argument. The default is to use the entire blockchain that the node is
+    ///   aware of. -1 can be used as in other RPC calls to indicate the current height (including
+    ///   the mempool), but this does not support negative values in general. A “future” height will
+    ///   fall back to the current height. Any explicit value will cause the mempool to be ignored,
+    ///   meaning no unconfirmed tx will be considered.
+    ///   THIS API PARAMETER IS NOT YET SUPPORTED IN ZALLET
     #[method(name = "z_listunspent")]
-    async fn list_unspent(&self) -> list_unspent::Response;
+    async fn list_unspent(
+        &self,
+        minconf: Option<u32>,
+        maxconf: Option<u32>,
+        include_watch_only: Option<bool>,
+        addresses: Option<Vec<String>>,
+        as_of_height: Option<u32>,
+    ) -> list_unspent::Response;
 
     #[method(name = "z_getnotescount")]
     async fn get_notes_count(
@@ -498,8 +520,22 @@ impl RpcServer for RpcImpl {
         view_transaction::call(self.wallet().await?.as_ref(), self.chain().await?, txid).await
     }
 
-    async fn list_unspent(&self) -> list_unspent::Response {
-        list_unspent::call(self.wallet().await?.as_ref())
+    async fn list_unspent(
+        &self,
+        minconf: Option<u32>,
+        maxconf: Option<u32>,
+        include_watch_only: Option<bool>,
+        addresses: Option<Vec<String>>,
+        as_of_height: Option<u32>,
+    ) -> list_unspent::Response {
+        list_unspent::call(
+            self.wallet().await?.as_ref(),
+            minconf,
+            maxconf,
+            include_watch_only,
+            addresses,
+            as_of_height,
+        )
     }
 
     async fn get_notes_count(
