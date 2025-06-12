@@ -102,6 +102,9 @@ Changes to response:
     qualifies as change involves a bunch of annoying subtleties and the
     meaning of this field has varied between Sapling and Orchard.
   - A `walletInternal` field has been added.
+  - Transparent outputs are now included in the response array. The `pool`
+    field for such outputs is set to the string `"transparent"`.
+  - The `memo` field is now omitted for transparent outputs.
 
 ### `z_sendmany`
 

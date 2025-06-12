@@ -8,9 +8,13 @@ use jsonrpsee::{
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use transparent::keys::TransparentKeyScope;
 use zcash_client_backend::{
     address::UnifiedAddress,
-    data_api::{Account, AccountPurpose, InputSource, WalletRead, wallet::TargetHeight},
+    data_api::{
+        Account, AccountPurpose, InputSource, WalletRead,
+        wallet::{ConfirmationsPolicy, TargetHeight},
+    },
     encoding::AddressCodec,
     fees::{orchard::InputView as _, sapling::InputView as _},
     wallet::NoteId,
@@ -33,20 +37,20 @@ pub(crate) type Response = RpcResult<ResultType>;
 /// A list of unspent notes.
 #[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 #[serde(transparent)]
-pub(crate) struct ResultType(Vec<UnspentNote>);
+pub(crate) struct ResultType(Vec<UnspentOutput>);
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-pub(crate) struct UnspentNote {
+pub(crate) struct UnspentOutput {
     /// The ID of the transaction that created this output.
     txid: String,
 
     /// The shielded value pool.
     ///
-    /// One of `["sapling", "orchard"]`.
+    /// One of `["sapling", "orchard", "transparent"]`.
     pool: String,
 
-    /// The Sapling output or Orchard action index.
-    outindex: u16,
+    /// The Transparent UTXO, Sapling output or Orchard action index.
+    outindex: u32,
 
     /// The number of confirmations.
     confirmations: u32,
@@ -113,6 +117,11 @@ pub(crate) fn call(
     as_of_height: Option<i64>,
 ) -> Response {
     let minconf = minconf.unwrap_or(1);
+    let confirmations_policy = match NonZeroU32::new(minconf) {
+        Some(c) => ConfirmationsPolicy::new_symmetrical(c, false),
+        None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), true),
+    };
+
     //let include_watch_only = include_watch_only.unwrap_or(false);
     let addresses = addresses
         .unwrap_or_default()
@@ -181,7 +190,7 @@ pub(crate) fn call(
         }
     };
 
-    let mut unspent_notes = vec![];
+    let mut unspent_outputs = vec![];
 
     for account_id in wallet.get_account_ids().map_err(|e| {
         RpcError::owned(
@@ -203,6 +212,64 @@ pub(crate) fn call(
             .ok_or(RpcErrorCode::InternalError)?;
 
         let is_watch_only = !matches!(account.purpose(), AccountPurpose::Spending { .. });
+
+        let utxos = wallet
+            .get_transparent_receivers(account_id, true)
+            .map_err(|e| {
+                RpcError::owned(
+                    LegacyCode::Database.into(),
+                    "WalletDb::get_transparent_receivers failed",
+                    Some(format!("{e}")),
+                )
+            })?
+            .iter()
+            .try_fold(vec![], |mut acc, (addr, _)| {
+                let mut outputs = wallet
+                    .get_spendable_transparent_outputs(addr, target_height, confirmations_policy)
+                    .map_err(|e| {
+                        RpcError::owned(
+                            LegacyCode::Database.into(),
+                            "WalletDb::get_spendable_transparent_outputs failed",
+                            Some(format!("{e}")),
+                        )
+                    })?;
+
+                acc.append(&mut outputs);
+                Ok::<_, RpcError>(acc)
+            })?;
+
+        for utxo in utxos {
+            let confirmations = utxo.mined_height().map(|h| target_height - h).unwrap_or(0);
+
+            let wallet_internal = wallet
+                .get_transparent_address_metadata(account_id, utxo.recipient_address())
+                .map_err(|e| {
+                    RpcError::owned(
+                        LegacyCode::Database.into(),
+                        "WalletDb::get_transparent_address_metadata failed",
+                        Some(format!("{e}")),
+                    )
+                })?
+                .is_some_and(|m| m.scope() == TransparentKeyScope::INTERNAL);
+
+            unspent_outputs.push(UnspentOutput {
+                txid: utxo.outpoint().txid().to_string(),
+                pool: "transparent".into(),
+                outindex: utxo.outpoint().n(),
+                confirmations,
+                is_watch_only,
+                account_uuid: account_id.expose_uuid().to_string(),
+                address: utxo
+                    .txout()
+                    .recipient_address()
+                    .map(|addr| addr.encode(wallet.params())),
+                value: value_from_zatoshis(utxo.value()),
+                value_zat: u64::from(utxo.value()),
+                memo: None,
+                memo_str: None,
+                wallet_internal,
+            })
+        }
 
         let notes = wallet
             .select_unspent_notes(
@@ -275,10 +342,10 @@ pub(crate) fn call(
             let (memo, memo_str) =
                 get_memo(*note.txid(), ShieldedProtocol::Sapling, note.output_index())?;
 
-            unspent_notes.push(UnspentNote {
+            unspent_outputs.push(UnspentOutput {
                 txid: note.txid().to_string(),
                 pool: "sapling".into(),
-                outindex: note.output_index(),
+                outindex: note.output_index().into(),
                 confirmations,
                 is_watch_only,
                 account_uuid: account_id.expose_uuid().to_string(),
@@ -323,10 +390,10 @@ pub(crate) fn call(
             let (memo, memo_str) =
                 get_memo(*note.txid(), ShieldedProtocol::Orchard, note.output_index())?;
 
-            unspent_notes.push(UnspentNote {
+            unspent_outputs.push(UnspentOutput {
                 txid: note.txid().to_string(),
                 pool: "orchard".into(),
-                outindex: note.output_index(),
+                outindex: note.output_index().into(),
                 confirmations,
                 is_watch_only,
                 account_uuid: account_id.expose_uuid().to_string(),
@@ -345,5 +412,5 @@ pub(crate) fn call(
         }
     }
 
-    Ok(ResultType(unspent_notes))
+    Ok(ResultType(unspent_outputs))
 }
