@@ -390,6 +390,10 @@ criteria = "safe-to-deploy"
 version = "6.1.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.dcbor]]
+version = "0.19.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.deadpool]]
 version = "0.12.2"
 criteria = "safe-to-deploy"
@@ -558,6 +562,10 @@ criteria = "safe-to-deploy"
 version = "0.4.7"
 criteria = "safe-to-deploy"
 
+[[exemptions.half]]
+version = "2.6.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.halo2_gadgets]]
 version = "0.3.1"
 criteria = "safe-to-deploy"
@@ -680,6 +688,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.impl-codec]]
 version = "0.6.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.impl-codec]]
+version = "0.7.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.impl-trait-for-tuples]]
@@ -946,6 +958,10 @@ criteria = "safe-to-deploy"
 version = "0.5.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.paste]]
+version = "1.0.10"
+criteria = "safe-to-deploy"
+
 [[exemptions.pbkdf2]]
 version = "0.12.2"
 criteria = "safe-to-deploy"
@@ -1008,6 +1024,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.primitive-types]]
 version = "0.12.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.primitive-types]]
+version = "0.13.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.proc-macro-crate]]

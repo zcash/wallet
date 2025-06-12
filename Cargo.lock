@@ -1200,6 +1200,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dcbor"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "402f083d3c2daef249d4c06ef827c8b743ab88536f73dae52201f4de5abb0354"
+dependencies = [
+ "chrono",
+ "half",
+ "hex",
+ "paste",
+ "thiserror 1.0.69",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "deadpool"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1824,6 +1838,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "half"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "459196ed295495a68f7d7fe1d84f6c4b7ff0e21fe3017b2f283c6fac3ad803c9"
+dependencies = [
+ "cfg-if",
+ "crunchy",
+]
+
+[[package]]
 name = "halo2_gadgets"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2381,6 +2405,15 @@ name = "impl-codec"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba6a270039626615617f3f36d15fc827041df3b78c439da2cadfa47455a77f2f"
+dependencies = [
+ "parity-scale-codec",
+]
+
+[[package]]
+name = "impl-codec"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d40b9d5e17727407e55028eafc22b2dc68781786e6d7eb8a21103f5058e3a14"
 dependencies = [
  "parity-scale-codec",
 ]
@@ -3273,6 +3306,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
 name = "pbkdf2"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3452,8 +3491,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b34d9fd68ae0b74a41b21c03c2f62847aa0ffea044eee893b4c140b37e244e2"
 dependencies = [
  "fixed-hash",
- "impl-codec",
+ "impl-codec 0.6.0",
  "uint 0.9.5",
+]
+
+[[package]]
+name = "primitive-types"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d15600a7d856470b7d278b3fe0e311fe28c2526348549f8ef2ff7db3299c87f5"
+dependencies = [
+ "fixed-hash",
+ "impl-codec 0.7.1",
+ "uint 0.10.0",
 ]
 
 [[package]]
@@ -6116,7 +6166,7 @@ dependencies = [
 [[package]]
 name = "zaino-fetch"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
+source = "git+https://github.com/zingolabs/zaino.git?rev=4827c1347d5657fc89c8d3a96ec231bd15f82450#4827c1347d5657fc89c8d3a96ec231bd15f82450"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -6144,7 +6194,7 @@ dependencies = [
 [[package]]
 name = "zaino-proto"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
+source = "git+https://github.com/zingolabs/zaino.git?rev=4827c1347d5657fc89c8d3a96ec231bd15f82450#4827c1347d5657fc89c8d3a96ec231bd15f82450"
 dependencies = [
  "prost",
  "tonic 0.12.3",
@@ -6155,11 +6205,12 @@ dependencies = [
 [[package]]
 name = "zaino-state"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=688817639762b244a1617c30faf1abb586f8823b#688817639762b244a1617c30faf1abb586f8823b"
+source = "git+https://github.com/zingolabs/zaino.git?rev=4827c1347d5657fc89c8d3a96ec231bd15f82450#4827c1347d5657fc89c8d3a96ec231bd15f82450"
 dependencies = [
  "async-trait",
  "chrono",
  "dashmap",
+ "dcbor",
  "futures",
  "hex",
  "http",
@@ -6168,6 +6219,7 @@ dependencies = [
  "lazy-regex",
  "lmdb",
  "nonempty",
+ "primitive-types 0.13.1",
  "prost",
  "serde",
  "serde_json",
@@ -6181,6 +6233,8 @@ dependencies = [
  "whoami",
  "zaino-fetch",
  "zaino-proto",
+ "zcash_primitives",
+ "zcash_protocol",
  "zebra-chain",
  "zebra-rpc",
  "zebra-state",
@@ -6381,7 +6435,7 @@ source = "git+https://github.com/zcash/librustzcash.git?rev=b3727870470e58d18820
 dependencies = [
  "blake2b_simd",
  "byteorder",
- "primitive-types",
+ "primitive-types 0.12.2",
 ]
 
 [[package]]
@@ -6570,7 +6624,7 @@ dependencies = [
  "lazy_static",
  "num-integer",
  "orchard",
- "primitive-types",
+ "primitive-types 0.12.2",
  "rand_core 0.6.4",
  "rayon",
  "reddsa",

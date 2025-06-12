@@ -80,9 +80,9 @@ zcash_primitives = "0.22"
 zcash_proofs = "0.22"
 
 # Zcash chain state
-zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "688817639762b244a1617c30faf1abb586f8823b" }
-zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "688817639762b244a1617c30faf1abb586f8823b" }
-zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "688817639762b244a1617c30faf1abb586f8823b" }
+zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "4827c1347d5657fc89c8d3a96ec231bd15f82450" }
+zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "4827c1347d5657fc89c8d3a96ec231bd15f82450" }
+zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "4827c1347d5657fc89c8d3a96ec231bd15f82450" }
 zebra-chain = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "8b9fdd073d822a02768927634c635e84edb4eee4" }
 zebra-rpc = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "8b9fdd073d822a02768927634c635e84edb4eee4" }
 zebra-state = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "8b9fdd073d822a02768927634c635e84edb4eee4" }
