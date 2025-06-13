@@ -31,6 +31,7 @@ mod openrpc;
 mod recover_accounts;
 mod unlock_wallet;
 mod view_transaction;
+mod z_get_total_balance;
 mod z_send_many;
 
 #[rpc(server)]
@@ -301,6 +302,13 @@ pub(crate) trait Rpc {
         fee: Option<JsonValue>,
         #[argument(rename = "privacyPolicy")] privacy_policy: Option<String>,
     ) -> z_send_many::Response;
+
+    #[method(name = "z_gettotalbalance")]
+    async fn z_get_total_balance(
+        &self,
+        minconf: Option<u32>,
+        include_watch_only: Option<bool>,
+    ) -> z_get_total_balance::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -480,5 +488,13 @@ impl RpcServer for RpcImpl {
                 .await?,
             )
             .await)
+    }
+
+    async fn z_get_total_balance(
+        &self,
+        minconf: Option<u32>,
+        include_watch_only: Option<bool>,
+    ) -> z_get_total_balance::Response {
+        z_get_total_balance::call(self.wallet().await?.as_ref(), minconf, include_watch_only)
     }
 }
