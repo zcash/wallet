@@ -151,6 +151,13 @@ rec-privpol-privacy-weakening =
     to '{$policy}' or weaker if you wish to allow this transaction to proceed
     anyway.
 
+## RPC CLI errors
+
+err-rpc-cli-conn-failed = Failed to connect to the Zallet wallet's JSON-RPC port.
+err-rpc-cli-invalid-param = Invalid parameter '{$parameter}'
+err-rpc-cli-no-server = No JSON-RPC port is available.
+err-rpc-cli-request-failed = JSON-RPC request failed: {$error}
+
 ## zallet manpage
 
 man-zallet-about = A {-zcash} wallet.
