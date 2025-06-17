@@ -16,6 +16,9 @@ mod init_wallet_encryption;
 mod migrate_zcash_conf;
 mod start;
 
+#[cfg(feature = "rpc-cli")]
+pub(crate) mod rpc_cli;
+
 /// Zallet Configuration Filename
 pub const CONFIG_FILE: &str = "zallet.toml";
 
