@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::convert::Infallible;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 
 use abscissa_core::Application;
 use jsonrpsee::core::{JsonValue, RpcResult};
@@ -17,7 +17,7 @@ use zcash_client_backend::{
             create_proposed_transactions, input_selection::GreedyInputSelector, propose_transfer,
         },
     },
-    fees::{DustOutputPolicy, SplitPolicy, StandardFeeRule, standard::MultiOutputChangeStrategy},
+    fees::{DustOutputPolicy, StandardFeeRule, standard::MultiOutputChangeStrategy},
     wallet::OvkPolicy,
     zip321::{Payment, TransactionRequest},
 };
@@ -313,11 +313,7 @@ async fn run(
         None,
         ShieldedProtocol::Orchard,
         DustOutputPolicy::default(),
-        // TODO: Make this configurable. https://github.com/zcash/wallet/issues/140
-        SplitPolicy::with_min_output_value(
-            NonZeroUsize::new(4).expect("valid"),
-            Zatoshis::from_u64(100_0000).expect("valid"),
-        ),
+        APP.config().note_management.split_policy(),
     );
     // TODO: Once `zcash_client_backend` supports spending transparent coins arbitrarily,
     // consider using the privacy policy here to avoid selecting incompatible funds. This

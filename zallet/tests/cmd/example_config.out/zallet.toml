@@ -177,6 +177,22 @@ as_of_version = "0.0.0"
 #orchard_actions = 50
 
 
+# Note management configuration section.
+#
+# TODO: Decide whether this should be part of `[builder]`.
+[note_management]
+
+# The minimum value that Zallet should target for each shielded note in the wallet.
+#min_note_value = 1000000
+
+# The target number of shielded notes with value at least `min_note_value` that
+# Zallet should aim to maintain within each account in the wallet.
+#
+# If an account contains fewer such notes, Zallet will split larger notes (in change
+# outputs of other transactions) to achieve the target.
+#target_note_count = 4
+
+
 # Settings for the JSON-RPC interface.
 [rpc]
 

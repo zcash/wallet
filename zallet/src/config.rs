@@ -3,12 +3,14 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::net::SocketAddr;
+use std::num::NonZeroU16;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
 use serde::{Deserialize, Serialize};
-use zcash_protocol::consensus::NetworkType;
+use zcash_client_backend::fees::SplitPolicy;
+use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 use zip32::fingerprint::SeedFingerprint;
 
 use crate::network::{Network, RegTestNuParam};
@@ -47,6 +49,9 @@ pub struct ZalletConfig {
 
     /// Configurable limits on wallet operation (to prevent e.g. memory exhaustion).
     pub limits: LimitsSection,
+
+    /// Settings for how Zallet manages notes.
+    pub note_management: NoteManagementSection,
 
     /// Settings for the JSON-RPC interface.
     pub rpc: RpcSection,
@@ -349,6 +354,48 @@ impl LimitsSection {
     }
 }
 
+/// Note management configuration section.
+///
+/// TODO: Decide whether this should be part of `[builder]`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct NoteManagementSection {
+    /// The minimum value that Zallet should target for each shielded note in the wallet.
+    pub min_note_value: Option<u32>,
+
+    /// The target number of shielded notes with value at least `min_note_value` that
+    /// Zallet should aim to maintain within each account in the wallet.
+    ///
+    /// If an account contains fewer such notes, Zallet will split larger notes (in change
+    /// outputs of other transactions) to achieve the target.
+    pub target_note_count: Option<NonZeroU16>,
+}
+
+impl NoteManagementSection {
+    /// The minimum value that Zallet should target for each shielded note in the wallet.
+    ///
+    /// Default is 100_0000.
+    pub fn min_note_value(&self) -> Zatoshis {
+        Zatoshis::const_from_u64(self.min_note_value.unwrap_or(100_0000).into())
+    }
+
+    /// The target number of shielded notes with value at least `min_note_value` that
+    /// Zallet should aim to maintain within each account in the wallet.
+    ///
+    /// If an account contains fewer such notes, Zallet will split larger notes (in change
+    /// outputs of other transactions) to achieve the target.
+    ///
+    /// Default is 4.
+    pub fn target_note_count(&self) -> NonZeroU16 {
+        self.target_note_count
+            .unwrap_or_else(|| NonZeroU16::new(4).expect("valid"))
+    }
+
+    pub(crate) fn split_policy(&self) -> SplitPolicy {
+        SplitPolicy::with_min_output_value(self.target_note_count().into(), self.min_note_value())
+    }
+}
+
 /// Settings for the JSON-RPC interface.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
@@ -415,6 +462,14 @@ impl ZalletConfig {
             keystore("identity", &conf.keystore.identity),
             keystore("require_backup", conf.keystore.require_backup()),
             limits("orchard_actions", conf.limits.orchard_actions()),
+            note_management(
+                "min_note_value",
+                conf.note_management.min_note_value().into_u64(),
+            ),
+            note_management(
+                "target_note_count",
+                conf.note_management.target_note_count(),
+            ),
             rpc("bind", &conf.rpc.bind),
             rpc("timeout", conf.rpc.timeout().as_secs()),
         ]
@@ -432,6 +487,7 @@ impl ZalletConfig {
         const INDEXER: &str = "indexer";
         const KEYSTORE: &str = "keystore";
         const LIMITS: &str = "limits";
+        const NOTE_MANAGEMENT: &str = "note_management";
         const RPC: &str = "rpc";
         fn builder<T: Serialize>(
             f: &'static str,
@@ -480,6 +536,12 @@ impl ZalletConfig {
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(LIMITS, f, d)
+        }
+        fn note_management<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(NOTE_MANAGEMENT, f, d)
         }
         fn rpc<T: Serialize>(
             f: &'static str,
@@ -623,6 +685,9 @@ impl ZalletConfig {
                 INDEXER => write_section::<IndexerSection>(&mut config, field_name, &sec_def),
                 KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, &sec_def),
                 LIMITS => write_section::<LimitsSection>(&mut config, field_name, &sec_def),
+                NOTE_MANAGEMENT => {
+                    write_section::<NoteManagementSection>(&mut config, field_name, &sec_def)
+                }
                 RPC => write_section::<RpcSection>(&mut config, field_name, &sec_def),
                 _ => write_field::<Self>(&mut config, field_name, false, top_def(field_name)),
             }

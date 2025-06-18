@@ -71,6 +71,7 @@ fn setup_new_wallet() {
         writeln!(f, "[keystore]").unwrap();
         writeln!(f, "identity = \"{}\"", identity_file.display()).unwrap();
         writeln!(f, "[limits]").unwrap();
+        writeln!(f, "[note_management]").unwrap();
         writeln!(f, "[rpc]").unwrap();
         writeln!(f, "bind = []").unwrap();
     }

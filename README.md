@@ -47,6 +47,8 @@ identity = "/path/to/zallet/datadir/identity.txt"
 
 [limits]
 
+[note_management]
+
 [rpc]
 bind = ["127.0.0.1:SOMEPORT"]
 ```

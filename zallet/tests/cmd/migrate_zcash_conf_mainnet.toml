@@ -28,6 +28,8 @@ identity = ""
 
 [limits]
 
+[note_management]
+
 [rpc]
 bind = [
     "172.16.0.1:8234",

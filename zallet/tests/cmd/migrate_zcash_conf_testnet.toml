@@ -28,6 +28,8 @@ identity = ""
 
 [limits]
 
+[note_management]
+
 [rpc]
 
 """
