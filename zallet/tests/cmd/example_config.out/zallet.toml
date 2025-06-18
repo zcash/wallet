@@ -12,37 +12,6 @@
 # it set to the current default value means that Zallet will treat it as a
 # user-configured value going forward.
 
-# Whether the wallet should broadcast transactions.
-#broadcast = true
-
-# Directory to be used when exporting data.
-#export_dir = UNSET
-
-# Network type.
-network = "main"
-
-# Execute command when a wallet transaction changes.
-#
-# `%s` in the command is replaced by TxID.
-#notify = UNSET
-
-# The parameters for regtest mode.
-#
-# Ignored if `network` is not `NetworkType::Regtest`.
-#regtest_nuparams = []
-
-# By default, the wallet will not allow generation of new spending keys & addresses
-# from the mnemonic seed until the backup of that seed has been confirmed with the
-# `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
-# to allow generation of spending keys even if the backup has not yet been confirmed.
-#require_backup = true
-
-# Path to the wallet database file.
-#
-# TODO: If we decide to support a data directory, allow this to have a relative path
-# within it as well as a default name.
-#wallet_db = UNSET
-
 
 # Transaction builder configuration section.
 [builder]
@@ -57,6 +26,21 @@ network = "main"
 #
 # - Minimum: `TX_EXPIRING_SOON_THRESHOLD + 1`
 #tx_expiry_delta = 40
+
+
+# Consensus rules configuration section.
+#
+# The configuration in this section MUST match the configuration of the full node being
+# used as a data source in the `validator_address` field of the `[indexer]` section.
+[consensus]
+
+# Network type.
+network = "main"
+
+# The parameters for regtest mode.
+#
+# Ignored if `network` is not `NetworkType::Regtest`.
+#regtest_nuparams = []
 
 
 # Indexer configuration section.
@@ -93,12 +77,35 @@ network = "main"
 # Path to the age identity file that encrypts key material.
 #identity = ""
 
+# By default, the wallet will not allow generation of new spending keys & addresses
+# from the mnemonic seed until the backup of that seed has been confirmed with the
+# `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
+# to allow generation of spending keys even if the backup has not yet been confirmed.
+#require_backup = true
+
 
 # Limits configuration section.
 [limits]
 
 # The maximum number of Orchard actions permitted in a constructed transaction.
 #orchard_actions = 50
+
+
+# Outputs configuration section.
+#
+# TODO: Rename this, and/or merge with `[storage]` in some way.
+[outputs]
+
+# Whether the wallet should broadcast transactions.
+#broadcast = true
+
+# Directory to be used when exporting data.
+#export_dir = UNSET
+
+# Execute command when a wallet transaction changes.
+#
+# `%s` in the command is replaced by TxID.
+#notify = UNSET
 
 
 # RPC configuration section.
@@ -121,4 +128,16 @@ network = "main"
 
 # Timeout (in seconds) during HTTP requests.
 #timeout = 30
+
+
+# Storage configuration section.
+#
+# TODO: Rename this, and/or merge with `[outputs]` in some way.
+[storage]
+
+# Path to the wallet database file.
+#
+# TODO: If we decide to support a data directory, allow this to have a relative path
+# within it as well as a default name.
+#wallet = UNSET
 
