@@ -29,6 +29,7 @@ mod list_unspent;
 mod lock_wallet;
 mod openrpc;
 mod recover_accounts;
+mod stop;
 mod unlock_wallet;
 mod view_transaction;
 mod z_get_total_balance;
@@ -320,6 +321,15 @@ pub(crate) trait Rpc {
         fee: Option<JsonValue>,
         #[argument(rename = "privacyPolicy")] privacy_policy: Option<String>,
     ) -> z_send_many::Response;
+
+    /// Stop the running zallet process.
+    ///
+    /// # Notes
+    ///
+    /// - Works for non windows targets only.
+    /// - Works only if the network of the running zallet process is `Regtest`.
+    #[method(name = "stop")]
+    async fn stop(&self) -> stop::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -507,5 +517,9 @@ impl RpcServer for RpcImpl {
                 .await?,
             )
             .await)
+    }
+
+    async fn stop(&self) -> stop::Response {
+        stop::call(self.wallet().await?)
     }
 }
