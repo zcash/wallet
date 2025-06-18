@@ -14,6 +14,13 @@ network = "main"
 
 [external]
 
+[features]
+as_of_version = "0.0.0"
+
+[features.deprecated]
+
+[features.experimental]
+
 [indexer]
 
 [keystore]

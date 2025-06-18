@@ -30,6 +30,13 @@ wallet = "/path/to/zallet/datadir/data.sqlite"
 
 [external]
 
+[features]
+as_of_version = "0.0.0"
+
+[features.deprecated]
+
+[features.experimental]
+
 [indexer]
 validator_user = ".."
 validator_password = ".."

@@ -1,6 +1,6 @@
 //! Zallet Config
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -9,6 +9,7 @@ use std::time::Duration;
 use documented::{Documented, DocumentedFields};
 use serde::{Deserialize, Serialize};
 use zcash_protocol::consensus::NetworkType;
+use zip32::fingerprint::SeedFingerprint;
 
 use crate::network::{Network, RegTestNuParam};
 
@@ -19,6 +20,7 @@ use crate::network::{Network, RegTestNuParam};
 /// option with the current default value (which should be preserved). The sole exceptions
 /// to this are:
 /// - `consensus.network`, which cannot change for the lifetime of the wallet.
+/// - `features.as_of_version`, which must always be set to some Zallet version.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
@@ -33,6 +35,9 @@ pub struct ZalletConfig {
 
     /// Settings controlling how Zallet interacts with the outside world.
     pub external: ExternalSection,
+
+    /// Settings for Zallet features.
+    pub features: FeaturesSection,
 
     /// Settings for the Zaino chain indexer.
     pub indexer: IndexerSection,
@@ -151,6 +156,124 @@ impl ExternalSection {
     pub fn broadcast(&self) -> bool {
         self.broadcast.unwrap_or(true)
     }
+}
+
+/// Settings for Zallet features.
+#[derive(Clone, Debug, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct FeaturesSection {
+    /// The most recent Zallet version for which this configuration file has been updated.
+    ///
+    /// This is used by Zallet to detect any changes to experimental or deprecated
+    /// features. If this version is not compatible with `zallet --version`, most Zallet
+    /// commands will error and print out information about how to upgrade your wallet,
+    /// along with any changes you need to make to your usage of Zallet.
+    pub as_of_version: String,
+
+    /// Enable "legacy `zcashd` pool of funds" semantics for the given seed.
+    ///
+    /// The seed fingerprint should correspond to the mnemonic phrase of a `zcashd` wallet
+    /// imported into this Zallet wallet.
+    ///
+    /// # Background
+    ///
+    /// `zcashd` had two kinds of legacy balance semantics:
+    /// - The transparent JSON-RPC methods inherited from Bitcoin Core treated all
+    ///   spendable funds in the wallet as being part of a single pool of funds. RPCs like
+    ///   `sendmany` didn't allow the caller to specify which transparent addresses to
+    ///   spend funds from, and RPCs like `getbalance` similarly computed a balance across
+    ///   all transparent addresses returned from `getaddress`.
+    /// - The early shielded JSON-RPC methods added for Sprout treated every address as a
+    ///   separate pool of funds, because for Sprout there was a 1:1 relationship between
+    ///   addresses and spend authority. RPCs like `z_sendmany` only spent funds that were
+    ///   sent to the specified addressed, and RPCs like `z_getbalance` similarly computed
+    ///   a separate balance for each address (which became complex and unintuitive with
+    ///   the introduction of Sapling diversified addresses).
+    ///
+    /// With the advent of Unified Addresses and HD-derived spending keys, `zcashd` gained
+    /// its modern balance semantics: each full viewing key in the wallet is a separate
+    /// pool of funds, and treated as a separate "account". These are the semantics used
+    /// throughout Zallet, and that should be used by everyone going forward. They are
+    /// also incompatible with various legacy JSON-RPC methods that were deprecated in
+    /// `zcashd`, as well as some fields of general RPC methods; these methods and fields
+    /// are unavailable in Zallet by default.
+    ///
+    /// However, given that `zcashd` wallets can be imported into Zallet, and in order to
+    /// ease the transition between them, this setting turns on legacy balance semantics
+    /// in Zallet:
+    /// - JSON-RPC methods that only work with legacy semantics become available for use.
+    /// - Fields in responses that are calculated using legacy semantics are included.
+    ///
+    /// Due to how the legacy transparent semantics in particular were defined by Bitcoin
+    /// Core, this can only be done for a single `zcashd` wallet at a time. Given that
+    /// every `zcashd` wallet in production in 2025 had a single mnemonic seed phrase in
+    /// its wallet, we use its ZIP 32 seed fingerprint as the `zcashd` wallet identifier
+    /// in this setting.
+    #[serde(default, with = "seedfp")]
+    #[documented_fields(trim = false)]
+    pub legacy_pool_seed_fingerprint: Option<SeedFingerprint>,
+
+    /// Deprecated features.
+    pub deprecated: DeprecatedFeaturesSection,
+
+    /// Experimental features.
+    pub experimental: ExperimentalFeaturesSection,
+}
+
+mod seedfp {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+    use zip32::fingerprint::SeedFingerprint;
+
+    use crate::components::json_rpc::utils::{encode_seedfp_parameter, parse_seedfp};
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<SeedFingerprint>, D::Error> {
+        Option::<String>::deserialize(deserializer).and_then(|v| {
+            v.map(|s| parse_seedfp(&s).map_err(|e| D::Error::custom(e.to_string())))
+                .transpose()
+        })
+    }
+
+    pub(super) fn serialize<S: Serializer>(
+        seedfp: &Option<SeedFingerprint>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.serialize_some(&seedfp.as_ref().map(encode_seedfp_parameter))
+    }
+}
+
+impl Default for FeaturesSection {
+    fn default() -> Self {
+        Self {
+            as_of_version: env!("CARGO_PKG_VERSION").into(),
+            legacy_pool_seed_fingerprint: None,
+            deprecated: Default::default(),
+            experimental: Default::default(),
+        }
+    }
+}
+
+/// Deprecated Zallet features that you are temporarily re-enabling.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+pub struct DeprecatedFeaturesSection {
+    /// Any other deprecated feature flags.
+    ///
+    /// This is present to enable Zallet to detect the case where a deprecated feature has
+    /// been removed, and a user's configuration still enables it.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, toml::Value>,
+}
+
+/// Experimental Zallet features that you are using before they are stable.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+pub struct ExperimentalFeaturesSection {
+    /// Any other experimental feature flags.
+    ///
+    /// This is present to enable Zallet to detect the case where a experimental feature has
+    /// been either stabilised or removed, and a user's configuration still enables it.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, toml::Value>,
 }
 
 /// Settings for the Zaino chain indexer.
@@ -281,6 +404,8 @@ impl ZalletConfig {
             external("broadcast", conf.external.broadcast()),
             external("export_dir", &conf.external.export_dir),
             external("notify", &conf.external.notify),
+            features("as_of_version", &conf.features.as_of_version),
+            features("legacy_pool_seed_fingerprint", None::<String>),
             indexer("validator_address", conf.indexer.validator_address),
             indexer("validator_cookie_auth", conf.indexer.validator_cookie_auth),
             indexer("validator_cookie_path", &conf.indexer.validator_cookie_path),
@@ -301,6 +426,9 @@ impl ZalletConfig {
         const CONSENSUS: &str = "consensus";
         const DATABASE: &str = "database";
         const EXTERNAL: &str = "external";
+        const FEATURES: &str = "features";
+        const FEATURES_DEPRECATED: &str = "features.deprecated";
+        const FEATURES_EXPERIMENTAL: &str = "features.experimental";
         const INDEXER: &str = "indexer";
         const KEYSTORE: &str = "keystore";
         const LIMITS: &str = "limits";
@@ -328,6 +456,12 @@ impl ZalletConfig {
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(EXTERNAL, f, d)
+        }
+        fn features<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(FEATURES, f, d)
         }
         fn indexer<T: Serialize>(
             f: &'static str,
@@ -417,11 +551,25 @@ impl ZalletConfig {
 
             for field_name in T::FIELD_NAMES {
                 match (section_name, *field_name) {
+                    // Render nested sections.
+                    (FEATURES, "deprecated") => write_section::<DeprecatedFeaturesSection>(
+                        config,
+                        FEATURES_DEPRECATED,
+                        sec_def,
+                    ),
+                    (FEATURES, "experimental") => write_section::<ExperimentalFeaturesSection>(
+                        config,
+                        FEATURES_EXPERIMENTAL,
+                        sec_def,
+                    ),
+                    // Ignore flattened fields (present to support parsing old configs).
+                    (FEATURES_DEPRECATED, "other") | (FEATURES_EXPERIMENTAL, "other") => (),
                     // Render section field.
                     _ => write_field::<T>(
                         config,
                         field_name,
-                        section_name == CONSENSUS && *field_name == "network",
+                        (section_name == CONSENSUS && *field_name == "network")
+                            || (section_name == FEATURES && *field_name == "as_of_version"),
                         sec_def(section_name, field_name),
                     ),
                 }
@@ -435,7 +583,11 @@ impl ZalletConfig {
             field_default: Option<&toml::Value>,
         ) {
             let field_doc = T::get_field_docs(field_name).expect("present");
-            for line in field_doc.lines() {
+            for mut line in field_doc.lines() {
+                // Trim selectively-untrimmed lines for docs that contained indentations
+                // we want to preserve.
+                line = line.strip_prefix(' ').unwrap_or(line);
+
                 if line.is_empty() {
                     writeln!(config, "#").unwrap();
                 } else {
@@ -467,6 +619,7 @@ impl ZalletConfig {
                 CONSENSUS => write_section::<ConsensusSection>(&mut config, field_name, &sec_def),
                 DATABASE => write_section::<DatabaseSection>(&mut config, field_name, &sec_def),
                 EXTERNAL => write_section::<ExternalSection>(&mut config, field_name, &sec_def),
+                FEATURES => write_section::<FeaturesSection>(&mut config, field_name, &sec_def),
                 INDEXER => write_section::<IndexerSection>(&mut config, field_name, &sec_def),
                 KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, &sec_def),
                 LIMITS => write_section::<LimitsSection>(&mut config, field_name, &sec_def),

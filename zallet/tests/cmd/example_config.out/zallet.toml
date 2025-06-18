@@ -68,6 +68,67 @@ network = "main"
 #notify = UNSET
 
 
+# Settings for Zallet features.
+[features]
+
+# The most recent Zallet version for which this configuration file has been updated.
+#
+# This is used by Zallet to detect any changes to experimental or deprecated
+# features. If this version is not compatible with `zallet --version`, most Zallet
+# commands will error and print out information about how to upgrade your wallet,
+# along with any changes you need to make to your usage of Zallet.
+as_of_version = "0.0.0"
+
+# Enable "legacy `zcashd` pool of funds" semantics for the given seed.
+#
+# The seed fingerprint should correspond to the mnemonic phrase of a `zcashd` wallet
+# imported into this Zallet wallet.
+#
+# # Background
+#
+# `zcashd` had two kinds of legacy balance semantics:
+# - The transparent JSON-RPC methods inherited from Bitcoin Core treated all
+#   spendable funds in the wallet as being part of a single pool of funds. RPCs like
+#   `sendmany` didn't allow the caller to specify which transparent addresses to
+#   spend funds from, and RPCs like `getbalance` similarly computed a balance across
+#   all transparent addresses returned from `getaddress`.
+# - The early shielded JSON-RPC methods added for Sprout treated every address as a
+#   separate pool of funds, because for Sprout there was a 1:1 relationship between
+#   addresses and spend authority. RPCs like `z_sendmany` only spent funds that were
+#   sent to the specified addressed, and RPCs like `z_getbalance` similarly computed
+#   a separate balance for each address (which became complex and unintuitive with
+#   the introduction of Sapling diversified addresses).
+#
+# With the advent of Unified Addresses and HD-derived spending keys, `zcashd` gained
+# its modern balance semantics: each full viewing key in the wallet is a separate
+# pool of funds, and treated as a separate "account". These are the semantics used
+# throughout Zallet, and that should be used by everyone going forward. They are
+# also incompatible with various legacy JSON-RPC methods that were deprecated in
+# `zcashd`, as well as some fields of general RPC methods; these methods and fields
+# are unavailable in Zallet by default.
+#
+# However, given that `zcashd` wallets can be imported into Zallet, and in order to
+# ease the transition between them, this setting turns on legacy balance semantics
+# in Zallet:
+# - JSON-RPC methods that only work with legacy semantics become available for use.
+# - Fields in responses that are calculated using legacy semantics are included.
+#
+# Due to how the legacy transparent semantics in particular were defined by Bitcoin
+# Core, this can only be done for a single `zcashd` wallet at a time. Given that
+# every `zcashd` wallet in production in 2025 had a single mnemonic seed phrase in
+# its wallet, we use its ZIP 32 seed fingerprint as the `zcashd` wallet identifier
+# in this setting.
+#legacy_pool_seed_fingerprint = UNSET
+
+
+# Deprecated Zallet features that you are temporarily re-enabling.
+[features.deprecated]
+
+
+# Experimental Zallet features that you are using before they are stable.
+[features.experimental]
+
+
 # Settings for the Zaino chain indexer.
 [indexer]
 
