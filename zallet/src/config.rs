@@ -1,14 +1,16 @@
 //! Zallet Config
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::net::SocketAddr;
+use std::num::NonZeroU16;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
 use serde::{Deserialize, Serialize};
-use zcash_protocol::consensus::NetworkType;
+use zcash_client_backend::fees::SplitPolicy;
+use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 
 use crate::network::{Network, RegTestNuParam};
 
@@ -16,46 +18,21 @@ use crate::network::{Network, RegTestNuParam};
 ///
 /// Most fields are `Option<T>` to enable distinguishing between a user relying on a
 /// default value (which may change over time), and a user explicitly configuring an
-/// option with the current default value (which should be preserved). The sole exception
-/// to this is `network`, which cannot change for the lifetime of the wallet.
+/// option with the current default value (which should be preserved). The sole exceptions
+/// to this are:
+/// - `consensus.network`, which cannot change for the lifetime of the wallet.
+/// - `features.as_of_version`, which must always be set to some Zallet version.
 #[derive(Clone, Debug, Deserialize, Serialize, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
-    /// Whether the wallet should broadcast transactions.
-    pub broadcast: Option<bool>,
-
-    /// Directory to be used when exporting data.
-    pub export_dir: Option<String>,
-
-    /// Network type.
-    #[serde(with = "crate::network::kind")]
-    pub network: NetworkType,
-
-    /// Execute command when a wallet transaction changes.
-    ///
-    /// `%s` in the command is replaced by TxID.
-    pub notify: Option<String>,
-
-    /// The parameters for regtest mode.
-    ///
-    /// Ignored if `network` is not `NetworkType::Regtest`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub regtest_nuparams: Vec<RegTestNuParam>,
-
-    /// By default, the wallet will not allow generation of new spending keys & addresses
-    /// from the mnemonic seed until the backup of that seed has been confirmed with the
-    /// `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
-    /// to allow generation of spending keys even if the backup has not yet been confirmed.
-    pub require_backup: Option<bool>,
-
-    /// Path to the wallet database file.
-    ///
-    /// TODO: If we decide to support a data directory, allow this to have a relative path
-    /// within it as well as a default name.
-    pub wallet_db: Option<PathBuf>,
-
     /// Settings that affect transactions created by Zallet.
     pub builder: BuilderSection,
+
+    /// Zallet's understanding of the consensus rules.
+    pub consensus: ConsensusSection,
+
+    /// Settings for Zallet features.
+    pub features: FeaturesSection,
 
     /// Settings for the Zaino chain indexer.
     pub indexer: IndexerSection,
@@ -66,50 +43,33 @@ pub struct ZalletConfig {
     /// Configurable limits on wallet operation (to prevent e.g. memory exhaustion).
     pub limits: LimitsSection,
 
+    /// Settings for how Zallet manages notes.
+    pub note_management: NoteManagementSection,
+
+    /// "Outputs" of the Zallet wallet process.
+    pub outputs: OutputsSection,
+
     /// Settings for the JSON-RPC interface.
     pub rpc: RpcSection,
+
+    /// Settings for how Zallet stores data.
+    pub storage: StorageSection,
 }
 
 impl Default for ZalletConfig {
     fn default() -> Self {
         Self {
-            broadcast: None,
-            export_dir: None,
-            network: NetworkType::Main,
-            notify: None,
-            regtest_nuparams: vec![],
-            require_backup: None,
-            wallet_db: None,
             builder: Default::default(),
+            consensus: Default::default(),
+            features: Default::default(),
             indexer: Default::default(),
             keystore: Default::default(),
             limits: Default::default(),
+            note_management: Default::default(),
+            outputs: Default::default(),
             rpc: Default::default(),
+            storage: Default::default(),
         }
-    }
-}
-
-impl ZalletConfig {
-    /// Whether the wallet should broadcast transactions.
-    ///
-    /// Default is `true`.
-    pub fn broadcast(&self) -> bool {
-        self.broadcast.unwrap_or(true)
-    }
-
-    /// Returns the network parameters for this wallet.
-    pub fn network(&self) -> Network {
-        Network::from_type(self.network, &self.regtest_nuparams)
-    }
-
-    /// Whether to require a confirmed wallet backup.
-    ///
-    /// By default, the wallet will not allow generation of new spending keys & addresses
-    /// from the mnemonic seed until the backup of that seed has been confirmed with the
-    /// `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
-    /// to allow generation of spending keys even if the backup has not yet been confirmed.
-    pub fn require_backup(&self) -> bool {
-        self.require_backup.unwrap_or(true)
     }
 }
 
@@ -149,6 +109,112 @@ impl BuilderSection {
     }
 }
 
+/// Consensus rules configuration section.
+///
+/// The configuration in this section MUST match the configuration of the full node being
+/// used as a data source in the `validator_address` field of the `[indexer]` section.
+#[derive(Clone, Debug, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct ConsensusSection {
+    /// Network type.
+    #[serde(with = "crate::network::kind")]
+    pub network: NetworkType,
+
+    /// The parameters for regtest mode.
+    ///
+    /// Ignored if `network` is not `NetworkType::Regtest`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub regtest_nuparams: Vec<RegTestNuParam>,
+}
+
+impl Default for ConsensusSection {
+    fn default() -> Self {
+        Self {
+            network: NetworkType::Main,
+            regtest_nuparams: vec![],
+        }
+    }
+}
+
+impl ConsensusSection {
+    /// Returns the network parameters for this wallet.
+    pub fn network(&self) -> Network {
+        Network::from_type(self.network, &self.regtest_nuparams)
+    }
+}
+
+/// Zallet features configuration section.
+#[derive(Clone, Debug, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct FeaturesSection {
+    /// The most recent Zallet version for which this configuration file has been updated.
+    ///
+    /// This is used by Zallet to detect any changes to experimental or deprecated
+    /// features. If this version is not compatible with `zallet --version`, most Zallet
+    /// commands will error and print out information about how to upgrade your wallet,
+    /// along with any changes you need to make to your usage of Zallet.
+    pub as_of_version: String,
+
+    /// Enable support for the "legacy pools" of funds.
+    ///
+    /// This enables scanning and tracking of funds sent to addresses generated via the
+    /// `getnewaddress` and `z_getnewaddress` RPC methods (such as in wallets imported
+    /// from a `zcashd` node). It also enables any RPC methods that only work with the
+    /// legacy pool of funds, such as `getbalance`.
+    pub legacy_pools: Option<bool>,
+
+    /// Deprecated features.
+    pub deprecated: DeprecatedFeaturesSection,
+
+    /// Experimental features.
+    pub experimental: ExperimentalFeaturesSection,
+}
+
+impl Default for FeaturesSection {
+    fn default() -> Self {
+        Self {
+            as_of_version: env!("CARGO_PKG_VERSION").into(),
+            legacy_pools: None,
+            deprecated: Default::default(),
+            experimental: Default::default(),
+        }
+    }
+}
+
+impl FeaturesSection {
+    /// Enable support for the "legacy pools" of funds.
+    ///
+    /// This enables scanning and tracking of funds sent to addresses generated via the
+    /// `getnewaddress` and `z_getnewaddress` RPC methods (such as in wallets imported
+    /// from a `zcashd` node). It also enables any RPC methods that only work with the
+    /// legacy pool of funds, such as `getbalance`.
+    pub fn legacy_pools(&self) -> bool {
+        self.legacy_pools.unwrap_or(false)
+    }
+}
+
+/// Deprecated Zallet features that you are temporarily re-enabling.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+pub struct DeprecatedFeaturesSection {
+    /// Any other deprecated feature flags.
+    ///
+    /// This is present to enable Zallet to detect the case where a deprecated feature has
+    /// been removed, and a user's configuration still enables it.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, toml::Value>,
+}
+
+/// Experimental Zallet features that you are using before they are stable.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+pub struct ExperimentalFeaturesSection {
+    /// Any other experimental feature flags.
+    ///
+    /// This is present to enable Zallet to detect the case where a experimental feature has
+    /// been either stabilised or removed, and a user's configuration still enables it.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, toml::Value>,
+}
+
 /// Indexer configuration section.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
@@ -185,6 +251,24 @@ pub struct KeyStoreSection {
     /// Path to the age identity file that encrypts key material.
     // TODO: Change this to `PathBuf` once `age::IdentityFile::from_file` supports it.
     pub identity: String,
+
+    /// By default, the wallet will not allow generation of new spending keys & addresses
+    /// from the mnemonic seed until the backup of that seed has been confirmed with the
+    /// `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
+    /// to allow generation of spending keys even if the backup has not yet been confirmed.
+    pub require_backup: Option<bool>,
+}
+
+impl KeyStoreSection {
+    /// Whether to require a confirmed wallet backup.
+    ///
+    /// By default, the wallet will not allow generation of new spending keys & addresses
+    /// from the mnemonic seed until the backup of that seed has been confirmed with the
+    /// `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
+    /// to allow generation of spending keys even if the backup has not yet been confirmed.
+    pub fn require_backup(&self) -> bool {
+        self.require_backup.unwrap_or(true)
+    }
 }
 
 /// Limits configuration section.
@@ -201,6 +285,142 @@ impl LimitsSection {
     /// Default is 50.
     pub fn orchard_actions(&self) -> u16 {
         self.orchard_actions.unwrap_or(50)
+    }
+}
+
+/// Note management configuration section.
+///
+/// TODO: Decide whether this should be part of `[builder]`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct NoteManagementSection {
+    /// The minimum value that Zallet should target for each shielded note in the wallet.
+    pub min_note_value: Option<u32>,
+
+    /// The target number of shielded notes with value at least `min_note_value` that
+    /// Zallet should aim to maintain within each account in the wallet.
+    ///
+    /// If an account contains fewer such notes, Zallet will split larger notes (in change
+    /// outputs of other transactions) to achieve the target.
+    pub target_output_count: Option<NonZeroU16>,
+
+    /// The number of confirmations required for a trusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// A trusted TXO is a TXO received from a party where the wallet trusts that it will
+    /// remain mined in its original transaction, such as change outputs created by the
+    /// wallet's internal TXO handling.
+    ///
+    /// This setting is a trade-off between latency and reliability: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if a chain reorg occurs that unmines the receiving transaction.
+    pub trusted_confirmations: Option<u32>,
+
+    /// The number of confirmations required for an untrusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// An untrusted TXO is a TXO received by the wallet that is not trusted (in the sense
+    /// used by the `trusted_confirmations` setting).
+    ///
+    /// This setting is a trade-off between latency and security: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if the sender of the receiving transaction is malicious and
+    /// double-spends the funds.
+    ///
+    /// Values smaller than `trusted_confirmations` are ignored.
+    pub untrusted_confirmations: Option<u32>,
+}
+
+impl NoteManagementSection {
+    /// The minimum value that Zallet should target for each shielded note in the wallet.
+    ///
+    /// Default is 100_0000.
+    pub fn min_note_value(&self) -> Zatoshis {
+        Zatoshis::const_from_u64(self.min_note_value.unwrap_or(100_0000).into())
+    }
+
+    /// The target number of shielded notes with value at least `min_note_value` that
+    /// Zallet should aim to maintain within each account in the wallet.
+    ///
+    /// If an account contains fewer such notes, Zallet will split larger notes (in change
+    /// outputs of other transactions) to achieve the target.
+    ///
+    /// Default is 4.
+    pub fn target_output_count(&self) -> NonZeroU16 {
+        self.target_output_count
+            .unwrap_or_else(|| NonZeroU16::new(4).expect("valid"))
+    }
+
+    /// The number of confirmations required for a trusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// A trusted TXO is a TXO received from a party where the wallet trusts that it will
+    /// remain mined in its original transaction, such as change outputs created by the
+    /// wallet's internal TXO handling.
+    ///
+    /// This setting is a trade-off between latency and reliability: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if a chain reorg occurs that unmines the receiving transaction.
+    ///
+    /// Default is 3.
+    pub fn trusted_confirmations(&self) -> u32 {
+        self.trusted_confirmations.unwrap_or(3)
+    }
+
+    /// The number of confirmations required for an untrusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// An untrusted TXO is a TXO received by the wallet that is not trusted (in the sense
+    /// used by the `trusted_confirmations` setting).
+    ///
+    /// This setting is a trade-off between latency and security: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if the sender of the receiving transaction is malicious and
+    /// double-spends the funds.
+    ///
+    /// Values smaller than `trusted_confirmations` are ignored.
+    ///
+    /// Default is 10.
+    pub fn untrusted_confirmations(&self) -> u32 {
+        self.untrusted_confirmations.unwrap_or(10)
+    }
+
+    pub(crate) fn split_policy(&self) -> SplitPolicy {
+        SplitPolicy::with_min_output_value(self.target_output_count().into(), self.min_note_value())
+    }
+
+    /// TODO: Remove this once we have proper ZIP 315 confirmation handling in
+    /// `zcash_client_backend`.
+    pub(crate) fn default_minconf(&self) -> u32 {
+        self.untrusted_confirmations()
+            .max(self.trusted_confirmations())
+    }
+}
+
+/// Outputs configuration section.
+///
+/// TODO: Rename this, and/or merge with `[storage]` in some way.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct OutputsSection {
+    /// Whether the wallet should broadcast transactions.
+    pub broadcast: Option<bool>,
+
+    /// Directory to be used when exporting data.
+    pub export_dir: Option<String>,
+
+    /// Execute command when a wallet transaction changes.
+    ///
+    /// `%s` in the command is replaced by TxID.
+    pub notify: Option<String>,
+}
+
+impl OutputsSection {
+    /// Whether the wallet should broadcast transactions.
+    ///
+    /// Default is `true`.
+    pub fn broadcast(&self) -> bool {
+        self.broadcast.unwrap_or(true)
     }
 }
 
@@ -237,6 +457,19 @@ impl RpcSection {
     }
 }
 
+/// Storage configuration section.
+///
+/// TODO: Rename this, and/or merge with `[outputs]` in some way.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct StorageSection {
+    /// Path to the wallet database file.
+    ///
+    /// TODO: If we decide to support a data directory, allow this to have a relative path
+    /// within it as well as a default name.
+    pub wallet: Option<PathBuf>,
+}
+
 impl ZalletConfig {
     /// Generates an example config file, with all default values included as comments.
     pub fn generate_example() -> String {
@@ -245,18 +478,18 @@ impl ZalletConfig {
         // make changes to the config structure.
         let conf = ZalletConfig::default();
         let field_defaults = [
-            top("broadcast", conf.broadcast()),
-            top("export_dir", &conf.export_dir),
-            top("network", crate::network::kind::Serializable(conf.network)),
-            top("notify", &conf.notify),
-            top("regtest_nuparams", &conf.regtest_nuparams),
-            top("require_backup", conf.require_backup()),
-            top("wallet_db", &conf.wallet_db),
             builder(
                 "spend_zeroconf_change",
                 conf.builder.spend_zeroconf_change(),
             ),
             builder("tx_expiry_delta", conf.builder.tx_expiry_delta()),
+            consensus(
+                "network",
+                crate::network::kind::Serializable(conf.consensus.network),
+            ),
+            consensus("regtest_nuparams", &conf.consensus.regtest_nuparams),
+            features("as_of_version", &conf.features.as_of_version),
+            features("legacy_pools", conf.features.legacy_pools()),
             indexer("validator_address", conf.indexer.validator_address),
             indexer("validator_cookie_auth", conf.indexer.validator_cookie_auth),
             indexer("validator_cookie_path", &conf.indexer.validator_cookie_path),
@@ -264,30 +497,64 @@ impl ZalletConfig {
             indexer("validator_password", &conf.indexer.validator_password),
             indexer("db_path", &conf.indexer.db_path),
             keystore("identity", &conf.keystore.identity),
+            keystore("require_backup", conf.keystore.require_backup()),
             limits("orchard_actions", conf.limits.orchard_actions()),
+            note_management(
+                "min_note_value",
+                conf.note_management.min_note_value().into_u64(),
+            ),
+            note_management(
+                "target_output_count",
+                conf.note_management.target_output_count(),
+            ),
+            note_management(
+                "trusted_confirmations",
+                conf.note_management.trusted_confirmations(),
+            ),
+            note_management(
+                "untrusted_confirmations",
+                conf.note_management.untrusted_confirmations(),
+            ),
+            outputs("broadcast", conf.outputs.broadcast()),
+            outputs("export_dir", &conf.outputs.export_dir),
+            outputs("notify", &conf.outputs.notify),
             rpc("bind", &conf.rpc.bind),
             rpc("timeout", conf.rpc.timeout().as_secs()),
+            storage("wallet", &conf.storage.wallet),
         ]
         .into_iter()
         .collect::<HashMap<_, _>>();
 
         // The glue that makes the above easy to maintain:
         const BUILDER: &str = "builder";
+        const CONSENSUS: &str = "consensus";
+        const FEATURES: &str = "features";
+        const FEATURES_DEPRECATED: &str = "features.deprecated";
+        const FEATURES_EXPERIMENTAL: &str = "features.experimental";
         const INDEXER: &str = "indexer";
         const KEYSTORE: &str = "keystore";
         const LIMITS: &str = "limits";
+        const NOTE_MANAGEMENT: &str = "note_management";
+        const OUTPUTS: &str = "outputs";
         const RPC: &str = "rpc";
-        fn top<T: Serialize>(
-            f: &'static str,
-            d: T,
-        ) -> ((&'static str, &'static str), Option<toml::Value>) {
-            field("", f, d)
-        }
+        const STORAGE: &str = "storage";
         fn builder<T: Serialize>(
             f: &'static str,
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(BUILDER, f, d)
+        }
+        fn consensus<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(CONSENSUS, f, d)
+        }
+        fn features<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(FEATURES, f, d)
         }
         fn indexer<T: Serialize>(
             f: &'static str,
@@ -307,11 +574,29 @@ impl ZalletConfig {
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(LIMITS, f, d)
         }
+        fn note_management<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(NOTE_MANAGEMENT, f, d)
+        }
+        fn outputs<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(OUTPUTS, f, d)
+        }
         fn rpc<T: Serialize>(
             f: &'static str,
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(RPC, f, d)
+        }
+        fn storage<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(STORAGE, f, d)
         }
         fn field<T: Serialize>(
             s: &'static str,
@@ -362,17 +647,43 @@ impl ZalletConfig {
         fn write_section<'a, T: Documented + DocumentedFields>(
             config: &mut String,
             section_name: &'static str,
-            sec_def: impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
+            sec_def: &impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
         ) {
             writeln!(config).unwrap();
             for line in T::DOCS.lines() {
-                writeln!(config, "# {}", line).unwrap();
+                if line.is_empty() {
+                    writeln!(config, "#").unwrap();
+                } else {
+                    writeln!(config, "# {}", line).unwrap();
+                }
             }
             writeln!(config, "[{}]", section_name).unwrap();
             writeln!(config).unwrap();
 
             for field_name in T::FIELD_NAMES {
-                write_field::<T>(config, field_name, false, sec_def(section_name, field_name));
+                match (section_name, *field_name) {
+                    // Render nested sections.
+                    (FEATURES, "deprecated") => write_section::<DeprecatedFeaturesSection>(
+                        config,
+                        FEATURES_DEPRECATED,
+                        sec_def,
+                    ),
+                    (FEATURES, "experimental") => write_section::<ExperimentalFeaturesSection>(
+                        config,
+                        FEATURES_EXPERIMENTAL,
+                        sec_def,
+                    ),
+                    // Ignore flattened fields (present to support parsing old configs).
+                    (FEATURES_DEPRECATED, "other") | (FEATURES_EXPERIMENTAL, "other") => (),
+                    // Render section field.
+                    _ => write_field::<T>(
+                        config,
+                        field_name,
+                        (section_name == CONSENSUS && *field_name == "network")
+                            || (section_name == FEATURES && *field_name == "as_of_version"),
+                        sec_def(section_name, field_name),
+                    ),
+                }
             }
         }
 
@@ -411,17 +722,19 @@ impl ZalletConfig {
 
         for field_name in Self::FIELD_NAMES {
             match *field_name {
-                BUILDER => write_section::<BuilderSection>(&mut config, field_name, sec_def),
-                INDEXER => write_section::<IndexerSection>(&mut config, field_name, sec_def),
-                KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, sec_def),
-                LIMITS => write_section::<LimitsSection>(&mut config, field_name, sec_def),
-                RPC => write_section::<RpcSection>(&mut config, field_name, sec_def),
-                _ => write_field::<Self>(
-                    &mut config,
-                    field_name,
-                    *field_name == "network",
-                    top_def(field_name),
-                ),
+                BUILDER => write_section::<BuilderSection>(&mut config, field_name, &sec_def),
+                CONSENSUS => write_section::<ConsensusSection>(&mut config, field_name, &sec_def),
+                FEATURES => write_section::<FeaturesSection>(&mut config, field_name, &sec_def),
+                INDEXER => write_section::<IndexerSection>(&mut config, field_name, &sec_def),
+                KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, &sec_def),
+                LIMITS => write_section::<LimitsSection>(&mut config, field_name, &sec_def),
+                NOTE_MANAGEMENT => {
+                    write_section::<NoteManagementSection>(&mut config, field_name, &sec_def)
+                }
+                OUTPUTS => write_section::<OutputsSection>(&mut config, field_name, &sec_def),
+                RPC => write_section::<RpcSection>(&mut config, field_name, &sec_def),
+                STORAGE => write_section::<StorageSection>(&mut config, field_name, &sec_def),
+                _ => write_field::<Self>(&mut config, field_name, false, top_def(field_name)),
             }
         }
 

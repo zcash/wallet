@@ -5,6 +5,9 @@ stdout = """
 # Zallet configuration file
 # Migrated from ./zcash.conf
 
+[builder]
+
+[consensus]
 network = "regtest"
 regtest_nuparams = [
     "5ba81b19:1",
@@ -14,7 +17,12 @@ regtest_nuparams = [
     "e9ff75a6:200",
 ]
 
-[builder]
+[features]
+as_of_version = "0.0.0"
+
+[features.deprecated]
+
+[features.experimental]
 
 [indexer]
 
@@ -24,7 +32,13 @@ identity = ""
 [limits]
 orchard_actions = 250
 
+[note_management]
+
+[outputs]
+
 [rpc]
+
+[storage]
 
 """
 stderr = ""

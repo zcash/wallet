@@ -5,9 +5,17 @@ stdout = """
 # Zallet configuration file
 # Migrated from ./zcash.conf
 
+[builder]
+
+[consensus]
 network = "main"
 
-[builder]
+[features]
+as_of_version = "0.0.0"
+
+[features.deprecated]
+
+[features.experimental]
 
 [indexer]
 
@@ -16,11 +24,17 @@ identity = ""
 
 [limits]
 
+[note_management]
+
+[outputs]
+
 [rpc]
 bind = [
     "172.16.0.1:8234",
     "127.0.0.1:8234",
 ]
+
+[storage]
 
 """
 stderr = ""
