@@ -5,9 +5,14 @@ stdout = """
 # Zallet configuration file
 # Migrated from ./zcash.conf
 
+[builder]
+
+[consensus]
 network = "test"
 
-[builder]
+[database]
+
+[external]
 
 [indexer]
 

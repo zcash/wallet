@@ -396,17 +396,17 @@ fn build_actions() -> HashMap<&'static str, Action> {
         // TODO: Decide whether we want to allow renaming the `WalletDb` backing file.
         .chain(Action::ignore("wallet"))
         .chain(Action::map_bool("walletbroadcast", |config| {
-            &mut config.broadcast
+            &mut config.external.broadcast
         }))
         // TODO: Decide if we want to change how this is configured, or do anything to
         // improve security.
         .chain(Action::map(
             "walletnotify",
-            |config| &mut config.notify,
+            |config| &mut config.external.notify,
             |value| Ok(value.into()),
         ))
         .chain(Action::map_bool("walletrequirebackup", |config| {
-            &mut config.require_backup
+            &mut config.keystore.require_backup
         }))
         .chain(Some((
             "zapwallettxes",
@@ -501,18 +501,18 @@ fn build_actions() -> HashMap<&'static str, Action> {
         .chain(Action::ignore("experimentalfeatures"))
         .chain(Action::map(
             "exportdir",
-            |config| &mut config.export_dir,
+            |config| &mut config.external.export_dir,
             |value| Ok(value.into()),
         ))
         .chain(Action::map_multi(
             "nuparams",
-            |config| &mut config.regtest_nuparams,
+            |config| &mut config.consensus.regtest_nuparams,
             |value| RegTestNuParam::try_from(value.to_string()).map_err(|_| ()),
         ))
         .chain(Action::map_related(
             "regtest",
             "network",
-            |config| &mut config.network,
+            |config| &mut config.consensus.network,
             |value| Ok((value == "1").then_some(zcash_protocol::consensus::NetworkType::Regtest)),
         ))
         // TODO: Support mapping multi-arg options.
@@ -558,7 +558,7 @@ fn build_actions() -> HashMap<&'static str, Action> {
         .chain(Action::map_related(
             "testnet",
             "network",
-            |config| &mut config.network,
+            |config| &mut config.consensus.network,
             |value| Ok((value == "1").then_some(zcash_protocol::consensus::NetworkType::Test)),
         ));
 

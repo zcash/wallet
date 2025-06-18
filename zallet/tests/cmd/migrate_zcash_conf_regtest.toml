@@ -5,6 +5,9 @@ stdout = """
 # Zallet configuration file
 # Migrated from ./zcash.conf
 
+[builder]
+
+[consensus]
 network = "regtest"
 regtest_nuparams = [
     "5ba81b19:1",
@@ -14,7 +17,9 @@ regtest_nuparams = [
     "e9ff75a6:200",
 ]
 
-[builder]
+[database]
+
+[external]
 
 [indexer]
 

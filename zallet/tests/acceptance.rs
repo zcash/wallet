@@ -57,9 +57,12 @@ fn setup_new_wallet() {
 
     {
         let mut f = File::create(&config_file).unwrap();
-        writeln!(f, "network = \"test\"").unwrap();
-        writeln!(f, "wallet_db = \"{}\"", wallet_db.display()).unwrap();
         writeln!(f, "[builder]").unwrap();
+        writeln!(f, "[consensus]").unwrap();
+        writeln!(f, "network = \"test\"").unwrap();
+        writeln!(f, "[database]").unwrap();
+        writeln!(f, "wallet = \"{}\"", wallet_db.display()).unwrap();
+        writeln!(f, "[external]").unwrap();
         writeln!(f, "[indexer]").unwrap();
         writeln!(f, "[keystore]").unwrap();
         writeln!(f, "identity = \"{}\"", identity_file.display()).unwrap();

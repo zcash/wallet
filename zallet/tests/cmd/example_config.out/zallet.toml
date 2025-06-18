@@ -12,39 +12,8 @@
 # it set to the current default value means that Zallet will treat it as a
 # user-configured value going forward.
 
-# Whether the wallet should broadcast transactions.
-#broadcast = true
 
-# Directory to be used when exporting data.
-#export_dir = UNSET
-
-# Network type.
-network = "main"
-
-# Execute command when a wallet transaction changes.
-#
-# `%s` in the command is replaced by TxID.
-#notify = UNSET
-
-# The parameters for regtest mode.
-#
-# Ignored if `network` is not `NetworkType::Regtest`.
-#regtest_nuparams = []
-
-# By default, the wallet will not allow generation of new spending keys & addresses
-# from the mnemonic seed until the backup of that seed has been confirmed with the
-# `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
-# to allow generation of spending keys even if the backup has not yet been confirmed.
-#require_backup = true
-
-# Path to the wallet database file.
-#
-# TODO: If we decide to support a data directory, allow this to have a relative path
-# within it as well as a default name.
-#wallet_db = UNSET
-
-
-# Transaction builder configuration section.
+# Settings that affect transactions created by Zallet.
 [builder]
 
 # Whether to spend unconfirmed transparent change when sending transactions.
@@ -59,7 +28,47 @@ network = "main"
 #tx_expiry_delta = 40
 
 
-# Indexer configuration section.
+# Zallet's understanding of the consensus rules.
+#
+# The configuration in this section MUST match the configuration of the full node being
+# used as a data source in the `validator_address` field of the `[indexer]` section.
+[consensus]
+
+# Network type.
+network = "main"
+
+# The parameters for regtest mode.
+#
+# Ignored if `network` is not `NetworkType::Regtest`.
+#regtest_nuparams = []
+
+
+# Settings for how Zallet stores wallet data.
+[database]
+
+# Path to the wallet database file.
+#
+# TODO: If we decide to support a data directory, allow this to have a relative path
+# within it as well as a default name.
+#wallet = UNSET
+
+
+# Settings controlling how Zallet interacts with the outside world.
+[external]
+
+# Whether the wallet should broadcast transactions.
+#broadcast = true
+
+# Directory to be used when exporting data.
+#export_dir = UNSET
+
+# Execute command when a wallet transaction changes.
+#
+# `%s` in the command is replaced by TxID.
+#notify = UNSET
+
+
+# Settings for the Zaino chain indexer.
 [indexer]
 
 # IP address and port of the JSON-RPC interface for the full node / validator being
@@ -87,11 +96,17 @@ network = "main"
 #db_path = UNSET
 
 
-# Key store configuration section.
+# Settings for the key store.
 [keystore]
 
 # Path to the age identity file that encrypts key material.
 #identity = ""
+
+# By default, the wallet will not allow generation of new spending keys & addresses
+# from the mnemonic seed until the backup of that seed has been confirmed with the
+# `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
+# to allow generation of spending keys even if the backup has not yet been confirmed.
+#require_backup = true
 
 
 # Limits configuration section.
@@ -101,7 +116,7 @@ network = "main"
 #orchard_actions = 50
 
 
-# RPC configuration section.
+# Settings for the JSON-RPC interface.
 [rpc]
 
 # Addresses to listen for JSON-RPC connections.

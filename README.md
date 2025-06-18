@@ -20,10 +20,15 @@ Pick a folder to use for Zallet, and create a `zallet.toml` file in it. You
 currently need at least the following:
 
 ```toml
-network = "main"
-wallet_db = "/path/to/zallet/datadir/data.sqlite"
-
 [builder]
+
+[consensus]
+network = "main"
+
+[database]
+wallet = "/path/to/zallet/datadir/data.sqlite"
+
+[external]
 
 [indexer]
 validator_user = ".."
