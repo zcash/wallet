@@ -61,6 +61,7 @@ hyper = "1"
 jsonrpsee = "0.24"
 schemars = "0.9"
 tower = "0.4"
+nix = "0.30" # `stop` RPC method
 
 # Tracing
 console-subscriber = "0.4"
