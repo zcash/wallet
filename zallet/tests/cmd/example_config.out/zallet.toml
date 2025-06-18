@@ -43,6 +43,34 @@ network = "main"
 #regtest_nuparams = []
 
 
+# Zallet features configuration section.
+[features]
+
+# The most recent Zallet version for which this configuration file has been updated.
+#
+# This is used by Zallet to detect any changes to experimental or deprecated
+# features. If this version is not compatible with `zallet --version`, most Zallet
+# commands will error and print out information about how to upgrade your wallet,
+# along with any changes you need to make to your usage of Zallet.
+as_of_version = "0.0.0"
+
+# Enable support for the "legacy pools" of funds.
+#
+# This enables scanning and tracking of funds sent to addresses generated via the
+# `getnewaddress` and `z_getnewaddress` RPC methods (such as in wallets imported
+# from a `zcashd` node). It also enables any RPC methods that only work with the
+# legacy pool of funds, such as `getbalance`.
+#legacy_pools = false
+
+
+# Deprecated Zallet features that you are temporarily re-enabling.
+[features.deprecated]
+
+
+# Experimental Zallet features that you are using before they are stable.
+[features.experimental]
+
+
 # Indexer configuration section.
 [indexer]
 

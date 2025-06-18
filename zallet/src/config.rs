@@ -1,6 +1,6 @@
 //! Zallet Config
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -19,6 +19,7 @@ use crate::network::{Network, RegTestNuParam};
 /// option with the current default value (which should be preserved). The sole exceptions
 /// to this are:
 /// - `consensus.network`, which cannot change for the lifetime of the wallet.
+/// - `features.as_of_version`, which must always be set to some Zallet version.
 #[derive(Clone, Debug, Deserialize, Serialize, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
@@ -27,6 +28,9 @@ pub struct ZalletConfig {
 
     /// Zallet's understanding of the consensus rules.
     pub consensus: ConsensusSection,
+
+    /// Settings for Zallet features.
+    pub features: FeaturesSection,
 
     /// Settings for the Zaino chain indexer.
     pub indexer: IndexerSection,
@@ -52,6 +56,7 @@ impl Default for ZalletConfig {
         Self {
             builder: Default::default(),
             consensus: Default::default(),
+            features: Default::default(),
             indexer: Default::default(),
             keystore: Default::default(),
             limits: Default::default(),
@@ -130,6 +135,78 @@ impl ConsensusSection {
     pub fn network(&self) -> Network {
         Network::from_type(self.network, &self.regtest_nuparams)
     }
+}
+
+/// Zallet features configuration section.
+#[derive(Clone, Debug, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct FeaturesSection {
+    /// The most recent Zallet version for which this configuration file has been updated.
+    ///
+    /// This is used by Zallet to detect any changes to experimental or deprecated
+    /// features. If this version is not compatible with `zallet --version`, most Zallet
+    /// commands will error and print out information about how to upgrade your wallet,
+    /// along with any changes you need to make to your usage of Zallet.
+    pub as_of_version: String,
+
+    /// Enable support for the "legacy pools" of funds.
+    ///
+    /// This enables scanning and tracking of funds sent to addresses generated via the
+    /// `getnewaddress` and `z_getnewaddress` RPC methods (such as in wallets imported
+    /// from a `zcashd` node). It also enables any RPC methods that only work with the
+    /// legacy pool of funds, such as `getbalance`.
+    pub legacy_pools: Option<bool>,
+
+    /// Deprecated features.
+    pub deprecated: DeprecatedFeaturesSection,
+
+    /// Experimental features.
+    pub experimental: ExperimentalFeaturesSection,
+}
+
+impl Default for FeaturesSection {
+    fn default() -> Self {
+        Self {
+            as_of_version: env!("CARGO_PKG_VERSION").into(),
+            legacy_pools: None,
+            deprecated: Default::default(),
+            experimental: Default::default(),
+        }
+    }
+}
+
+impl FeaturesSection {
+    /// Enable support for the "legacy pools" of funds.
+    ///
+    /// This enables scanning and tracking of funds sent to addresses generated via the
+    /// `getnewaddress` and `z_getnewaddress` RPC methods (such as in wallets imported
+    /// from a `zcashd` node). It also enables any RPC methods that only work with the
+    /// legacy pool of funds, such as `getbalance`.
+    pub fn legacy_pools(&self) -> bool {
+        self.legacy_pools.unwrap_or(false)
+    }
+}
+
+/// Deprecated Zallet features that you are temporarily re-enabling.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+pub struct DeprecatedFeaturesSection {
+    /// Any other deprecated feature flags.
+    ///
+    /// This is present to enable Zallet to detect the case where a deprecated feature has
+    /// been removed, and a user's configuration still enables it.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, toml::Value>,
+}
+
+/// Experimental Zallet features that you are using before they are stable.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+pub struct ExperimentalFeaturesSection {
+    /// Any other experimental feature flags.
+    ///
+    /// This is present to enable Zallet to detect the case where a experimental feature has
+    /// been either stabilised or removed, and a user's configuration still enables it.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, toml::Value>,
 }
 
 /// Indexer configuration section.
@@ -296,6 +373,8 @@ impl ZalletConfig {
                 crate::network::kind::Serializable(conf.consensus.network),
             ),
             consensus("regtest_nuparams", &conf.consensus.regtest_nuparams),
+            features("as_of_version", &conf.features.as_of_version),
+            features("legacy_pools", conf.features.legacy_pools()),
             indexer("validator_address", conf.indexer.validator_address),
             indexer("validator_cookie_auth", conf.indexer.validator_cookie_auth),
             indexer("validator_cookie_path", &conf.indexer.validator_cookie_path),
@@ -318,6 +397,9 @@ impl ZalletConfig {
         // The glue that makes the above easy to maintain:
         const BUILDER: &str = "builder";
         const CONSENSUS: &str = "consensus";
+        const FEATURES: &str = "features";
+        const FEATURES_DEPRECATED: &str = "features.deprecated";
+        const FEATURES_EXPERIMENTAL: &str = "features.experimental";
         const INDEXER: &str = "indexer";
         const KEYSTORE: &str = "keystore";
         const LIMITS: &str = "limits";
@@ -335,6 +417,12 @@ impl ZalletConfig {
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(CONSENSUS, f, d)
+        }
+        fn features<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(FEATURES, f, d)
         }
         fn indexer<T: Serialize>(
             f: &'static str,
@@ -436,11 +524,25 @@ impl ZalletConfig {
 
             for field_name in T::FIELD_NAMES {
                 match (section_name, *field_name) {
+                    // Render nested sections.
+                    (FEATURES, "deprecated") => write_section::<DeprecatedFeaturesSection>(
+                        config,
+                        FEATURES_DEPRECATED,
+                        sec_def,
+                    ),
+                    (FEATURES, "experimental") => write_section::<ExperimentalFeaturesSection>(
+                        config,
+                        FEATURES_EXPERIMENTAL,
+                        sec_def,
+                    ),
+                    // Ignore flattened fields (present to support parsing old configs).
+                    (FEATURES_DEPRECATED, "other") | (FEATURES_EXPERIMENTAL, "other") => (),
                     // Render section field.
                     _ => write_field::<T>(
                         config,
                         field_name,
-                        section_name == CONSENSUS && *field_name == "network",
+                        (section_name == CONSENSUS && *field_name == "network")
+                            || (section_name == FEATURES && *field_name == "as_of_version"),
                         sec_def(section_name, field_name),
                     ),
                 }
@@ -484,6 +586,7 @@ impl ZalletConfig {
             match *field_name {
                 BUILDER => write_section::<BuilderSection>(&mut config, field_name, &sec_def),
                 CONSENSUS => write_section::<ConsensusSection>(&mut config, field_name, &sec_def),
+                FEATURES => write_section::<FeaturesSection>(&mut config, field_name, &sec_def),
                 INDEXER => write_section::<IndexerSection>(&mut config, field_name, &sec_def),
                 KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, &sec_def),
                 LIMITS => write_section::<LimitsSection>(&mut config, field_name, &sec_def),

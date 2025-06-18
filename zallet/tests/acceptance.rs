@@ -60,6 +60,10 @@ fn setup_new_wallet() {
         writeln!(f, "[builder]").unwrap();
         writeln!(f, "[consensus]").unwrap();
         writeln!(f, "network = \"test\"").unwrap();
+        writeln!(f, "[features]").unwrap();
+        writeln!(f, "as_of_version = \"{}\"", env!("CARGO_PKG_VERSION")).unwrap();
+        writeln!(f, "[features.deprecated]").unwrap();
+        writeln!(f, "[features.experimental]").unwrap();
         writeln!(f, "[indexer]").unwrap();
         writeln!(f, "[keystore]").unwrap();
         writeln!(f, "identity = \"{}\"", identity_file.display()).unwrap();

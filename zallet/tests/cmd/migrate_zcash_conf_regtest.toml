@@ -17,6 +17,13 @@ regtest_nuparams = [
     "e9ff75a6:200",
 ]
 
+[features]
+as_of_version = "0.0.0"
+
+[features.deprecated]
+
+[features.experimental]
+
 [indexer]
 
 [keystore]
