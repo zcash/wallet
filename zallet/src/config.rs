@@ -402,7 +402,7 @@ impl ZalletConfig {
         fn write_section<'a, T: Documented + DocumentedFields>(
             config: &mut String,
             section_name: &'static str,
-            sec_def: impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
+            sec_def: &impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
         ) {
             writeln!(config).unwrap();
             for line in T::DOCS.lines() {
@@ -416,12 +416,15 @@ impl ZalletConfig {
             writeln!(config).unwrap();
 
             for field_name in T::FIELD_NAMES {
-                write_field::<T>(
-                    config,
-                    field_name,
-                    section_name == CONSENSUS && *field_name == "network",
-                    sec_def(section_name, field_name),
-                );
+                match (section_name, *field_name) {
+                    // Render section field.
+                    _ => write_field::<T>(
+                        config,
+                        field_name,
+                        section_name == CONSENSUS && *field_name == "network",
+                        sec_def(section_name, field_name),
+                    ),
+                }
             }
         }
 
@@ -460,14 +463,14 @@ impl ZalletConfig {
 
         for field_name in Self::FIELD_NAMES {
             match *field_name {
-                BUILDER => write_section::<BuilderSection>(&mut config, field_name, sec_def),
-                CONSENSUS => write_section::<ConsensusSection>(&mut config, field_name, sec_def),
-                DATABASE => write_section::<DatabaseSection>(&mut config, field_name, sec_def),
-                EXTERNAL => write_section::<ExternalSection>(&mut config, field_name, sec_def),
-                INDEXER => write_section::<IndexerSection>(&mut config, field_name, sec_def),
-                KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, sec_def),
-                LIMITS => write_section::<LimitsSection>(&mut config, field_name, sec_def),
-                RPC => write_section::<RpcSection>(&mut config, field_name, sec_def),
+                BUILDER => write_section::<BuilderSection>(&mut config, field_name, &sec_def),
+                CONSENSUS => write_section::<ConsensusSection>(&mut config, field_name, &sec_def),
+                DATABASE => write_section::<DatabaseSection>(&mut config, field_name, &sec_def),
+                EXTERNAL => write_section::<ExternalSection>(&mut config, field_name, &sec_def),
+                INDEXER => write_section::<IndexerSection>(&mut config, field_name, &sec_def),
+                KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, &sec_def),
+                LIMITS => write_section::<LimitsSection>(&mut config, field_name, &sec_def),
+                RPC => write_section::<RpcSection>(&mut config, field_name, &sec_def),
                 _ => write_field::<Self>(&mut config, field_name, false, top_def(field_name)),
             }
         }
