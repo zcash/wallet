@@ -3,12 +3,14 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::net::SocketAddr;
+use std::num::NonZeroU16;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
 use serde::{Deserialize, Serialize};
-use zcash_protocol::consensus::NetworkType;
+use zcash_client_backend::fees::SplitPolicy;
+use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 
 use crate::network::{Network, RegTestNuParam};
 
@@ -41,6 +43,9 @@ pub struct ZalletConfig {
     /// Configurable limits on wallet operation (to prevent e.g. memory exhaustion).
     pub limits: LimitsSection,
 
+    /// Settings for how Zallet manages notes.
+    pub note_management: NoteManagementSection,
+
     /// "Outputs" of the Zallet wallet process.
     pub outputs: OutputsSection,
 
@@ -60,6 +65,7 @@ impl Default for ZalletConfig {
             indexer: Default::default(),
             keystore: Default::default(),
             limits: Default::default(),
+            note_management: Default::default(),
             outputs: Default::default(),
             rpc: Default::default(),
             storage: Default::default(),
@@ -282,6 +288,115 @@ impl LimitsSection {
     }
 }
 
+/// Note management configuration section.
+///
+/// TODO: Decide whether this should be part of `[builder]`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct NoteManagementSection {
+    /// The minimum value that Zallet should target for each shielded note in the wallet.
+    pub min_note_value: Option<u32>,
+
+    /// The target number of shielded notes with value at least `min_note_value` that
+    /// Zallet should aim to maintain within each account in the wallet.
+    ///
+    /// If an account contains fewer such notes, Zallet will split larger notes (in change
+    /// outputs of other transactions) to achieve the target.
+    pub target_output_count: Option<NonZeroU16>,
+
+    /// The number of confirmations required for a trusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// A trusted TXO is a TXO received from a party where the wallet trusts that it will
+    /// remain mined in its original transaction, such as change outputs created by the
+    /// wallet's internal TXO handling.
+    ///
+    /// This setting is a trade-off between latency and reliability: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if a chain reorg occurs that unmines the receiving transaction.
+    pub trusted_confirmations: Option<u32>,
+
+    /// The number of confirmations required for an untrusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// An untrusted TXO is a TXO received by the wallet that is not trusted (in the sense
+    /// used by the `trusted_confirmations` setting).
+    ///
+    /// This setting is a trade-off between latency and security: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if the sender of the receiving transaction is malicious and
+    /// double-spends the funds.
+    ///
+    /// Values smaller than `trusted_confirmations` are ignored.
+    pub untrusted_confirmations: Option<u32>,
+}
+
+impl NoteManagementSection {
+    /// The minimum value that Zallet should target for each shielded note in the wallet.
+    ///
+    /// Default is 100_0000.
+    pub fn min_note_value(&self) -> Zatoshis {
+        Zatoshis::const_from_u64(self.min_note_value.unwrap_or(100_0000).into())
+    }
+
+    /// The target number of shielded notes with value at least `min_note_value` that
+    /// Zallet should aim to maintain within each account in the wallet.
+    ///
+    /// If an account contains fewer such notes, Zallet will split larger notes (in change
+    /// outputs of other transactions) to achieve the target.
+    ///
+    /// Default is 4.
+    pub fn target_output_count(&self) -> NonZeroU16 {
+        self.target_output_count
+            .unwrap_or_else(|| NonZeroU16::new(4).expect("valid"))
+    }
+
+    /// The number of confirmations required for a trusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// A trusted TXO is a TXO received from a party where the wallet trusts that it will
+    /// remain mined in its original transaction, such as change outputs created by the
+    /// wallet's internal TXO handling.
+    ///
+    /// This setting is a trade-off between latency and reliability: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if a chain reorg occurs that unmines the receiving transaction.
+    ///
+    /// Default is 3.
+    pub fn trusted_confirmations(&self) -> u32 {
+        self.trusted_confirmations.unwrap_or(3)
+    }
+
+    /// The number of confirmations required for an untrusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// An untrusted TXO is a TXO received by the wallet that is not trusted (in the sense
+    /// used by the `trusted_confirmations` setting).
+    ///
+    /// This setting is a trade-off between latency and security: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if the sender of the receiving transaction is malicious and
+    /// double-spends the funds.
+    ///
+    /// Values smaller than `trusted_confirmations` are ignored.
+    ///
+    /// Default is 10.
+    pub fn untrusted_confirmations(&self) -> u32 {
+        self.untrusted_confirmations.unwrap_or(10)
+    }
+
+    pub(crate) fn split_policy(&self) -> SplitPolicy {
+        SplitPolicy::with_min_output_value(self.target_output_count().into(), self.min_note_value())
+    }
+
+    /// TODO: Remove this once we have proper ZIP 315 confirmation handling in
+    /// `zcash_client_backend`.
+    pub(crate) fn default_minconf(&self) -> u32 {
+        self.untrusted_confirmations()
+            .max(self.trusted_confirmations())
+    }
+}
+
 /// Outputs configuration section.
 ///
 /// TODO: Rename this, and/or merge with `[storage]` in some way.
@@ -384,6 +499,22 @@ impl ZalletConfig {
             keystore("identity", &conf.keystore.identity),
             keystore("require_backup", conf.keystore.require_backup()),
             limits("orchard_actions", conf.limits.orchard_actions()),
+            note_management(
+                "min_note_value",
+                conf.note_management.min_note_value().into_u64(),
+            ),
+            note_management(
+                "target_output_count",
+                conf.note_management.target_output_count(),
+            ),
+            note_management(
+                "trusted_confirmations",
+                conf.note_management.trusted_confirmations(),
+            ),
+            note_management(
+                "untrusted_confirmations",
+                conf.note_management.untrusted_confirmations(),
+            ),
             outputs("broadcast", conf.outputs.broadcast()),
             outputs("export_dir", &conf.outputs.export_dir),
             outputs("notify", &conf.outputs.notify),
@@ -403,6 +534,7 @@ impl ZalletConfig {
         const INDEXER: &str = "indexer";
         const KEYSTORE: &str = "keystore";
         const LIMITS: &str = "limits";
+        const NOTE_MANAGEMENT: &str = "note_management";
         const OUTPUTS: &str = "outputs";
         const RPC: &str = "rpc";
         const STORAGE: &str = "storage";
@@ -441,6 +573,12 @@ impl ZalletConfig {
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(LIMITS, f, d)
+        }
+        fn note_management<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(NOTE_MANAGEMENT, f, d)
         }
         fn outputs<T: Serialize>(
             f: &'static str,
@@ -590,6 +728,9 @@ impl ZalletConfig {
                 INDEXER => write_section::<IndexerSection>(&mut config, field_name, &sec_def),
                 KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, &sec_def),
                 LIMITS => write_section::<LimitsSection>(&mut config, field_name, &sec_def),
+                NOTE_MANAGEMENT => {
+                    write_section::<NoteManagementSection>(&mut config, field_name, &sec_def)
+                }
                 OUTPUTS => write_section::<OutputsSection>(&mut config, field_name, &sec_def),
                 RPC => write_section::<RpcSection>(&mut config, field_name, &sec_def),
                 STORAGE => write_section::<StorageSection>(&mut config, field_name, &sec_def),

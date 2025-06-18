@@ -119,6 +119,48 @@ as_of_version = "0.0.0"
 #orchard_actions = 50
 
 
+# Note management configuration section.
+#
+# TODO: Decide whether this should be part of `[builder]`.
+[note_management]
+
+# The minimum value that Zallet should target for each shielded note in the wallet.
+#min_note_value = 1000000
+
+# The target number of shielded notes with value at least `min_note_value` that
+# Zallet should aim to maintain within each account in the wallet.
+#
+# If an account contains fewer such notes, Zallet will split larger notes (in change
+# outputs of other transactions) to achieve the target.
+#target_output_count = 4
+
+# The number of confirmations required for a trusted transaction output (TXO) to
+# become spendable.
+#
+# A trusted TXO is a TXO received from a party where the wallet trusts that it will
+# remain mined in its original transaction, such as change outputs created by the
+# wallet's internal TXO handling.
+#
+# This setting is a trade-off between latency and reliability: a smaller value makes
+# trusted TXOs spendable more quickly, but the spending transaction has a higher
+# risk of failure if a chain reorg occurs that unmines the receiving transaction.
+#trusted_confirmations = 3
+
+# The number of confirmations required for an untrusted transaction output (TXO) to
+# become spendable.
+#
+# An untrusted TXO is a TXO received by the wallet that is not trusted (in the sense
+# used by the `trusted_confirmations` setting).
+#
+# This setting is a trade-off between latency and security: a smaller value makes
+# trusted TXOs spendable more quickly, but the spending transaction has a higher
+# risk of failure if the sender of the receiving transaction is malicious and
+# double-spends the funds.
+#
+# Values smaller than `trusted_confirmations` are ignored.
+#untrusted_confirmations = 10
+
+
 # Outputs configuration section.
 #
 # TODO: Rename this, and/or merge with `[storage]` in some way.

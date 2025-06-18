@@ -32,6 +32,8 @@ identity = ""
 [limits]
 orchard_actions = 250
 
+[note_management]
+
 [outputs]
 
 [rpc]

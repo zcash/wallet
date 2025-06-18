@@ -24,6 +24,8 @@ identity = ""
 
 [limits]
 
+[note_management]
+
 [outputs]
 
 [rpc]
