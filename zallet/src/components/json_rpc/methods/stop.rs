@@ -1,6 +1,5 @@
 use documented::Documented;
 use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
-use nix::sys::signal;
 use schemars::JsonSchema;
 use serde::Serialize;
 use zcash_protocol::consensus::{NetworkType, Parameters};
@@ -18,14 +17,15 @@ pub(crate) struct ResultType(());
 pub(crate) fn call(wallet: DbHandle) -> Response {
     #[cfg(not(target_os = "windows"))]
     match wallet.params().network_type() {
-        NetworkType::Regtest => {
-            match signal::raise(signal::SIGINT) {
-                Ok(_) => Ok(ResultType(())),
-                Err(_) => Err(RpcErrorCode::InternalError.into()),
-            }
+        NetworkType::Regtest => match nix::sys::signal::raise(nix::sys::signal::SIGINT) {
+            Ok(_) => Ok(ResultType(())),
+            Err(_) => Err(RpcErrorCode::InternalError.into()),
         },
         _ => Err(RpcErrorCode::MethodNotFound.into()),
     }
     #[cfg(target_os = "windows")]
-    Err(RpcErrorCode::MethodNotFound.into())
+    {
+        let _ = wallet;
+        Err(RpcErrorCode::MethodNotFound.into())
+    }
 }
