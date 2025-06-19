@@ -208,6 +208,24 @@ pub(crate) trait Rpc {
     #[method(name = "listaddresses")]
     async fn list_addresses(&self) -> list_addresses::Response;
 
+    /// Returns the total value of funds stored in the node's wallet.
+    ///
+    /// TODO: Currently watchonly addresses cannot be omitted; `includeWatchonly` must be
+    /// set to true.
+    ///
+    /// # Arguments
+    ///
+    /// - `minconf` (numeric, optional, default=1) Only include private and transparent
+    ///   transactions confirmed at least this many times.
+    /// - `includeWatchonly` (bool, optional, default=false) Also include balance in
+    ///   watchonly addresses (see 'importaddress' and 'z_importviewingkey').
+    #[method(name = "z_gettotalbalance")]
+    async fn z_get_total_balance(
+        &self,
+        minconf: Option<u32>,
+        #[argument(rename = "includeWatchonly")] include_watch_only: Option<bool>,
+    ) -> z_get_total_balance::Response;
+
     #[method(name = "z_listunifiedreceivers")]
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response;
 
@@ -302,13 +320,6 @@ pub(crate) trait Rpc {
         fee: Option<JsonValue>,
         #[argument(rename = "privacyPolicy")] privacy_policy: Option<String>,
     ) -> z_send_many::Response;
-
-    #[method(name = "z_gettotalbalance")]
-    async fn z_get_total_balance(
-        &self,
-        minconf: Option<u32>,
-        include_watch_only: Option<bool>,
-    ) -> z_get_total_balance::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -445,6 +456,14 @@ impl RpcServer for RpcImpl {
         list_addresses::call(self.wallet().await?.as_ref())
     }
 
+    async fn z_get_total_balance(
+        &self,
+        minconf: Option<u32>,
+        include_watch_only: Option<bool>,
+    ) -> z_get_total_balance::Response {
+        z_get_total_balance::call(self.wallet().await?.as_ref(), minconf, include_watch_only)
+    }
+
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response {
         list_unified_receivers::call(unified_address)
     }
@@ -488,13 +507,5 @@ impl RpcServer for RpcImpl {
                 .await?,
             )
             .await)
-    }
-
-    async fn z_get_total_balance(
-        &self,
-        minconf: Option<u32>,
-        include_watch_only: Option<bool>,
-    ) -> z_get_total_balance::Response {
-        z_get_total_balance::call(self.wallet().await?.as_ref(), minconf, include_watch_only)
     }
 }
