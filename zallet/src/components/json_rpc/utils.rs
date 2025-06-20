@@ -1,10 +1,13 @@
 use std::collections::HashSet;
+use std::fmt;
 
 use jsonrpsee::{
     core::{JsonValue, RpcResult},
     types::ErrorCode as RpcErrorCode,
 };
 use rust_decimal::Decimal;
+use schemars::{JsonSchema, json_schema};
+use serde::Serialize;
 use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
 use zcash_protocol::{
@@ -153,18 +156,70 @@ pub(super) fn zatoshis_from_value(value: &JsonValue) -> RpcResult<Zatoshis> {
     })
 }
 
-// TODO: https://github.com/zcash/wallet/issues/15
-pub(super) fn value_from_zatoshis(value: Zatoshis) -> f64 {
-    value_from_zat_balance(value.into())
-        .try_into()
-        .expect("valid")
+pub(super) fn value_from_zatoshis(value: Zatoshis) -> JsonZec {
+    JsonZec(value_from_zat_balance(value.into()).0)
 }
 
 /// Equivalent of `ValueFromAmount` in `zcashd`
-pub(super) fn value_from_zat_balance(value: ZatBalance) -> Decimal {
-    (Decimal::from(i64::from(value)) / Decimal::from(COIN))
-        // Matches the truncated-remainder rounding that `zcashd` used.
-        .trunc_with_scale(8)
+pub(super) fn value_from_zat_balance(value: ZatBalance) -> JsonZecBalance {
+    JsonZecBalance(
+        (Decimal::from(i64::from(value)) / Decimal::from(COIN))
+            // Matches the truncated-remainder rounding that `zcashd` used.
+            .trunc_with_scale(8),
+    )
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
+pub(super) struct JsonZec(Decimal);
+
+impl fmt::Display for JsonZec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl JsonSchema for JsonZec {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ZEC".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        json_schema!({
+            "type": "number",
+            "minimum": 0,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
+pub(super) struct JsonZecBalance(Decimal);
+
+impl fmt::Display for JsonZecBalance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl JsonSchema for JsonZecBalance {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ZECBalance".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        json_schema!({
+            "type": "number",
+        })
+    }
 }
 
 /// Upper bound for mantissa.

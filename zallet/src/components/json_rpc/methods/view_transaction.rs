@@ -18,7 +18,7 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{parse_txid, value_from_zatoshis},
+        utils::{JsonZec, parse_txid, value_from_zatoshis},
     },
 };
 
@@ -74,7 +74,7 @@ struct Spend {
     address: Option<String>,
 
     /// The amount in ZEC.
-    value: f64,
+    value: JsonZec,
 
     /// The amount in zatoshis.
     #[serde(rename = "valueZat")]
@@ -111,7 +111,7 @@ struct Output {
     wallet_internal: bool,
 
     /// The amount in ZEC.
-    value: f64,
+    value: JsonZec,
 
     /// The amount in zatoshis.
     #[serde(rename = "valueZat")]

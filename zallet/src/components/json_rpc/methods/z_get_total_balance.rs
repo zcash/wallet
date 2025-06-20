@@ -3,6 +3,7 @@ use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
 use zcash_client_backend::data_api::WalletRead;
+use zcash_protocol::value::Zatoshis;
 
 use crate::components::{
     database::DbConnection,
@@ -17,23 +18,13 @@ pub(crate) type ResultType = TotalBalance;
 #[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct TotalBalance {
     /// The total value of unspent transparent outputs, in ZEC
-    transparent: f64,
+    transparent: String,
 
     /// The total value of unspent Sapling and Orchard outputs, in ZEC
-    private: f64,
+    private: String,
 
     /// The total value of unspent shielded and transparent outputs, in ZEC
-    total: f64,
-}
-
-impl TotalBalance {
-    fn zero() -> Self {
-        TotalBalance {
-            transparent: 0.0,
-            private: 0.0,
-            total: 0.0,
-        }
-    }
+    total: String,
 }
 
 pub(super) const PARAM_MINCONF_DESC: &str =
@@ -52,25 +43,32 @@ pub(crate) fn call(
             .with_message("include_watch_only argument must be set to true (for now)")),
     }?;
 
-    if let Some(summary) = wallet
+    let (transparent, private) = if let Some(summary) = wallet
         .get_wallet_summary(minconf.unwrap_or(1))
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
     {
         // TODO: support `include_watch_only = false`
-        let mut balance = summary.account_balances().iter().fold(
-            TotalBalance::zero(),
-            |mut result, (_, balance)| {
-                result.transparent += value_from_zatoshis(balance.unshielded_balance().total());
-                result.private += value_from_zatoshis(balance.sapling_balance().total());
-                result.private += value_from_zatoshis(balance.orchard_balance().total());
-                result
+        summary.account_balances().iter().fold(
+            (Some(Zatoshis::ZERO), Some(Zatoshis::ZERO)),
+            |(transparent, private), (_, balance)| {
+                (
+                    transparent + balance.unshielded_balance().total(),
+                    private + balance.sapling_balance().total() + balance.orchard_balance().total(),
+                )
             },
-        );
-
-        balance.total = balance.transparent + balance.private;
-
-        Ok(balance)
+        )
     } else {
-        Ok(TotalBalance::zero())
-    }
+        (Some(Zatoshis::ZERO), Some(Zatoshis::ZERO))
+    };
+
+    transparent
+        .zip(private)
+        .and_then(|(transparent, private)| {
+            (transparent + private).map(|total| TotalBalance {
+                transparent: value_from_zatoshis(transparent).to_string(),
+                private: value_from_zatoshis(private).to_string(),
+                total: value_from_zatoshis(total).to_string(),
+            })
+        })
+        .ok_or_else(|| LegacyCode::Wallet.with_static("balance overflow"))
 }
