@@ -214,7 +214,7 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
             })
             .optional()
             .map_err(|e| {
-                LegacyCode::Database.with_message(format!("Failed to fetch spent note: {:?}", e))
+                LegacyCode::Database.with_message(format!("Failed to fetch spent note: {e:?}"))
             })
     }
 
@@ -250,7 +250,7 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
             // Allow the `sent_notes` table to not be populated.
             .optional()
             .map_err(|e| {
-                LegacyCode::Database.with_message(format!("Failed to fetch sent-to address: {}", e))
+                LegacyCode::Database.with_message(format!("Failed to fetch sent-to address: {e}"))
             })?
             // If we don't have a cached recipient, fall back on an address that
             // corresponds to the actual receiver.

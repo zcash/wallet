@@ -366,9 +366,9 @@ impl ZalletConfig {
         ) {
             writeln!(config).unwrap();
             for line in T::DOCS.lines() {
-                writeln!(config, "# {}", line).unwrap();
+                writeln!(config, "# {line}").unwrap();
             }
-            writeln!(config, "[{}]", section_name).unwrap();
+            writeln!(config, "[{section_name}]").unwrap();
             writeln!(config).unwrap();
 
             for field_name in T::FIELD_NAMES {
@@ -387,7 +387,7 @@ impl ZalletConfig {
                 if line.is_empty() {
                     writeln!(config, "#").unwrap();
                 } else {
-                    writeln!(config, "# {}", line).unwrap();
+                    writeln!(config, "# {line}").unwrap();
                 }
             }
 

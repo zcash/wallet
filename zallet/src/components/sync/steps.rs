@@ -107,8 +107,7 @@ pub(super) async fn update_subtree_roots(
             hex::decode_to_slice(&subtree.root, &mut root_hash).map_err(|e| {
                 FetchServiceError::JsonRpcConnectorError(
                     JsonRpSeeConnectorError::JsonRpSeeClientError(format!(
-                        "Invalid subtree root: {}",
-                        e
+                        "Invalid subtree root: {e}"
                     )),
                 )
             })?;
@@ -132,8 +131,7 @@ pub(super) async fn update_subtree_roots(
             hex::decode_to_slice(&subtree.root, &mut root_hash).map_err(|e| {
                 FetchServiceError::JsonRpcConnectorError(
                     JsonRpSeeConnectorError::JsonRpSeeClientError(format!(
-                        "Invalid subtree root: {}",
-                        e
+                        "Invalid subtree root: {e}"
                     )),
                 )
             })?;

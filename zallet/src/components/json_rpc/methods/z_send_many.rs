@@ -231,7 +231,7 @@ pub(crate) async fn call(
 ///
 /// Notes:
 /// 1. #1159 Currently there is no limit set on the number of elements, which could
-///     make the tx too large.
+///    make the tx too large.
 /// 2. #1360 Note selection is not optimal.
 /// 3. #1277 Spendable notes are not locked, so an operation running in parallel
 ///    could also try to use them.

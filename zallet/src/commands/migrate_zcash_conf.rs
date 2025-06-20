@@ -177,11 +177,11 @@ impl Runnable for MigrateZcashConfCmd {
         match abscissa_tokio::run(&APP, self.start()) {
             Ok(Ok(())) => (),
             Ok(Err(e)) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
         }
