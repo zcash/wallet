@@ -31,6 +31,7 @@ mod openrpc;
 mod recover_accounts;
 mod unlock_wallet;
 mod view_transaction;
+mod z_get_total_balance;
 mod z_send_many;
 
 #[rpc(server)]
@@ -206,6 +207,24 @@ pub(crate) trait Rpc {
     /// the wallet's key storage file.
     #[method(name = "listaddresses")]
     async fn list_addresses(&self) -> list_addresses::Response;
+
+    /// Returns the total value of funds stored in the node's wallet.
+    ///
+    /// TODO: Currently watchonly addresses cannot be omitted; `includeWatchonly` must be
+    /// set to true.
+    ///
+    /// # Arguments
+    ///
+    /// - `minconf` (numeric, optional, default=1) Only include private and transparent
+    ///   transactions confirmed at least this many times.
+    /// - `includeWatchonly` (bool, optional, default=false) Also include balance in
+    ///   watchonly addresses (see 'importaddress' and 'z_importviewingkey').
+    #[method(name = "z_gettotalbalance")]
+    async fn z_get_total_balance(
+        &self,
+        minconf: Option<u32>,
+        #[argument(rename = "includeWatchonly")] include_watch_only: Option<bool>,
+    ) -> z_get_total_balance::Response;
 
     #[method(name = "z_listunifiedreceivers")]
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response;
@@ -435,6 +454,14 @@ impl RpcServer for RpcImpl {
 
     async fn list_addresses(&self) -> list_addresses::Response {
         list_addresses::call(self.wallet().await?.as_ref())
+    }
+
+    async fn z_get_total_balance(
+        &self,
+        minconf: Option<u32>,
+        include_watch_only: Option<bool>,
+    ) -> z_get_total_balance::Response {
+        z_get_total_balance::call(self.wallet().await?.as_ref(), minconf, include_watch_only)
     }
 
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response {
