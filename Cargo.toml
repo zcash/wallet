@@ -113,17 +113,17 @@ tonic = "0.13"
 
 [patch.crates-io]
 age = { git = "https://github.com/str4d/rage.git", rev = "84dc1e9f641994388f107ceebdbaa00126e30e16" }
-equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "b3727870470e58d188207e2aa663d66163faa64c" }
+equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "bffbe51beb03897499301ed5692f37e6b221ba63" }
 
 # Apply PRs on top of what Zaino depends on:
 # - https://github.com/ZcashFoundation/zebra/pull/9536
