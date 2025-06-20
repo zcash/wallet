@@ -165,7 +165,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                 })?
                 .map(|memo| {
                     (
-                        hex::encode(memo.encode().as_slice()),
+                        hex::encode(memo.encode().as_array()),
                         match memo {
                             zcash_protocol::memo::Memo::Text(text_memo) => Some(text_memo.into()),
                             _ => None,
