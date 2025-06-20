@@ -4,11 +4,12 @@ use jsonrpsee::{
     core::{JsonValue, RpcResult},
     types::ErrorCode as RpcErrorCode,
 };
+use rust_decimal::Decimal;
 use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
 use zcash_protocol::{
     TxId,
-    value::{BalanceError, COIN, Zatoshis},
+    value::{BalanceError, COIN, ZatBalance, Zatoshis},
 };
 use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
 
@@ -154,7 +155,16 @@ pub(super) fn zatoshis_from_value(value: &JsonValue) -> RpcResult<Zatoshis> {
 
 // TODO: https://github.com/zcash/wallet/issues/15
 pub(super) fn value_from_zatoshis(value: Zatoshis) -> f64 {
-    (u64::from(value) as f64) / (COIN as f64)
+    value_from_zat_balance(value.into())
+        .try_into()
+        .expect("valid")
+}
+
+/// Equivalent of `ValueFromAmount` in `zcashd`
+pub(super) fn value_from_zat_balance(value: ZatBalance) -> Decimal {
+    (Decimal::from(i64::from(value)) / Decimal::from(COIN))
+        // Matches the truncated-remainder rounding that `zcashd` used.
+        .trunc_with_scale(8)
 }
 
 /// Upper bound for mantissa.
@@ -329,12 +339,14 @@ fn parse_fixed_point(mut val: &str, decimals: i64) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use zcash_protocol::value::{COIN, Zatoshis};
+    use zcash_protocol::value::{COIN, ZatBalance, Zatoshis};
     use zip32::fingerprint::SeedFingerprint;
 
     use super::{parse_fixed_point, zatoshis_from_value};
 
-    use crate::components::json_rpc::utils::{encode_seedfp_parameter, parse_seedfp_parameter};
+    use crate::components::json_rpc::utils::{
+        encode_seedfp_parameter, parse_seedfp_parameter, value_from_zat_balance,
+    };
 
     #[test]
     fn seed_fingerprint_roundtrip() {
@@ -344,6 +356,45 @@ mod tests {
             parse_seedfp_parameter(&encode_seedfp_parameter(&seedfp)),
             Ok(seedfp),
         );
+    }
+
+    #[test]
+    fn rpc_format_monetary_values() {
+        let format = |v| value_from_zat_balance(ZatBalance::const_from_i64(v)).to_string();
+        let coin = i64::try_from(COIN).expect("fits");
+
+        assert_eq!(format(0), "0.00000000");
+        assert_eq!(format(1), "0.00000001");
+        assert_eq!(format(17622195), "0.17622195");
+        assert_eq!(format(50000000), "0.50000000");
+        assert_eq!(format(89898989), "0.89898989");
+        assert_eq!(format(100000000), "1.00000000");
+        assert_eq!(format(2099999999999990), "20999999.99999990");
+        assert_eq!(format(2099999999999999), "20999999.99999999");
+
+        assert_eq!(format((coin / 10000) * 123456789), "12345.67890000");
+        assert_eq!(format(-coin), "-1.00000000");
+        assert_eq!(format(-coin / 10), "-0.10000000");
+
+        // We can't test this `zcashd` case because it exceeds `MAX_MONEY`, but we won't
+        // ever encounter it for `value_from_zat_balance`.
+        //assert_eq!(format(coin * 100000000), "100000000.00000000");
+        assert_eq!(format(coin * 10000000), "10000000.00000000");
+        assert_eq!(format(coin * 1000000), "1000000.00000000");
+        assert_eq!(format(coin * 100000), "100000.00000000");
+        assert_eq!(format(coin * 10000), "10000.00000000");
+        assert_eq!(format(coin * 1000), "1000.00000000");
+        assert_eq!(format(coin * 100), "100.00000000");
+        assert_eq!(format(coin * 10), "10.00000000");
+        assert_eq!(format(coin), "1.00000000");
+        assert_eq!(format(coin / 10), "0.10000000");
+        assert_eq!(format(coin / 100), "0.01000000");
+        assert_eq!(format(coin / 1000), "0.00100000");
+        assert_eq!(format(coin / 10000), "0.00010000");
+        assert_eq!(format(coin / 100000), "0.00001000");
+        assert_eq!(format(coin / 1000000), "0.00000100");
+        assert_eq!(format(coin / 10000000), "0.00000010");
+        assert_eq!(format(coin / 100000000), "0.00000001");
     }
 
     #[test]

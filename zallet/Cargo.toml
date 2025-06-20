@@ -98,6 +98,7 @@ phf.workspace = true
 rand.workspace = true
 rpassword.workspace = true
 rusqlite.workspace = true
+rust_decimal.workspace = true
 rust-embed.workspace = true
 sapling.workspace = true
 schemars.workspace = true

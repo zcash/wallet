@@ -59,6 +59,10 @@ rpassword = "7"
 http-body-util = "0.1"
 hyper = "1"
 jsonrpsee = "0.24"
+rust_decimal = { version = "1.37", default-features = false, features = [
+    "serde-arbitrary-precision",
+    "serde-float",
+] }
 schemars = "0.9"
 tower = "0.4"
 
