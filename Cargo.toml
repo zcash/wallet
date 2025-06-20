@@ -65,6 +65,7 @@ rust_decimal = { version = "1.37", default-features = false, features = [
 ] }
 schemars = "0.9"
 tower = "0.4"
+nix = "0.30" # `stop` RPC method
 
 # Tracing
 console-subscriber = "0.4"

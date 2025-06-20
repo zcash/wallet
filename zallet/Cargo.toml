@@ -93,6 +93,7 @@ i18n-embed-fl.workspace = true
 incrementalmerkletree.workspace = true
 jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
+nix = { workspace = true, features = ["signal"] }
 orchard.workspace = true
 phf.workspace = true
 rand.workspace = true
