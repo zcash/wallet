@@ -22,7 +22,10 @@ use zip32::Scope;
 
 use crate::components::{
     database::DbConnection,
-    json_rpc::{server::LegacyCode, utils::value_from_zatoshis},
+    json_rpc::{
+        server::LegacyCode,
+        utils::{JsonZec, value_from_zatoshis},
+    },
 };
 
 /// Response to a `z_listunspent` RPC request.
@@ -63,7 +66,7 @@ pub(crate) struct UnspentNote {
     address: Option<String>,
 
     /// The amount of value in the note.
-    amount: f64,
+    amount: JsonZec,
 
     /// Hexadecimal string representation of memo field.
     memo: String,

@@ -46,16 +46,14 @@ impl ChainView {
                             addr_str
                         );
                         Err(ErrorKind::Init.context(format!(
-                            "validator_address '{}' resolved to no IP addresses",
-                            addr_str
+                            "validator_address '{addr_str}' resolved to no IP addresses"
                         )))
                     }
                 },
                 Err(e) => {
                     error!("Failed to resolve validator_address '{}': {}", addr_str, e);
                     Err(ErrorKind::Init.context(format!(
-                        "Failed to resolve validator_address '{}': {}",
-                        addr_str, e
+                        "Failed to resolve validator_address '{addr_str}': {e}"
                     )))
                 }
             },
@@ -67,7 +65,7 @@ impl ChainView {
                     ) => 8232, // Mainnet default RPC port for Zebra/zcashd
                     _ => 18232, // Testnet/Regtest default RPC port for Zebra/zcashd
                 };
-                let default_addr_str = format!("127.0.0.1:{}", default_port);
+                let default_addr_str = format!("127.0.0.1:{default_port}");
                 info!(
                     "validator_address not set, defaulting to {}",
                     default_addr_str
@@ -81,8 +79,7 @@ impl ChainView {
                             default_addr_str, e
                         );
                         Err(ErrorKind::Init.context(format!(
-                            "Failed to parse default validator_address '{}': {}",
-                            default_addr_str, e
+                            "Failed to parse default validator_address '{default_addr_str}': {e}"
                         )))
                     }
                 }

@@ -18,7 +18,7 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{parse_txid, value_from_zatoshis},
+        utils::{JsonZec, parse_txid, value_from_zatoshis},
     },
 };
 
@@ -74,7 +74,7 @@ struct Spend {
     address: Option<String>,
 
     /// The amount in ZEC.
-    value: f64,
+    value: JsonZec,
 
     /// The amount in zatoshis.
     #[serde(rename = "valueZat")]
@@ -111,7 +111,7 @@ struct Output {
     wallet_internal: bool,
 
     /// The amount in ZEC.
-    value: f64,
+    value: JsonZec,
 
     /// The amount in zatoshis.
     #[serde(rename = "valueZat")]
@@ -214,7 +214,7 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
             })
             .optional()
             .map_err(|e| {
-                LegacyCode::Database.with_message(format!("Failed to fetch spent note: {:?}", e))
+                LegacyCode::Database.with_message(format!("Failed to fetch spent note: {e:?}"))
             })
     }
 
@@ -250,7 +250,7 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
             // Allow the `sent_notes` table to not be populated.
             .optional()
             .map_err(|e| {
-                LegacyCode::Database.with_message(format!("Failed to fetch sent-to address: {}", e))
+                LegacyCode::Database.with_message(format!("Failed to fetch sent-to address: {e}"))
             })?
             // If we don't have a cached recipient, fall back on an address that
             // corresponds to the actual receiver.

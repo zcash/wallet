@@ -4138,6 +4138,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust_decimal"
+version = "1.37.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b203a6425500a03e0919c42d3c47caca51e79f1132046626d2c8871c5092035d"
+dependencies = [
+ "arrayvec",
+ "num-traits",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6277,6 +6289,7 @@ dependencies = [
  "rpassword",
  "rusqlite",
  "rust-embed",
+ "rust_decimal",
  "sapling-crypto",
  "schemars",
  "schemerz",
