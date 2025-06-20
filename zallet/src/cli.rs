@@ -53,6 +53,10 @@ pub(crate) enum ZalletCmd {
 
     /// Import a BIP 39 mnemonic phrase into the wallet.
     ImportMnemonic(ImportMnemonicCmd),
+
+    /// Communicate with a Zallet wallet's JSON-RPC interface.
+    #[cfg(feature = "rpc-cli")]
+    Rpc(RpcCliCmd),
 }
 
 /// `start` subcommand
@@ -128,3 +132,15 @@ pub(crate) struct GenerateMnemonicCmd {}
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct ImportMnemonicCmd {}
+
+/// `rpc` subcommand
+#[cfg(feature = "rpc-cli")]
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct RpcCliCmd {
+    /// The JSON-RPC command to send to Zallet.
+    pub(crate) command: String,
+
+    /// Any parameters for the command.
+    pub(crate) params: Vec<String>,
+}
