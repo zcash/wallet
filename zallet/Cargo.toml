@@ -145,6 +145,7 @@ zebra-state.workspace = true
 zip32.workspace = true
 
 console-subscriber = { workspace = true, optional = true }
+jsonrpsee-http-client = { workspace = true, optional = true }
 
 [build-dependencies]
 clap = { workspace = true, features = ["string", "unstable-styles"] }
@@ -165,6 +166,9 @@ tempfile = "3"
 trycmd = "0.15"
 
 [features]
+## `zallet rpc` CLI support
+rpc-cli = ["jsonrpsee/async-client", "dep:jsonrpsee-http-client"]
+
 ## `tokio-console` support
 ##
 ## To activate this feature, run:
