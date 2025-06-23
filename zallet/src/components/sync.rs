@@ -591,7 +591,10 @@ async fn data_requests(
                     // we pick the chain height as of the start of evaluation as the "evaluated-at"
                     // height for this data request, in order to not overstate the height for which
                     // all observations are valid.
-                    let chain_tip = chain.chain_height().await?;
+                    let as_of_height = match req.block_range_end() {
+                        Some(h) => h - 1,
+                        None => chain.chain_height().await?.into(),
+                    };
 
                     let address = req.address().encode(params);
                     debug!(
@@ -695,7 +698,7 @@ async fn data_requests(
                         decrypt_and_store_transaction(params, db_data, &tx, mined_height)?;
                     }
 
-                    db_data.notify_address_checked(req, chain_tip.into())?;
+                    db_data.notify_address_checked(req, as_of_height)?;
                 }
             }
         }
