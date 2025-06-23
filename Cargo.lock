@@ -6280,6 +6280,7 @@ dependencies = [
  "incrementalmerkletree",
  "jsonrpsee",
  "known-folders",
+ "nix",
  "once_cell",
  "orchard",
  "phf",
