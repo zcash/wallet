@@ -21,11 +21,37 @@
 # Does not affect unconfirmed shielded change, which cannot be spent.
 #spend_zeroconf_change = true
 
+# The number of confirmations required for a trusted transaction output (TXO) to
+# become spendable.
+#
+# A trusted TXO is a TXO received from a party where the wallet trusts that it will
+# remain mined in its original transaction, such as change outputs created by the
+# wallet's internal TXO handling.
+#
+# This setting is a trade-off between latency and reliability: a smaller value makes
+# trusted TXOs spendable more quickly, but the spending transaction has a higher
+# risk of failure if a chain reorg occurs that unmines the receiving transaction.
+#trusted_confirmations = 3
+
 # The number of blocks after which a transaction created by Zallet that has not been
 # mined will become invalid.
 #
 # - Minimum: `TX_EXPIRING_SOON_THRESHOLD + 1`
 #tx_expiry_delta = 40
+
+# The number of confirmations required for an untrusted transaction output (TXO) to
+# become spendable.
+#
+# An untrusted TXO is a TXO received by the wallet that is not trusted (in the sense
+# used by the `trusted_confirmations` setting).
+#
+# This setting is a trade-off between latency and security: a smaller value makes
+# trusted TXOs spendable more quickly, but the spending transaction has a higher
+# risk of failure if the sender of the receiving transaction is malicious and
+# double-spends the funds.
+#
+# Values smaller than `trusted_confirmations` are ignored.
+#untrusted_confirmations = 10
 
 
 # Zallet's understanding of the consensus rules.

@@ -66,11 +66,37 @@ pub struct BuilderSection {
     /// Does not affect unconfirmed shielded change, which cannot be spent.
     pub spend_zeroconf_change: Option<bool>,
 
+    /// The number of confirmations required for a trusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// A trusted TXO is a TXO received from a party where the wallet trusts that it will
+    /// remain mined in its original transaction, such as change outputs created by the
+    /// wallet's internal TXO handling.
+    ///
+    /// This setting is a trade-off between latency and reliability: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if a chain reorg occurs that unmines the receiving transaction.
+    pub trusted_confirmations: Option<u32>,
+
     /// The number of blocks after which a transaction created by Zallet that has not been
     /// mined will become invalid.
     ///
     /// - Minimum: `TX_EXPIRING_SOON_THRESHOLD + 1`
     pub tx_expiry_delta: Option<u16>,
+
+    /// The number of confirmations required for an untrusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// An untrusted TXO is a TXO received by the wallet that is not trusted (in the sense
+    /// used by the `trusted_confirmations` setting).
+    ///
+    /// This setting is a trade-off between latency and security: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if the sender of the receiving transaction is malicious and
+    /// double-spends the funds.
+    ///
+    /// Values smaller than `trusted_confirmations` are ignored.
+    pub untrusted_confirmations: Option<u32>,
 }
 
 impl BuilderSection {
@@ -83,6 +109,22 @@ impl BuilderSection {
         self.spend_zeroconf_change.unwrap_or(true)
     }
 
+    /// The number of confirmations required for a trusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// A trusted TXO is a TXO received from a party where the wallet trusts that it will
+    /// remain mined in its original transaction, such as change outputs created by the
+    /// wallet's internal TXO handling.
+    ///
+    /// This setting is a trade-off between latency and reliability: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if a chain reorg occurs that unmines the receiving transaction.
+    ///
+    /// Default is 3.
+    pub fn trusted_confirmations(&self) -> u32 {
+        self.trusted_confirmations.unwrap_or(3)
+    }
+
     /// The number of blocks after which a transaction created by Zallet that has not been
     /// mined will become invalid.
     ///
@@ -90,6 +132,31 @@ impl BuilderSection {
     /// - Default: 40
     pub fn tx_expiry_delta(&self) -> u16 {
         self.tx_expiry_delta.unwrap_or(40)
+    }
+
+    /// The number of confirmations required for an untrusted transaction output (TXO) to
+    /// become spendable.
+    ///
+    /// An untrusted TXO is a TXO received by the wallet that is not trusted (in the sense
+    /// used by the `trusted_confirmations` setting).
+    ///
+    /// This setting is a trade-off between latency and security: a smaller value makes
+    /// trusted TXOs spendable more quickly, but the spending transaction has a higher
+    /// risk of failure if the sender of the receiving transaction is malicious and
+    /// double-spends the funds.
+    ///
+    /// Values smaller than `trusted_confirmations` are ignored.
+    ///
+    /// Default is 10.
+    pub fn untrusted_confirmations(&self) -> u32 {
+        self.untrusted_confirmations.unwrap_or(10)
+    }
+
+    /// TODO: Remove this once we have proper ZIP 315 confirmation handling in
+    /// `zcash_client_backend`.
+    pub(crate) fn default_minconf(&self) -> u32 {
+        self.untrusted_confirmations()
+            .max(self.trusted_confirmations())
     }
 }
 
@@ -441,7 +508,15 @@ impl ZalletConfig {
                 "spend_zeroconf_change",
                 conf.builder.spend_zeroconf_change(),
             ),
+            builder(
+                "trusted_confirmations",
+                conf.builder.trusted_confirmations(),
+            ),
             builder("tx_expiry_delta", conf.builder.tx_expiry_delta()),
+            builder(
+                "untrusted_confirmations",
+                conf.builder.untrusted_confirmations(),
+            ),
             consensus(
                 "network",
                 crate::network::kind::Serializable(conf.consensus.network),

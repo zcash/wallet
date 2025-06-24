@@ -47,9 +47,6 @@ use crate::{
     prelude::*,
 };
 
-/// Default minimum number of confirmations for note selection.
-const DEFAULT_NOTE_CONFIRMATIONS: NonZeroU32 = NonZeroU32::new(10).unwrap();
-
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub(crate) struct AmountParameter {
     /// A taddr, zaddr, or Unified Address.
@@ -184,7 +181,7 @@ pub(crate) async fn call(
             // TODO: Fix this inconsistency with `zcashd` (inability to create zero-conf txs).
             // https://github.com/zcash/wallet/issues/139
             .ok_or_else(|| LegacyCode::InvalidParameter.with_static("minconf must be non-zero"))?,
-        None => DEFAULT_NOTE_CONFIRMATIONS,
+        None => NonZeroU32::new(APP.config().builder.default_minconf()).unwrap_or(NonZeroU32::MIN),
     };
 
     // Fetch spending key last, to avoid a keystore decryption if unnecessary.
