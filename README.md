@@ -20,7 +20,7 @@ Pick a folder to use for Zallet, and create a `zallet.toml` file in it. You
 currently need at least the following:
 
 ```toml
-[builder]
+[builder.limits]
 
 [consensus]
 network = "main"
@@ -44,8 +44,6 @@ db_path = "/path/to/zallet/datadir/zaino"
 
 [keystore]
 identity = "/path/to/zallet/datadir/identity.txt"
-
-[limits]
 
 [note_management]
 

@@ -58,6 +58,7 @@ fn setup_new_wallet() {
     {
         let mut f = File::create(&config_file).unwrap();
         writeln!(f, "[builder]").unwrap();
+        writeln!(f, "[builder.limits]").unwrap();
         writeln!(f, "[consensus]").unwrap();
         writeln!(f, "network = \"test\"").unwrap();
         writeln!(f, "[database]").unwrap();
@@ -70,7 +71,6 @@ fn setup_new_wallet() {
         writeln!(f, "[indexer]").unwrap();
         writeln!(f, "[keystore]").unwrap();
         writeln!(f, "identity = \"{}\"", identity_file.display()).unwrap();
-        writeln!(f, "[limits]").unwrap();
         writeln!(f, "[note_management]").unwrap();
         writeln!(f, "[rpc]").unwrap();
         writeln!(f, "bind = []").unwrap();

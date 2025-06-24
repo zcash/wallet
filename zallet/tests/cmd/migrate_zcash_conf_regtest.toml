@@ -5,7 +5,8 @@ stdout = """
 # Zallet configuration file
 # Migrated from ./zcash.conf
 
-[builder]
+[builder.limits]
+orchard_actions = 250
 
 [consensus]
 network = "regtest"
@@ -32,9 +33,6 @@ as_of_version = "0.0.0"
 
 [keystore]
 identity = ""
-
-[limits]
-orchard_actions = 250
 
 [note_management]
 

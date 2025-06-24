@@ -54,6 +54,14 @@
 #untrusted_confirmations = 10
 
 
+# Configurable limits on transaction builder operation (to prevent e.g. memory
+# exhaustion).
+[builder.limits]
+
+# The maximum number of Orchard actions permitted in a constructed transaction.
+#orchard_actions = 50
+
+
 # Zallet's understanding of the consensus rules.
 #
 # The configuration in this section MUST match the configuration of the full node being
@@ -194,13 +202,6 @@ as_of_version = "0.0.0"
 # `zcashd-wallet-tool` utility. A user may start zallet with `--walletrequirebackup=false`
 # to allow generation of spending keys even if the backup has not yet been confirmed.
 #require_backup = true
-
-
-# Limits configuration section.
-[limits]
-
-# The maximum number of Orchard actions permitted in a constructed transaction.
-#orchard_actions = 50
 
 
 # Note management configuration section.

@@ -350,7 +350,7 @@ fn build_actions() -> HashMap<&'static str, Action> {
         )))
         .chain(Action::map(
             "orchardactionlimit",
-            |config| &mut config.limits.orchard_actions,
+            |config| &mut config.builder.limits.orchard_actions,
             |value| value.parse().map_err(|_| ()),
         ))
         .chain(Some((

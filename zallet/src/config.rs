@@ -47,9 +47,6 @@ pub struct ZalletConfig {
     /// Settings for the key store.
     pub keystore: KeyStoreSection,
 
-    /// Configurable limits on wallet operation (to prevent e.g. memory exhaustion).
-    pub limits: LimitsSection,
-
     /// Settings for how Zallet manages notes.
     pub note_management: NoteManagementSection,
 
@@ -97,6 +94,10 @@ pub struct BuilderSection {
     ///
     /// Values smaller than `trusted_confirmations` are ignored.
     pub untrusted_confirmations: Option<u32>,
+
+    /// Configurable limits on transaction builder operation (to prevent e.g. memory
+    /// exhaustion).
+    pub limits: BuilderLimitsSection,
 }
 
 impl BuilderSection {
@@ -157,6 +158,24 @@ impl BuilderSection {
     pub(crate) fn default_minconf(&self) -> u32 {
         self.untrusted_confirmations()
             .max(self.trusted_confirmations())
+    }
+}
+
+/// Configurable limits on transaction builder operation (to prevent e.g. memory
+/// exhaustion).
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct BuilderLimitsSection {
+    /// The maximum number of Orchard actions permitted in a constructed transaction.
+    pub orchard_actions: Option<u16>,
+}
+
+impl BuilderLimitsSection {
+    /// The maximum number of Orchard actions permitted in a constructed transaction.
+    ///
+    /// Default is 50.
+    pub fn orchard_actions(&self) -> u16 {
+        self.orchard_actions.unwrap_or(50)
     }
 }
 
@@ -404,23 +423,6 @@ impl KeyStoreSection {
     }
 }
 
-/// Limits configuration section.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
-#[serde(deny_unknown_fields)]
-pub struct LimitsSection {
-    /// The maximum number of Orchard actions permitted in a constructed transaction.
-    pub orchard_actions: Option<u16>,
-}
-
-impl LimitsSection {
-    /// The maximum number of Orchard actions permitted in a constructed transaction.
-    ///
-    /// Default is 50.
-    pub fn orchard_actions(&self) -> u16 {
-        self.orchard_actions.unwrap_or(50)
-    }
-}
-
 /// Note management configuration section.
 ///
 /// TODO: Decide whether this should be part of `[builder]`.
@@ -517,6 +519,7 @@ impl ZalletConfig {
                 "untrusted_confirmations",
                 conf.builder.untrusted_confirmations(),
             ),
+            builder_limits("orchard_actions", conf.builder.limits.orchard_actions()),
             consensus(
                 "network",
                 crate::network::kind::Serializable(conf.consensus.network),
@@ -536,7 +539,6 @@ impl ZalletConfig {
             indexer("db_path", &conf.indexer.db_path),
             keystore("identity", &conf.keystore.identity),
             keystore("require_backup", conf.keystore.require_backup()),
-            limits("orchard_actions", conf.limits.orchard_actions()),
             note_management(
                 "min_note_value",
                 conf.note_management.min_note_value().into_u64(),
@@ -553,6 +555,7 @@ impl ZalletConfig {
 
         // The glue that makes the above easy to maintain:
         const BUILDER: &str = "builder";
+        const BUILDER_LIMITS: &str = "builder.limits";
         const CONSENSUS: &str = "consensus";
         const DATABASE: &str = "database";
         const EXTERNAL: &str = "external";
@@ -561,7 +564,6 @@ impl ZalletConfig {
         const FEATURES_EXPERIMENTAL: &str = "features.experimental";
         const INDEXER: &str = "indexer";
         const KEYSTORE: &str = "keystore";
-        const LIMITS: &str = "limits";
         const NOTE_MANAGEMENT: &str = "note_management";
         const RPC: &str = "rpc";
         fn builder<T: Serialize>(
@@ -569,6 +571,12 @@ impl ZalletConfig {
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(BUILDER, f, d)
+        }
+        fn builder_limits<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(BUILDER_LIMITS, f, d)
         }
         fn consensus<T: Serialize>(
             f: &'static str,
@@ -605,12 +613,6 @@ impl ZalletConfig {
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(KEYSTORE, f, d)
-        }
-        fn limits<T: Serialize>(
-            f: &'static str,
-            d: T,
-        ) -> ((&'static str, &'static str), Option<toml::Value>) {
-            field(LIMITS, f, d)
         }
         fn note_management<T: Serialize>(
             f: &'static str,
@@ -689,6 +691,9 @@ impl ZalletConfig {
             for field_name in T::FIELD_NAMES {
                 match (section_name, *field_name) {
                     // Render nested sections.
+                    (BUILDER, "limits") => {
+                        write_section::<BuilderLimitsSection>(config, BUILDER_LIMITS, sec_def)
+                    }
                     (FEATURES, "deprecated") => write_section::<DeprecatedFeaturesSection>(
                         config,
                         FEATURES_DEPRECATED,
@@ -759,7 +764,6 @@ impl ZalletConfig {
                 FEATURES => write_section::<FeaturesSection>(&mut config, field_name, &sec_def),
                 INDEXER => write_section::<IndexerSection>(&mut config, field_name, &sec_def),
                 KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, &sec_def),
-                LIMITS => write_section::<LimitsSection>(&mut config, field_name, &sec_def),
                 NOTE_MANAGEMENT => {
                     write_section::<NoteManagementSection>(&mut config, field_name, &sec_def)
                 }

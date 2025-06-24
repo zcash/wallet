@@ -333,7 +333,7 @@ async fn run(
 
     enforce_privacy_policy(&proposal, privacy_policy)?;
 
-    let orchard_actions_limit = APP.config().limits.orchard_actions().into();
+    let orchard_actions_limit = APP.config().builder.limits.orchard_actions().into();
     for step in proposal.steps() {
         let orchard_spends = step
             .shielded_inputs()

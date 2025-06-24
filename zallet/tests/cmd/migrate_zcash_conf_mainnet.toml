@@ -5,7 +5,7 @@ stdout = """
 # Zallet configuration file
 # Migrated from ./zcash.conf
 
-[builder]
+[builder.limits]
 
 [consensus]
 network = "main"
@@ -25,8 +25,6 @@ as_of_version = "0.0.0"
 
 [keystore]
 identity = ""
-
-[limits]
 
 [note_management]
 
