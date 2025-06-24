@@ -96,9 +96,16 @@ network = "main"
 # Directory to be used when exporting data.
 #export_dir = UNSET
 
-# Execute command when a wallet transaction changes.
+# Executes the specified command when a wallet transaction changes.
 #
-# `%s` in the command is replaced by TxID.
+# A wallet transaction "change" can be anything that alters how the transaction
+# affects the wallet's balance. Examples include (but are not limited to):
+# - A new transaction is created by the wallet.
+# - A wallet transaction is added to the mempool.
+# - A block containing a wallet transaction is mined or unmined.
+# - A wallet transaction is removed from the mempool due to conflicts.
+#
+# `%s` in the command is replaced by the hex encoding of the transaction ID.
 #notify = UNSET
 
 
