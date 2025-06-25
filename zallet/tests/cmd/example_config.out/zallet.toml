@@ -13,7 +13,9 @@
 # user-configured value going forward.
 
 
+#
 # Settings that affect transactions created by Zallet.
+#
 [builder]
 
 # Whether to spend unconfirmed transparent change when sending transactions.
@@ -54,18 +56,22 @@
 #untrusted_confirmations = 10
 
 
+#
 # Configurable limits on transaction builder operation (to prevent e.g. memory
 # exhaustion).
+#
 [builder.limits]
 
 # The maximum number of Orchard actions permitted in a constructed transaction.
 #orchard_actions = 50
 
 
+#
 # Zallet's understanding of the consensus rules.
 #
 # The configuration in this section MUST match the configuration of the full node being
 # used as a data source in the `validator_address` field of the `[indexer]` section.
+#
 [consensus]
 
 # Network type.
@@ -77,7 +83,9 @@ network = "main"
 #regtest_nuparams = []
 
 
+#
 # Settings for how Zallet stores wallet data.
+#
 [database]
 
 # Path to the wallet database file.
@@ -87,7 +95,9 @@ network = "main"
 #wallet = UNSET
 
 
+#
 # Settings controlling how Zallet interacts with the outside world.
+#
 [external]
 
 # Whether the wallet should broadcast transactions.
@@ -109,7 +119,9 @@ network = "main"
 #notify = UNSET
 
 
+#
 # Settings for Zallet features.
+#
 [features]
 
 # The most recent Zallet version for which this configuration file has been updated.
@@ -162,15 +174,21 @@ as_of_version = "0.0.0"
 #legacy_pool_seed_fingerprint = UNSET
 
 
+#
 # Deprecated Zallet features that you are temporarily re-enabling.
+#
 [features.deprecated]
 
 
+#
 # Experimental Zallet features that you are using before they are stable.
+#
 [features.experimental]
 
 
+#
 # Settings for the Zaino chain indexer.
+#
 [indexer]
 
 # IP address and port of the JSON-RPC interface for the full node / validator being
@@ -198,7 +216,9 @@ as_of_version = "0.0.0"
 #db_path = UNSET
 
 
+#
 # Settings for the key store.
+#
 [keystore]
 
 # Path to the age identity file that encrypts key material.
@@ -211,9 +231,11 @@ as_of_version = "0.0.0"
 #require_backup = true
 
 
+#
 # Note management configuration section.
 #
 # TODO: Decide whether this should be part of `[builder]`.
+#
 [note_management]
 
 # The minimum value that Zallet should target for each shielded note in the wallet.
@@ -227,7 +249,9 @@ as_of_version = "0.0.0"
 #target_note_count = 4
 
 
+#
 # Settings for the JSON-RPC interface.
+#
 [rpc]
 
 # Addresses to listen for JSON-RPC connections.

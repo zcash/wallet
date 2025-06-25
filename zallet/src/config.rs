@@ -685,6 +685,7 @@ impl ZalletConfig {
             sec_def: &impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
         ) {
             writeln!(config).unwrap();
+            writeln!(config, "#").unwrap();
             for line in T::DOCS.lines() {
                 if line.is_empty() {
                     writeln!(config, "#").unwrap();
@@ -692,6 +693,7 @@ impl ZalletConfig {
                     writeln!(config, "# {line}").unwrap();
                 }
             }
+            writeln!(config, "#").unwrap();
             writeln!(config, "[{section_name}]").unwrap();
             writeln!(config).unwrap();
 
