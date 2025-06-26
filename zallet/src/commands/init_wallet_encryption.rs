@@ -26,7 +26,18 @@ impl InitWalletEncryptionCmd {
             Some(identity_file) => Ok(identity_file),
             _ => {
                 // Re-read the identity file from disk.
-                age::IdentityFile::from_file(config.keystore.identity.clone())
+                age::IdentityFile::from_file(
+                    config
+                        .encryption_identity()
+                        .to_str()
+                        .ok_or_else(|| {
+                            ErrorKind::Init.context(format!(
+                                "{} is not currently supported (not UTF-8)",
+                                config.encryption_identity().display(),
+                            ))
+                        })?
+                        .to_string(),
+                )
             }
         }
         .map_err(|e| ErrorKind::Generic.context(e))?;

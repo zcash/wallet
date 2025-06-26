@@ -20,6 +20,7 @@
 -allow-warnings = --allow-warnings
 -allow-alpha-example = --this-is-alpha-code-and-you-will-need-to-recreate-the-example-later
 -allow-alpha-migration = --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later
+-datadir = --datadir
 
 ## Usage
 
@@ -77,6 +78,10 @@ migrate-config-written = {-zallet} config written to {$conf}
 err-kind-generic = Error
 err-kind-init = Failed to initialize {-zallet}
 err-kind-sync = Failed to synchronize {-zallet}
+
+err-init-cannot-find-home-dir =
+    Cannot find home directory for the default datadir. Use '{-datadir}' to set
+    the datadir directly.
 
 # errors in migration of configuration data from the zcashd `zcash.conf` config file format
 
