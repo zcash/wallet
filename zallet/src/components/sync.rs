@@ -379,7 +379,7 @@ async fn recover_history(
                     .await?;
 
             // Scan the downloaded blocks.
-            tokio::task::block_in_place(|| {
+            let scan_result = tokio::task::block_in_place(|| {
                 info!("Scanning {}", scan_range);
                 scan_cached_blocks(
                     params,
@@ -389,7 +389,21 @@ async fn recover_history(
                     &from_state,
                     scan_range.len(),
                 )
-            })?;
+            });
+
+            // If a scan error is encountered, truncate to recover.
+            match scan_result {
+                Ok(_) => {}
+                Err(chain::error::Error::Scan(ScanError::PrevHashMismatch { at_height })) => {
+                    db_data
+                        .truncate_to_height(at_height - 10)
+                        .map_err(chain::error::Error::Wallet)?;
+                    continue;
+                }
+                Err(e) => {
+                    return Err(e.into());
+                }
+            }
 
             // If scanning these blocks caused a suggested range to be added that has a
             // higher priority than the current range, invalidate the current ranges.
