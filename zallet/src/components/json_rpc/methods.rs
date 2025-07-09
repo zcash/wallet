@@ -227,8 +227,21 @@ pub(crate) trait Rpc {
         #[argument(rename = "includeWatchonly")] include_watch_only: Option<bool>,
     ) -> z_get_total_balance::Response;
 
+    /// Returns a record of the individual receivers contained within the provided UA,
+    /// keyed by receiver type. The UA may not have receivers for some receiver types,
+    /// in which case those keys will be absent.
+    ///
+    /// Transactions that send funds to any of the receivers returned by this RPC
+    /// method will be detected by the wallet as having been sent to the unified
+    /// address.
+    ///
+    /// # Arguments
+    /// - `unified_address` (string, required) The unified address to inspect.
     #[method(name = "z_listunifiedreceivers")]
-    fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response;
+    async fn list_unified_receivers(
+        &self,
+        unified_address: &str,
+    ) -> list_unified_receivers::Response;
 
     /// Returns detailed shielded information about in-wallet transaction `txid`.
     #[method(name = "z_viewtransaction")]
@@ -474,8 +487,11 @@ impl RpcServer for RpcImpl {
         z_get_total_balance::call(self.wallet().await?.as_ref(), minconf, include_watch_only)
     }
 
-    fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response {
-        list_unified_receivers::call(unified_address)
+    async fn list_unified_receivers(
+        &self,
+        unified_address: &str,
+    ) -> list_unified_receivers::Response {
+        list_unified_receivers::call(self.wallet().await?.as_ref(), unified_address)
     }
 
     async fn view_transaction(&self, txid: &str) -> view_transaction::Response {

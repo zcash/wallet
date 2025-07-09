@@ -1,7 +1,11 @@
 use documented::Documented;
-use jsonrpsee::{core::RpcResult, tracing::warn, types::ErrorCode};
+use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
+use transparent::address::TransparentAddress;
+use zcash_keys::{address::UnifiedAddress, encoding::AddressCodec};
+
+use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `z_listunifiedreceivers` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -33,8 +37,29 @@ pub(crate) struct ListUnifiedReceivers {
 
 pub(super) const PARAM_UNIFIED_ADDRESS_DESC: &str = "The unified address to inspect.";
 
-pub(crate) fn call(unified_address: &str) -> Response {
-    warn!("TODO: Implement z_listunifiedreceivers({unified_address})");
+pub(crate) fn call(wallet: &DbConnection, unified_address: &str) -> Response {
+    let address = match UnifiedAddress::decode(wallet.params(), unified_address) {
+        Ok(addr) => addr,
+        Err(e) => return Err(LegacyCode::InvalidParameter.with_message(e.to_string())),
+    };
 
-    Err(ErrorCode::MethodNotFound.into())
+    let transparent = address.transparent().map(|taddr| match taddr {
+        TransparentAddress::PublicKeyHash(_) => (Some(taddr.encode(wallet.params())), None),
+        TransparentAddress::ScriptHash(_) => (None, Some(taddr.encode(wallet.params()))),
+    });
+
+    let (p2pkh, p2sh) = transparent.unwrap_or((None, None));
+
+    let sapling = address.sapling().map(|s| s.encode(wallet.params()));
+
+    let orchard = address.orchard().and_then(|orch| {
+        UnifiedAddress::from_receivers(Some(*orch), None, None).map(|ua| ua.encode(wallet.params()))
+    });
+
+    Ok(ListUnifiedReceivers {
+        p2pkh,
+        p2sh,
+        sapling,
+        orchard,
+    })
 }
