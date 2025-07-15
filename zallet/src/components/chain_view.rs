@@ -59,7 +59,7 @@ impl ChainView {
             },
             None => {
                 // Default to localhost and standard port based on network
-                let default_port = match config.network() {
+                let default_port = match config.consensus.network() {
                     crate::network::Network::Consensus(
                         zcash_protocol::consensus::Network::MainNetwork,
                     ) => 8232, // Mainnet default RPC port for Zebra/zcashd
@@ -104,7 +104,7 @@ impl ChainView {
             None,
             db_path,
             None,
-            config.network().to_zebra(),
+            config.consensus.network().to_zebra(),
             false,
             // Setting this to `false` causes start-up to block on completely filling the
             // cache. Zaino's DB currently only contains a cache of CompactBlocks, so we

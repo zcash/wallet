@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::convert::Infallible;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 
 use abscissa_core::Application;
 use jsonrpsee::core::{JsonValue, RpcResult};
@@ -17,7 +17,7 @@ use zcash_client_backend::{
             create_proposed_transactions, input_selection::GreedyInputSelector, propose_transfer,
         },
     },
-    fees::{DustOutputPolicy, SplitPolicy, StandardFeeRule, standard::MultiOutputChangeStrategy},
+    fees::{DustOutputPolicy, StandardFeeRule, standard::MultiOutputChangeStrategy},
     wallet::OvkPolicy,
     zip321::{Payment, TransactionRequest},
 };
@@ -46,9 +46,6 @@ use crate::{
     fl,
     prelude::*,
 };
-
-/// Default minimum number of confirmations for note selection.
-const DEFAULT_NOTE_CONFIRMATIONS: NonZeroU32 = NonZeroU32::new(10).unwrap();
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub(crate) struct AmountParameter {
@@ -184,7 +181,7 @@ pub(crate) async fn call(
             // TODO: Fix this inconsistency with `zcashd` (inability to create zero-conf txs).
             // https://github.com/zcash/wallet/issues/139
             .ok_or_else(|| LegacyCode::InvalidParameter.with_static("minconf must be non-zero"))?,
-        None => DEFAULT_NOTE_CONFIRMATIONS,
+        None => NonZeroU32::new(APP.config().builder.default_minconf()).unwrap_or(NonZeroU32::MIN),
     };
 
     // Fetch spending key last, to avoid a keystore decryption if unnecessary.
@@ -313,11 +310,7 @@ async fn run(
         None,
         ShieldedProtocol::Orchard,
         DustOutputPolicy::default(),
-        // TODO: Make this configurable. https://github.com/zcash/wallet/issues/140
-        SplitPolicy::with_min_output_value(
-            NonZeroUsize::new(4).expect("valid"),
-            Zatoshis::from_u64(100_0000).expect("valid"),
-        ),
+        APP.config().note_management.split_policy(),
     );
     // TODO: Once `zcash_client_backend` supports spending transparent coins arbitrarily,
     // consider using the privacy policy here to avoid selecting incompatible funds. This
@@ -340,7 +333,7 @@ async fn run(
 
     enforce_privacy_policy(&proposal, privacy_policy)?;
 
-    let orchard_actions_limit = APP.config().limits.orchard_actions().into();
+    let orchard_actions_limit = APP.config().builder.limits.orchard_actions().into();
     for step in proposal.steps() {
         let orchard_spends = step
             .shielded_inputs()

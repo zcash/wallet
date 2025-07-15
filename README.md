@@ -20,10 +20,22 @@ Pick a folder to use for Zallet, and create a `zallet.toml` file in it. You
 currently need at least the following:
 
 ```toml
-network = "main"
-wallet_db = "/path/to/zallet/datadir/data.sqlite"
+[builder.limits]
 
-[builder]
+[consensus]
+network = "main"
+
+[database]
+wallet = "/path/to/zallet/datadir/data.sqlite"
+
+[external]
+
+[features]
+as_of_version = "0.0.0"
+
+[features.deprecated]
+
+[features.experimental]
 
 [indexer]
 validator_user = ".."
@@ -33,7 +45,7 @@ db_path = "/path/to/zallet/datadir/zaino"
 [keystore]
 identity = "/path/to/zallet/datadir/identity.txt"
 
-[limits]
+[note_management]
 
 [rpc]
 bind = ["127.0.0.1:SOMEPORT"]

@@ -59,7 +59,7 @@ impl WalletSync {
         db: Database,
         chain_view: ChainView,
     ) -> Result<(TaskHandle, TaskHandle, TaskHandle, TaskHandle), Error> {
-        let params = config.network();
+        let params = config.consensus.network();
 
         // Ensure the wallet is in a state that the sync tasks can work with.
         let chain = chain_view.subscribe().await?.inner();

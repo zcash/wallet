@@ -57,13 +57,21 @@ fn setup_new_wallet() {
 
     {
         let mut f = File::create(&config_file).unwrap();
-        writeln!(f, "network = \"test\"").unwrap();
-        writeln!(f, "wallet_db = \"{}\"", wallet_db.display()).unwrap();
         writeln!(f, "[builder]").unwrap();
+        writeln!(f, "[builder.limits]").unwrap();
+        writeln!(f, "[consensus]").unwrap();
+        writeln!(f, "network = \"test\"").unwrap();
+        writeln!(f, "[database]").unwrap();
+        writeln!(f, "wallet = \"{}\"", wallet_db.display()).unwrap();
+        writeln!(f, "[external]").unwrap();
+        writeln!(f, "[features]").unwrap();
+        writeln!(f, "as_of_version = \"{}\"", env!("CARGO_PKG_VERSION")).unwrap();
+        writeln!(f, "[features.deprecated]").unwrap();
+        writeln!(f, "[features.experimental]").unwrap();
         writeln!(f, "[indexer]").unwrap();
         writeln!(f, "[keystore]").unwrap();
         writeln!(f, "identity = \"{}\"", identity_file.display()).unwrap();
-        writeln!(f, "[limits]").unwrap();
+        writeln!(f, "[note_management]").unwrap();
         writeln!(f, "[rpc]").unwrap();
         writeln!(f, "bind = []").unwrap();
     }

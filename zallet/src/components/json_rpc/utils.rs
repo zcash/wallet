@@ -48,10 +48,14 @@ pub(crate) fn parse_txid(txid_str: &str) -> RpcResult<TxId> {
 ///
 /// TODO: Also parse desired public format: https://github.com/zcash/wallet/issues/119
 pub(super) fn parse_seedfp_parameter(seedfp: &str) -> RpcResult<SeedFingerprint> {
-    let mut hash = [0; 32];
-    hex::decode_to_slice(seedfp, &mut hash).map_err(|e: hex::FromHexError| {
+    parse_seedfp(seedfp).map_err(|e: hex::FromHexError| {
         LegacyCode::InvalidParameter.with_message(format!("Invalid seed fingerprint: {e}"))
-    })?;
+    })
+}
+
+pub(crate) fn parse_seedfp(seedfp: &str) -> Result<SeedFingerprint, hex::FromHexError> {
+    let mut hash = [0; 32];
+    hex::decode_to_slice(seedfp, &mut hash)?;
 
     // `zcashd` used `uint256` so the canonical hex byte ordering is "reverse".
     hash.reverse();
