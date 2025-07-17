@@ -14,6 +14,7 @@ use crate::{
 impl ImportMnemonicCmd {
     async fn start(&self) -> Result<(), Error> {
         let config = APP.config();
+        let _lock = config.lock_datadir()?;
 
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db)?;

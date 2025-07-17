@@ -13,7 +13,7 @@ use zcash_client_backend::fees::SplitPolicy;
 use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 use zip32::fingerprint::SeedFingerprint;
 
-use crate::commands::resolve_datadir_path;
+use crate::commands::{lock_datadir, resolve_datadir_path};
 use crate::network::{Network, RegTestNuParam};
 
 /// Zallet Configuration
@@ -68,6 +68,13 @@ impl ZalletConfig {
         self.datadir
             .as_deref()
             .expect("must be set by command before running any code using paths")
+    }
+
+    /// Ensures only a single Zallet process is using the data directory.
+    ///
+    /// This should be called inside any command that writes to the Zallet datadir.
+    pub(crate) fn lock_datadir(&self) -> Result<fmutex::Guard<'static>, crate::error::Error> {
+        lock_datadir(self.datadir())
     }
 
     /// Returns the path to the encryption identity.

@@ -1,6 +1,9 @@
 //! Zallet Subcommands
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use abscissa_core::{Configurable, FrameworkError, FrameworkErrorKind, Runnable, config::Override};
 use home::home_dir;
@@ -8,6 +11,7 @@ use home::home_dir;
 use crate::{
     cli::{EntryPoint, ZalletCmd},
     config::ZalletConfig,
+    error::{Error, ErrorKind},
     fl,
 };
 
@@ -23,6 +27,39 @@ pub(crate) mod rpc_cli;
 
 /// Zallet Configuration Filename
 pub const CONFIG_FILE: &str = "zallet.toml";
+
+/// Ensures only a single Zallet process is using the data directory.
+pub(crate) fn lock_datadir(datadir: &Path) -> Result<fmutex::Guard<'static>, Error> {
+    let lockfile_path = resolve_datadir_path(datadir, Path::new(".lock"));
+
+    {
+        // Ensure that the lockfile exists on disk.
+        let _ = fs::File::create(&lockfile_path).map_err(|e| {
+            ErrorKind::Init.context(fl!(
+                "err-init-failed-to-create-lockfile",
+                path = lockfile_path.display().to_string(),
+                error = e.to_string(),
+            ))
+        })?;
+    }
+
+    let guard = fmutex::try_lock_exclusive_path(&lockfile_path)
+        .map_err(|e| {
+            ErrorKind::Init.context(fl!(
+                "err-init-failed-to-read-lockfile",
+                path = lockfile_path.display().to_string(),
+                error = e.to_string(),
+            ))
+        })?
+        .ok_or_else(|| {
+            ErrorKind::Init.context(fl!(
+                "err-init-zallet-already-running",
+                datadir = datadir.display().to_string(),
+            ))
+        })?;
+
+    Ok(guard)
+}
 
 /// Resolves the requested path relative to the Zallet data directory.
 pub(crate) fn resolve_datadir_path(datadir: &Path, path: &Path) -> PathBuf {
