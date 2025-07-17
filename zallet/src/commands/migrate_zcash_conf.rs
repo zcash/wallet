@@ -4,23 +4,23 @@ use std::collections::{HashMap, HashSet};
 use std::iter;
 use std::path::PathBuf;
 
-use abscissa_core::{Runnable, Shutdown};
+use abscissa_core::Runnable;
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
 };
 
+use crate::commands::AsyncRunnable;
 use crate::{
     cli::MigrateZcashConfCmd,
     config::ZalletConfig,
     error::{Error, ErrorKind},
     fl,
     network::RegTestNuParam,
-    prelude::*,
 };
 
-impl MigrateZcashConfCmd {
-    async fn start(&self) -> Result<(), Error> {
+impl AsyncRunnable for MigrateZcashConfCmd {
+    async fn run(&self) -> Result<(), Error> {
         let conf = if self.conf.is_relative() {
             if let Some(datadir) = self.datadir.as_ref() {
                 datadir.join(&self.conf)
@@ -174,17 +174,7 @@ impl MigrateZcashConfCmd {
 
 impl Runnable for MigrateZcashConfCmd {
     fn run(&self) {
-        match abscissa_tokio::run(&APP, self.start()) {
-            Ok(Ok(())) => (),
-            Ok(Err(e)) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-            Err(e) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-        }
+        self.run_on_runtime();
     }
 }
 

@@ -2,11 +2,11 @@
 
 use std::fmt;
 
-use abscissa_core::{Runnable, Shutdown};
+use abscissa_core::Runnable;
 use jsonrpsee::core::{client::ClientT, params::ArrayParams};
 use jsonrpsee_http_client::HttpClientBuilder;
 
-use crate::{cli::RpcCliCmd, error::Error, prelude::*};
+use crate::{cli::RpcCliCmd, commands::AsyncRunnable, error::Error, prelude::*};
 
 macro_rules! wfl {
     ($f:ident, $message_id:literal) => {
@@ -29,8 +29,8 @@ macro_rules! wlnfl {
     };
 }
 
-impl RpcCliCmd {
-    async fn start(&self) -> Result<(), Error> {
+impl AsyncRunnable for RpcCliCmd {
+    async fn run(&self) -> Result<(), Error> {
         let config = APP.config();
 
         // Connect to the Zallet wallet.
@@ -78,17 +78,7 @@ impl RpcCliCmd {
 
 impl Runnable for RpcCliCmd {
     fn run(&self) {
-        match abscissa_tokio::run(&APP, self.start()) {
-            Ok(Ok(())) => (),
-            Ok(Err(e)) => {
-                eprintln!("{}", e);
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-            Err(e) => {
-                eprintln!("{}", e);
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-        }
+        self.run_on_runtime();
     }
 }
 

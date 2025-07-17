@@ -5,7 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use abscissa_core::{Configurable, FrameworkError, FrameworkErrorKind, Runnable, config::Override};
+use abscissa_core::{
+    Application, Configurable, FrameworkError, FrameworkErrorKind, Runnable, Shutdown,
+    config::Override,
+};
 use home::home_dir;
 
 use crate::{
@@ -13,6 +16,7 @@ use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
     fl,
+    prelude::APP,
 };
 
 mod example_config;
@@ -138,6 +142,29 @@ impl Configurable<ZalletConfig> for EntryPoint {
         match &self.cmd {
             ZalletCmd::Start(cmd) => cmd.override_config(config),
             _ => Ok(config),
+        }
+    }
+}
+
+/// An async version of the [`Runnable`] trait.
+pub(crate) trait AsyncRunnable {
+    /// Runs this `AsyncRunnable`.
+    async fn run(&self) -> Result<(), Error>;
+
+    /// Runs this `AsyncRunnable` using the `abscissa_tokio` runtime.
+    ///
+    /// This should be called from [`Runnable::run`].
+    fn run_on_runtime(&self) {
+        match abscissa_tokio::run(&APP, self.run()) {
+            Ok(Ok(())) => (),
+            Ok(Err(e)) => {
+                eprintln!("{e}");
+                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
+            }
         }
     }
 }

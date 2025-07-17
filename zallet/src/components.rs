@@ -18,7 +18,7 @@ pub(crate) mod tracing;
 ///
 /// Background tasks in Zallet are either one-shot (expected to terminate before Zallet),
 /// or ongoing (Zallet shuts down if the task finishes). The tasks are monitored by
-/// [`StartCmd::start`].
+/// [`StartCmd::run`].
 ///
-/// [`StartCmd::start`]: crate::cli::StartCmd::start
+/// [`StartCmd::run`]: crate::commands::AsyncRunnable::run
 pub(crate) type TaskHandle = JoinHandle<Result<(), Error>>;
