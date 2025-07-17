@@ -10,6 +10,7 @@ use abscissa_core::{
     config::Override,
 };
 use home::home_dir;
+use tracing::info;
 
 use crate::{
     cli::{EntryPoint, ZalletCmd},
@@ -153,9 +154,20 @@ pub(crate) trait AsyncRunnable {
 
     /// Runs this `AsyncRunnable` using the `abscissa_tokio` runtime.
     ///
+    /// Signal detection is included for handling both interrupts (Ctrl-C on most
+    /// platforms, corresponding to `SIGINT` on Unix), and programmatic termination
+    /// (`SIGTERM` on Unix). Both of these will cause [`AsyncRunnable::run`] to be
+    /// cancelled (ending execution at an `.await` boundary).
+    ///
     /// This should be called from [`Runnable::run`].
     fn run_on_runtime(&self) {
-        match abscissa_tokio::run(&APP, self.run()) {
+        match abscissa_tokio::run(&APP, async move {
+            tokio::select! {
+                biased;
+                _ = shutdown() => Ok(()),
+                result = self.run() => result,
+            }
+        }) {
             Ok(Ok(())) => (),
             Ok(Err(e)) => {
                 eprintln!("{e}");
@@ -166,5 +178,33 @@ pub(crate) trait AsyncRunnable {
                 APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
         }
+    }
+}
+
+async fn shutdown() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+
+        let mut sigint =
+            signal(SignalKind::interrupt()).expect("Failed to register signal handler for SIGINT");
+        let mut sigterm =
+            signal(SignalKind::terminate()).expect("Failed to register signal handler for SIGTERM");
+
+        let signal = tokio::select! {
+            _ = sigint.recv() => "SIGINT",
+            _ = sigterm.recv() => "SIGTERM",
+        };
+
+        info!("Received {signal}, starting shutdown");
+    }
+
+    #[cfg(not(unix))]
+    {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("listening for ctrl-c signal should never fail");
+
+        info!("Received Ctrl-C, starting shutdown");
     }
 }
