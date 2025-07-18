@@ -3,6 +3,7 @@ use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
 use transparent::address::TransparentAddress;
+use zcash_address::ZcashAddress;
 use zcash_keys::{address::UnifiedAddress, encoding::AddressCodec};
 
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
@@ -38,9 +39,15 @@ pub(crate) struct ListUnifiedReceivers {
 pub(super) const PARAM_UNIFIED_ADDRESS_DESC: &str = "The unified address to inspect.";
 
 pub(crate) fn call(wallet: &DbConnection, unified_address: &str) -> Response {
+    ZcashAddress::try_from_encoded(unified_address)
+        .map_err(|_| LegacyCode::InvalidAddressOrKey.with_message("Invalid address".to_string()))?;
+
     let address = match UnifiedAddress::decode(wallet.params(), unified_address) {
         Ok(addr) => addr,
-        Err(e) => return Err(LegacyCode::InvalidParameter.with_message(e.to_string())),
+        Err(_) => {
+            return Err(LegacyCode::InvalidParameter
+                .with_message("Address is not a unified address".to_string()));
+        }
     };
 
     let transparent = address.transparent().map(|taddr| match taddr {
