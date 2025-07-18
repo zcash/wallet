@@ -28,9 +28,17 @@ pub struct EntryPoint {
     #[arg(short, long)]
     pub(crate) verbose: bool,
 
-    /// Use the specified config file
+    /// Specify the data directory for the Zallet wallet.
+    ///
+    /// This must be an absolute path.
     #[arg(short, long)]
-    pub(crate) config: Option<String>,
+    pub(crate) datadir: Option<PathBuf>,
+
+    /// Use the specified configuration file.
+    ///
+    /// Relative paths will be prefixed by the datadir.
+    #[arg(short, long)]
+    pub(crate) config: Option<PathBuf>,
 }
 
 #[derive(Debug, Parser)]

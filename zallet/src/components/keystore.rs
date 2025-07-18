@@ -111,7 +111,6 @@
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -162,12 +161,7 @@ impl KeyStore {
     pub(crate) fn new(config: &ZalletConfig, db: Database) -> Result<Self, Error> {
         // TODO: Maybe support storing the identity in `zallet.toml` instead of as a
         // separate file on disk?
-        let path = config.keystore.identity.clone();
-        if Path::new(&path).is_relative() {
-            return Err(ErrorKind::Init
-                .context("keystore.identity must be an absolute path (for now)")
-                .into());
-        }
+        let path = config.encryption_identity();
 
         let (encrypted_identities, identities) = {
             let mut identity_data = vec![];
@@ -186,7 +180,10 @@ impl KeyStore {
                         .is_none()
                     {
                         return Err(ErrorKind::Init
-                            .context(format!("{path} is not encrypted with a passphrase"))
+                            .context(format!(
+                                "{} is not encrypted with a passphrase",
+                                path.display(),
+                            ))
                             .into());
                     }
 
@@ -196,12 +193,23 @@ impl KeyStore {
                     identity_data.zeroize();
 
                     // Try parsing as multiple single-line age identities.
-                    let identity_file = age::IdentityFile::from_file(path.clone())
-                        .map_err(|e| ErrorKind::Init.context(e))?
-                        .with_callbacks(age::cli_common::UiCallbacks);
+                    let identity_file = age::IdentityFile::from_file(
+                        path.to_str()
+                            .ok_or_else(|| {
+                                ErrorKind::Init.context(format!(
+                                    "{} is not currently supported (not UTF-8)",
+                                    path.display(),
+                                ))
+                            })?
+                            .to_string(),
+                    )
+                    .map_err(|e| ErrorKind::Init.context(e))?
+                    .with_callbacks(age::cli_common::UiCallbacks);
                     let identities = identity_file.into_identities().map_err(|e| {
-                        ErrorKind::Init
-                            .context(format!("Identity file at {path} is not usable: {e}"))
+                        ErrorKind::Init.context(format!(
+                            "Identity file at {} is not usable: {e}",
+                            path.display(),
+                        ))
                     })?;
 
                     (None, identities)

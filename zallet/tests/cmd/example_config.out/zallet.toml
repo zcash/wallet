@@ -90,9 +90,8 @@ network = "main"
 
 # Path to the wallet database file.
 #
-# TODO: If we decide to support a data directory, allow this to have a relative path
-# within it as well as a default name.
-#wallet = UNSET
+# This can be either an absolute path, or a path relative to the data directory.
+#wallet = "wallet.db"
 
 
 #
@@ -104,6 +103,8 @@ network = "main"
 #broadcast = true
 
 # Directory to be used when exporting data.
+#
+# This must be an absolute path; relative paths are not resolved within the datadir.
 #export_dir = UNSET
 
 # Executes the specified command when a wallet transaction changes.
@@ -210,10 +211,10 @@ as_of_version = "0.0.0"
 # Full node / validator Password.
 #validator_password = UNSET
 
-# Block Cache database file path.
+# Path to the folder where the indexer maintains its state.
 #
-# This is Zaino's Compact Block Cache db if using the FetchService or Zebra's RocksDB if using the StateService.
-#db_path = UNSET
+# This can be either an absolute path, or a path relative to the data directory.
+#db_path = "zaino"
 
 
 #
@@ -222,7 +223,9 @@ as_of_version = "0.0.0"
 [keystore]
 
 # Path to the age identity file that encrypts key material.
-#identity = ""
+#
+# This can be either an absolute path, or a path relative to the data directory.
+#encryption_identity = "encryption-identity.txt"
 
 # By default, the wallet will not allow generation of new spending keys & addresses
 # from the mnemonic seed until the backup of that seed has been confirmed with the

@@ -83,6 +83,7 @@ deadpool.workspace = true
 deadpool-sqlite.workspace = true
 deadpool-sync.workspace = true
 documented.workspace = true
+fmutex.workspace = true
 futures.workspace = true
 hex.workspace = true
 home.workspace = true

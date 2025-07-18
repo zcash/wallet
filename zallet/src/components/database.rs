@@ -32,16 +32,7 @@ impl fmt::Debug for Database {
 
 impl Database {
     pub(crate) async fn open(config: &ZalletConfig) -> Result<Self, Error> {
-        let path = config
-            .database
-            .wallet
-            .clone()
-            .ok_or_else(|| ErrorKind::Init.context("database.wallet must be set (for now)"))?;
-        if path.is_relative() {
-            return Err(ErrorKind::Init
-                .context("database.wallet must be an absolute path (for now)")
-                .into());
-        }
+        let path = config.wallet_db_path();
 
         let db_exists = fs::try_exists(&path)
             .await

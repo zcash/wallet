@@ -86,12 +86,6 @@ impl ChainView {
             }
         }?;
 
-        let db_path = config
-            .indexer
-            .db_path
-            .clone()
-            .ok_or(ErrorKind::Init.context("indexer.db_path must be set (for now)"))?;
-
         let config = FetchServiceConfig::new(
             resolved_validator_address,
             config.indexer.validator_cookie_auth.unwrap_or(false),
@@ -102,7 +96,7 @@ impl ChainView {
             None,
             None,
             None,
-            db_path,
+            config.indexer_db_path().to_path_buf(),
             None,
             config.consensus.network().to_zebra(),
             false,

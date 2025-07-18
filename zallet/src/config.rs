@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::net::SocketAddr;
 use std::num::NonZeroU16;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
@@ -13,6 +13,7 @@ use zcash_client_backend::fees::SplitPolicy;
 use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 use zip32::fingerprint::SeedFingerprint;
 
+use crate::commands::{lock_datadir, resolve_datadir_path};
 use crate::network::{Network, RegTestNuParam};
 
 /// Zallet Configuration
@@ -26,6 +27,13 @@ use crate::network::{Network, RegTestNuParam};
 #[derive(Clone, Debug, Default, Deserialize, Serialize, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
+    /// Zallet's data directory.
+    ///
+    /// This cannot be set in a config file; it must be provided on the command line, and
+    /// is set to `None` until `EntryPoint::process_config` is called.
+    #[serde(skip)]
+    pub(crate) datadir: Option<PathBuf>,
+
     /// Settings that affect transactions created by Zallet.
     pub builder: BuilderSection,
 
@@ -52,6 +60,37 @@ pub struct ZalletConfig {
 
     /// Settings for the JSON-RPC interface.
     pub rpc: RpcSection,
+}
+
+impl ZalletConfig {
+    /// Returns the data directory to use.
+    fn datadir(&self) -> &Path {
+        self.datadir
+            .as_deref()
+            .expect("must be set by command before running any code using paths")
+    }
+
+    /// Ensures only a single Zallet process is using the data directory.
+    ///
+    /// This should be called inside any command that writes to the Zallet datadir.
+    pub(crate) fn lock_datadir(&self) -> Result<fmutex::Guard<'static>, crate::error::Error> {
+        lock_datadir(self.datadir())
+    }
+
+    /// Returns the path to the encryption identity.
+    pub(crate) fn encryption_identity(&self) -> PathBuf {
+        resolve_datadir_path(self.datadir(), self.keystore.encryption_identity())
+    }
+
+    /// Returns the path to the indexer's database.
+    pub(crate) fn indexer_db_path(&self) -> PathBuf {
+        resolve_datadir_path(self.datadir(), self.indexer.db_path())
+    }
+
+    /// Returns the path to the wallet database.
+    pub(crate) fn wallet_db_path(&self) -> PathBuf {
+        resolve_datadir_path(self.datadir(), self.database.wallet_path())
+    }
 }
 
 /// Settings that affect transactions created by Zallet.
@@ -219,9 +258,21 @@ impl ConsensusSection {
 pub struct DatabaseSection {
     /// Path to the wallet database file.
     ///
-    /// TODO: If we decide to support a data directory, allow this to have a relative path
-    /// within it as well as a default name.
+    /// This can be either an absolute path, or a path relative to the data directory.
     pub wallet: Option<PathBuf>,
+}
+
+impl DatabaseSection {
+    /// Path to the wallet database file.
+    ///
+    /// This can be either an absolute path, or a path relative to the data directory.
+    ///
+    /// Default is `wallet.db`.
+    fn wallet_path(&self) -> &Path {
+        self.wallet
+            .as_deref()
+            .unwrap_or_else(|| Path::new("wallet.db"))
+    }
 }
 
 /// Settings controlling how Zallet interacts with the outside world.
@@ -232,7 +283,9 @@ pub struct ExternalSection {
     pub broadcast: Option<bool>,
 
     /// Directory to be used when exporting data.
-    pub export_dir: Option<String>,
+    ///
+    /// This must be an absolute path; relative paths are not resolved within the datadir.
+    pub export_dir: Option<PathBuf>,
 
     /// Executes the specified command when a wallet transaction changes.
     ///
@@ -397,10 +450,23 @@ pub struct IndexerSection {
     /// Full node / validator Password.
     pub validator_password: Option<String>,
 
-    /// Block Cache database file path.
+    /// Path to the folder where the indexer maintains its state.
     ///
-    /// This is Zaino's Compact Block Cache db if using the FetchService or Zebra's RocksDB if using the StateService.
+    /// This can be either an absolute path, or a path relative to the data directory.
     pub db_path: Option<PathBuf>,
+}
+
+impl IndexerSection {
+    /// Path to the folder where the indexer maintains its state.
+    ///
+    /// This can be either an absolute path, or a path relative to the data directory.
+    ///
+    /// Default is `zaino`.
+    fn db_path(&self) -> &Path {
+        self.db_path
+            .as_deref()
+            .unwrap_or_else(|| Path::new("zaino"))
+    }
 }
 
 /// Settings for the key store.
@@ -408,8 +474,9 @@ pub struct IndexerSection {
 #[serde(deny_unknown_fields)]
 pub struct KeyStoreSection {
     /// Path to the age identity file that encrypts key material.
-    // TODO: Change this to `PathBuf` once `age::IdentityFile::from_file` supports it.
-    pub identity: String,
+    ///
+    /// This can be either an absolute path, or a path relative to the data directory.
+    pub encryption_identity: Option<PathBuf>,
 
     /// By default, the wallet will not allow generation of new spending keys & addresses
     /// from the mnemonic seed until the backup of that seed has been confirmed with the
@@ -419,6 +486,17 @@ pub struct KeyStoreSection {
 }
 
 impl KeyStoreSection {
+    /// Path to the age identity file that encrypts key material.
+    ///
+    /// This can be either an absolute path, or a path relative to the data directory.
+    ///
+    /// Default is `encryption-identity.txt`.
+    fn encryption_identity(&self) -> &Path {
+        self.encryption_identity
+            .as_deref()
+            .unwrap_or_else(|| Path::new("encryption-identity.txt"))
+    }
+
     /// Whether to require a confirmed wallet backup.
     ///
     /// By default, the wallet will not allow generation of new spending keys & addresses
@@ -532,19 +610,19 @@ impl ZalletConfig {
                 crate::network::kind::Serializable(conf.consensus.network),
             ),
             consensus("regtest_nuparams", &conf.consensus.regtest_nuparams),
-            database("wallet", &conf.database.wallet),
+            database("wallet", conf.database.wallet_path()),
             external("broadcast", conf.external.broadcast()),
             external("export_dir", &conf.external.export_dir),
             external("notify", &conf.external.notify),
             features("as_of_version", &conf.features.as_of_version),
             features("legacy_pool_seed_fingerprint", None::<String>),
-            indexer("validator_address", conf.indexer.validator_address),
+            indexer("validator_address", &conf.indexer.validator_address),
             indexer("validator_cookie_auth", conf.indexer.validator_cookie_auth),
             indexer("validator_cookie_path", &conf.indexer.validator_cookie_path),
             indexer("validator_user", &conf.indexer.validator_user),
             indexer("validator_password", &conf.indexer.validator_password),
-            indexer("db_path", &conf.indexer.db_path),
-            keystore("identity", &conf.keystore.identity),
+            indexer("db_path", conf.indexer.db_path()),
+            keystore("encryption_identity", conf.keystore.encryption_identity()),
             keystore("require_backup", conf.keystore.require_backup()),
             note_management(
                 "min_note_value",
@@ -647,13 +725,6 @@ impl ZalletConfig {
                 },
             )
         }
-
-        let top_def = |field_name| {
-            field_defaults
-                .get(&("", field_name))
-                .expect("need to update field_defaults with changes to ZalletConfig")
-                .as_ref()
-        };
 
         let sec_def = |section_name, field_name| {
             field_defaults
@@ -777,7 +848,9 @@ impl ZalletConfig {
                     write_section::<NoteManagementSection>(&mut config, field_name, &sec_def)
                 }
                 RPC => write_section::<RpcSection>(&mut config, field_name, &sec_def),
-                _ => write_field::<Self>(&mut config, field_name, false, top_def(field_name)),
+                // Top-level fields correspond to CLI settings, and cannot be configured
+                // via a file.
+                _ => (),
             }
         }
 

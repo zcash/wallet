@@ -23,9 +23,10 @@ tokio = "1"
 
 # Documentation
 documented = "0.9"
-phf = "0.11"
+phf = { version = "0.11", features = ["macros"] }
 
 # Filesystem
+fmutex = "0.3"
 home = "0.5"
 known-folders = "1"
 xdg = "2.5"

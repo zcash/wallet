@@ -24,7 +24,6 @@ as_of_version = "0.0.0"
 [indexer]
 
 [keystore]
-identity = ""
 
 [note_management]
 
