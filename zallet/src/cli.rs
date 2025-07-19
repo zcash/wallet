@@ -53,6 +53,9 @@ pub(crate) enum ZalletCmd {
     /// Generate a `zallet.toml` config from an existing `zcash.conf` file.
     MigrateZcashConf(MigrateZcashConfCmd),
 
+    /// Generate a `zallet.toml` config from an existing `zcash.conf` file.
+    MigrateZcashdWallet(MigrateZcashdWalletCmd),
+
     /// Initialize wallet encryption.
     InitWalletEncryption(InitWalletEncryptionCmd),
 
@@ -124,6 +127,25 @@ pub(crate) struct MigrateZcashConfCmd {
     /// Temporary flag ensuring any alpha users are aware the migration is not stable.
     #[arg(long)]
     pub(crate) this_is_alpha_code_and_you_will_need_to_redo_the_migration_later: bool,
+}
+
+/// `generate-mnemonic` subcommand
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct MigrateZcashdWalletCmd {
+    /// Specify location of the `zcashd` `wallet.dat` file.
+    ///
+    /// Relative paths will be prefixed by `datadir` location.
+    #[arg(long, default_value = "wallet.dat")]
+    pub(crate) path: PathBuf,
+
+    /// Specify `zcashd` data directory (this path cannot use '~').
+    #[arg(long)]
+    pub(crate) datadir: Option<PathBuf>,
+
+    /// Allow a migration when warnings are present.
+    #[arg(long)]
+    pub(crate) allow_warnings: bool,
 }
 
 /// `init-wallet-encryption` subcommand
