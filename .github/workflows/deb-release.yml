@@ -84,7 +84,7 @@ jobs:
         shell: bash
         run: |
           aptly repo create --distribution bookworm --component main zcash_local
-          aptly repo add zcash_local target/debian/zallet_0.0.0-1_amd64.deb
+          aptly repo add zcash_local target/debian/zallet_*_amd64.deb
           aptly mirror update zcash
           aptly snapshot create snapshot_zcash from mirror zcash
           aptly snapshot create snapshot_local from repo zcash_local
