@@ -104,8 +104,18 @@ pub(crate) async fn call(
                 height: u64::try_from(treestate.height).map_err(|_| RpcErrorCode::InternalError)?,
                 hash: treestate.hash,
                 time: treestate.time,
-                sapling_tree: treestate.sapling.inner().inner().clone(),
-                orchard_tree: treestate.orchard.inner().inner().clone(),
+                sapling_tree: treestate
+                    .sapling
+                    .inner()
+                    .inner()
+                    .clone()
+                    .unwrap_or_default(),
+                orchard_tree: treestate
+                    .orchard
+                    .inner()
+                    .inner()
+                    .clone()
+                    .unwrap_or_default(),
             }
         };
 

@@ -1,25 +1,37 @@
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
-use tokio::time;
+use tokio::{sync::Notify, time};
+use transparent::{
+    address::Script,
+    bundle::{OutPoint, TxOut},
+};
+use zaino_fetch::jsonrpsee::error::JsonRpSeeConnectorError;
 use zaino_proto::proto::service::GetAddressUtxosArg;
-use zaino_state::{FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer};
-use zcash_client_backend::data_api::{
-    OutputStatusFilter, TransactionDataRequest, TransactionStatus, TransactionStatusFilter,
-    WalletRead, WalletWrite,
-    chain::{BlockCache, scan_cached_blocks},
-    scanning::{ScanPriority, ScanRange},
-    wallet::decrypt_and_store_transaction,
+use zaino_state::{
+    FetchServiceError, FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer,
+};
+use zcash_client_backend::{
+    data_api::{
+        OutputStatusFilter, TransactionDataRequest, TransactionStatus, TransactionStatusFilter,
+        WalletRead, WalletWrite,
+        chain::{self, BlockCache, scan_cached_blocks},
+        scanning::{ScanPriority, ScanRange},
+        wallet::decrypt_and_store_transaction,
+    },
+    scanning::ScanError,
+    wallet::WalletTransparentOutput,
 };
 use zcash_keys::encoding::AddressCodec;
 use zcash_primitives::transaction::Transaction;
 use zcash_protocol::{
     TxId,
     consensus::{self, BlockHeight},
+    value::Zatoshis,
 };
 use zebra_chain::transaction::SerializedTransaction;
-use zebra_rpc::methods::GetAddressTxIdsRequest;
+use zebra_rpc::methods::{AddressStrings, GetAddressTxIdsRequest};
 
 use super::{
     TaskHandle,
@@ -46,36 +58,73 @@ impl WalletSync {
         config: &ZalletConfig,
         db: Database,
         chain_view: ChainView,
-    ) -> Result<(TaskHandle, TaskHandle, TaskHandle), Error> {
-        let params = config.network();
+    ) -> Result<(TaskHandle, TaskHandle, TaskHandle, TaskHandle), Error> {
+        let params = config.consensus.network();
 
         // Ensure the wallet is in a state that the sync tasks can work with.
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let starting_tip = initialize(chain, &params, db_data.as_mut()).await?;
+        // TODO: Zaino should provide us an API that allows us to be notified when the chain tip
+        // changes; here, we produce our own signal via the "mempool stream closing" side effect
+        // that occurs in the light client API when the chain tip changes.
+        let tip_change_signal_source = Arc::new(Notify::new());
+        let poll_tip_change_signal_receiver = tip_change_signal_source.clone();
+        let req_tip_change_signal_receiver = tip_change_signal_source.clone();
 
         // Spawn the ongoing sync tasks.
         let chain = chain_view.subscribe().await?.inner();
-        let steady_state_task = tokio::spawn(async move {
-            steady_state(&chain, &params, db_data.as_mut(), starting_tip).await?;
+        let steady_state_task = crate::spawn!("Steady state sync", async move {
+            steady_state(
+                &chain,
+                &params,
+                db_data.as_mut(),
+                starting_tip,
+                tip_change_signal_source,
+            )
+            .await?;
             Ok(())
         });
 
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
-        let recover_history_task = tokio::spawn(async move {
+        let recover_history_task = crate::spawn!("Recover history", async move {
             recover_history(chain, &params, db_data.as_mut(), 1000).await?;
             Ok(())
         });
 
         let chain = chain_view.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
-        let data_requests_task = tokio::spawn(async move {
-            data_requests(chain, &params, db_data.as_mut()).await?;
+        let poll_transparent_task = crate::spawn!("Poll transparent", async move {
+            poll_transparent(
+                chain,
+                &params,
+                db_data.as_mut(),
+                poll_tip_change_signal_receiver,
+            )
+            .await?;
             Ok(())
         });
 
-        Ok((steady_state_task, recover_history_task, data_requests_task))
+        let chain = chain_view.subscribe().await?.inner();
+        let mut db_data = db.handle().await?;
+        let data_requests_task = crate::spawn!("Data requests", async move {
+            data_requests(
+                chain,
+                &params,
+                db_data.as_mut(),
+                req_tip_change_signal_receiver,
+            )
+            .await?;
+            Ok(())
+        });
+
+        Ok((
+            steady_state_task,
+            recover_history_task,
+            poll_transparent_task,
+            data_requests_task,
+        ))
     }
 }
 
@@ -119,19 +168,28 @@ async fn initialize(
             .await?;
 
         let from_state =
-            steps::fetch_chain_state(&chain, scan_range.block_range().start - 1).await?;
+            steps::fetch_chain_state(&chain, params, scan_range.block_range().start - 1).await?;
 
         // Scan the downloaded blocks.
         tokio::task::block_in_place(|| {
             info!("Scanning {}", scan_range);
-            scan_cached_blocks(
+            match scan_cached_blocks(
                 params,
                 &db_cache,
                 db_data,
                 scan_range.block_range().start,
                 &from_state,
                 scan_range.len(),
-            )
+            ) {
+                Ok(_) => Ok(()),
+                Err(chain::error::Error::Scan(ScanError::PrevHashMismatch { at_height })) => {
+                    db_data
+                        .truncate_to_height(at_height - 10)
+                        .map_err(chain::error::Error::Wallet)?;
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
         })?;
 
         // Delete the now-scanned blocks.
@@ -152,6 +210,7 @@ async fn steady_state(
     params: &Network,
     db_data: &mut DbConnection,
     mut prev_tip: ChainBlock,
+    tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
     info!("Steady-state sync task started");
     let mut current_tip = steps::get_chain_tip(chain).await?;
@@ -162,6 +221,7 @@ async fn steady_state(
 
     loop {
         info!("New chain tip: {} {}", current_tip.height, current_tip.hash);
+        tip_change_signal.notify_one();
 
         // Figure out the diff between the previous and current chain tips.
         let fork_point = steps::find_fork(chain, prev_tip, current_tip).await?;
@@ -206,7 +266,8 @@ async fn steady_state(
             let scan_range = ScanRange::from_parts(from_height..end_height, ScanPriority::ChainTip);
             db_cache.insert(block_stack).await?;
 
-            let from_state = steps::fetch_chain_state(chain, from_height.saturating_sub(1)).await?;
+            let from_state =
+                steps::fetch_chain_state(chain, params, from_height.saturating_sub(1)).await?;
 
             tokio::task::block_in_place(|| {
                 info!("Scanning {}", scan_range);
@@ -314,7 +375,8 @@ async fn recover_history(
                 .await?;
 
             let from_state =
-                steps::fetch_chain_state(&chain, scan_range.block_range().start - 1).await?;
+                steps::fetch_chain_state(&chain, params, scan_range.block_range().start - 1)
+                    .await?;
 
             // Scan the downloaded blocks.
             tokio::task::block_in_place(|| {
@@ -346,6 +408,70 @@ async fn recover_history(
     }
 }
 
+/// Polls the non-ephemeral transparent addresses in the wallet for UTXOs.
+///
+/// Ephemeral addresses are handled by [`data_requests`].
+#[tracing::instrument(skip_all)]
+async fn poll_transparent(
+    chain: FetchServiceSubscriber,
+    params: &Network,
+    db_data: &mut DbConnection,
+    tip_change_signal: Arc<Notify>,
+) -> Result<(), SyncError> {
+    info!("Transparent address polling sync task started");
+
+    loop {
+        // Wait for the chain tip to advance
+        tip_change_signal.notified().await;
+
+        // Collect all of the wallet's non-ephemeral transparent addresses. We do this
+        // fresh every loop to ensure we incorporate changes to the address set.
+        //
+        // TODO: This is likely to be append-only unless we add support for removing an
+        // account from the wallet, so we could implement a more efficient strategy here
+        // with some changes to the `WalletRead` API. For now this is fine.
+        let addresses = db_data
+            .get_account_ids()?
+            .into_iter()
+            .map(|account| db_data.get_transparent_receivers(account, true))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flat_map(|m| m.into_keys().map(|addr| addr.encode(params)))
+            .collect();
+
+        // Fetch all mined UTXOs.
+        // TODO: I really want to use the chaininfo-aware version (which Zaino doesn't
+        // implement) or an equivalent Zaino index (once it exists).
+        info!("Fetching mined UTXOs");
+        let utxos = chain
+            .z_get_address_utxos(
+                AddressStrings::new_valid(addresses).expect("we just encoded these"),
+            )
+            .await?;
+
+        // Notify the wallet about all mined UTXOs.
+        for utxo in utxos {
+            let (address, txid, index, script, value_zat, mined_height) = utxo.into_parts();
+            debug!("{address} has UTXO in tx {txid} at index {}", index.index());
+
+            let output = WalletTransparentOutput::from_parts(
+                OutPoint::new(txid.0, index.index()),
+                TxOut {
+                    value: Zatoshis::const_from_u64(value_zat),
+                    script_pubkey: Script(script.as_raw_bytes().to_vec()),
+                },
+                Some(BlockHeight::from_u32(mined_height.0)),
+            )
+            .expect("the UTXO was detected via a supported address kind");
+
+            db_data.put_received_transparent_utxo(&output)?;
+        }
+        // TODO: Once Zaino has an index over the mempool, monitor it for changes to the
+        // unmined UTXO set (which we can't get directly from the stream without building
+        // an index because existing mempool txs can be spent within the mempool).
+    }
+}
+
 /// Fetches information that the wallet requests to complete its view of transaction
 /// history.
 #[tracing::instrument(skip_all)]
@@ -353,27 +479,20 @@ async fn data_requests(
     chain: FetchServiceSubscriber,
     params: &Network,
     db_data: &mut DbConnection,
+    tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
-    let mut interval = time::interval(Duration::from_secs(10));
-    interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    // The first tick completes immediately. We want to use it for a conditional delay, so
-    // get that out of the way.
-    interval.tick().await;
-
-    // TODO: Remove this once https://github.com/zcash/librustzcash/issues/1805
-    // is implemented and used by Zallet.
-    let mut hotloop_preventer = time::interval(Duration::from_secs(1));
     loop {
-        hotloop_preventer.tick().await;
+        // Wait for the chain tip to advance
+        tip_change_signal.notified().await;
 
         let requests = db_data.transaction_data_requests()?;
         if requests.is_empty() {
             // Wait for new requests.
-            debug!("No transaction data requests, sleeping");
-            interval.tick().await;
+            debug!("No transaction data requests, sleeping until the chain tip changes.");
             continue;
         }
 
+        info!("{} transaction data requests to service", requests.len());
         for request in requests {
             match request {
                 TransactionDataRequest::GetStatus(txid) => {
@@ -388,8 +507,15 @@ async fn data_requests(
                             .map(BlockHeight::from_u32)
                             .map(TransactionStatus::Mined)
                             .unwrap_or(TransactionStatus::NotInMainChain),
-                        // TODO: Detect error corresponding to
-                        // `TransactionStatus::TxidNotRecognized`.
+                        // TODO: Zaino is not correctly parsing the error response, so we
+                        // can't look for `LegacyCode::InvalidAddressOrKey`. Instead match
+                        // on these three possible error messages:
+                        // - "No such mempool or blockchain transaction" (zcashd -txindex)
+                        // - "No such mempool transaction." (zcashd)
+                        // - "No such mempool or main chain transaction" (zebrad)
+                        Err(FetchServiceError::JsonRpcConnectorError(
+                            JsonRpSeeConnectorError::JsonRpSeeClientError(e),
+                        )) if e.contains("No such mempool") => TransactionStatus::TxidNotRecognized,
                         Err(e) => return Err(e.into()),
                     };
 
@@ -435,8 +561,15 @@ async fn data_requests(
 
                             Some((tx, mined_height))
                         }
-                        // TODO: Detect error corresponding to
-                        // `TransactionStatus::TxidNotRecognized`.
+                        // TODO: Zaino is not correctly parsing the error response, so we
+                        // can't look for `LegacyCode::InvalidAddressOrKey`. Instead match
+                        // on these three possible error messages:
+                        // - "No such mempool or blockchain transaction" (zcashd -txindex)
+                        // - "No such mempool transaction." (zcashd)
+                        // - "No such mempool or main chain transaction" (zebrad)
+                        Err(FetchServiceError::JsonRpcConnectorError(
+                            JsonRpSeeConnectorError::JsonRpSeeClientError(e),
+                        )) if e.contains("No such mempool") => None,
                         Err(e) => return Err(e.into()),
                     };
 
@@ -447,39 +580,46 @@ async fn data_requests(
                             .set_transaction_status(txid, TransactionStatus::TxidNotRecognized)?;
                     }
                 }
-                TransactionDataRequest::TransactionsInvolvingAddress {
-                    address,
-                    block_range_start,
-                    block_range_end,
-                    request_at,
-                    tx_status_filter,
-                    output_status_filter,
-                } => {
-                    let address = address.encode(params);
+                TransactionDataRequest::TransactionsInvolvingAddress(req) => {
+                    // nb: Zallet is a full node wallet with an index; we can safely look up
+                    // information immediately without exposing correlations between addresses to
+                    // untrusted parties, so we can ignore the `request_at` field.
+
+                    // TODO: we're making the *large* assumption that the chain data doesn't update
+                    // between the multiple chain calls in this method. Ideally, Zaino will give us
+                    // a "transactional" API so that we can ensure internal consistency; for now,
+                    // we pick the chain height as of the start of evaluation as the "evaluated-at"
+                    // height for this data request, in order to not overstate the height for which
+                    // all observations are valid.
+                    let as_of_height = match req.block_range_end() {
+                        Some(h) => h - 1,
+                        None => chain.chain_height().await?.into(),
+                    };
+
+                    let address = req.address().encode(params);
                     debug!(
-                        tx_status_filter = ?tx_status_filter,
-                        output_status_filter = ?output_status_filter,
+                        tx_status_filter = ?req.tx_status_filter(),
+                        output_status_filter = ?req.output_status_filter(),
                         "Fetching transactions involving {address} in range {}..{}",
-                        block_range_start,
-                        block_range_end.map(|h| h.to_string()).unwrap_or_default(),
+                        req.block_range_start(),
+                        req.block_range_end().map(|h| h.to_string()).unwrap_or_default(),
                     );
 
                     let request = GetAddressTxIdsRequest::from_parts(
                         vec![address.clone()],
-                        block_range_start.into(),
-                        block_range_end.map(u32::from).unwrap_or(0),
+                        req.block_range_start().into(),
+                        req.block_range_end().map(u32::from).unwrap_or(0),
                     );
 
                     // Zallet is a full node wallet with an index; we can safely look up
                     // information immediately without exposing correlations between
-                    // addresses to untrusted parties.
-                    let _ = request_at;
+                    // addresses to untrusted parties, so we ignore `req.request_at().
 
-                    let txs_with_unspent_outputs = match output_status_filter {
+                    let txs_with_unspent_outputs = match req.output_status_filter() {
                         OutputStatusFilter::Unspent => {
                             let request = GetAddressUtxosArg {
                                 addresses: vec![address],
-                                start_height: block_range_start.into(),
+                                start_height: req.block_range_start().into(),
                                 max_entries: 0,
                             };
                             Some(
@@ -513,7 +653,7 @@ async fn data_requests(
                         let mined_height = tx.height.map(BlockHeight::from_u32);
 
                         // Ignore transactions that don't match the status filter.
-                        match (&tx_status_filter, mined_height) {
+                        match (&req.tx_status_filter(), mined_height) {
                             (TransactionStatusFilter::Mined, None)
                             | (TransactionStatusFilter::Mempool, Some(_)) => continue,
                             _ => (),
@@ -557,6 +697,8 @@ async fn data_requests(
 
                         decrypt_and_store_transaction(params, db_data, &tx, mined_height)?;
                     }
+
+                    db_data.notify_address_checked(req, as_of_height)?;
                 }
             }
         }

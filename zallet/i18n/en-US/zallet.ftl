@@ -20,6 +20,7 @@
 -allow-warnings = --allow-warnings
 -allow-alpha-example = --this-is-alpha-code-and-you-will-need-to-recreate-the-example-later
 -allow-alpha-migration = --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later
+-datadir = --datadir
 
 ## Usage
 
@@ -77,6 +78,14 @@ migrate-config-written = {-zallet} config written to {$conf}
 err-kind-generic = Error
 err-kind-init = Failed to initialize {-zallet}
 err-kind-sync = Failed to synchronize {-zallet}
+
+err-init-cannot-find-home-dir =
+    Cannot find home directory for the default datadir. Use '{-datadir}' to set
+    the datadir directly.
+err-init-failed-to-create-lockfile = Failed to create a lockfile at {$path}: {$error}
+err-init-failed-to-read-lockfile = Failed to read lockfile at {$path}: {$error}
+err-init-zallet-already-running =
+    Cannot obtain a lock on data directory {$datadir}. {-zallet} is probably already running.
 
 # errors in migration of configuration data from the zcashd `zcash.conf` config file format
 
@@ -150,6 +159,13 @@ rec-privpol-privacy-weakening =
     THIS MAY AFFECT YOUR PRIVACY. Resubmit with the '{$parameter}' parameter set
     to '{$policy}' or weaker if you wish to allow this transaction to proceed
     anyway.
+
+## RPC CLI errors
+
+err-rpc-cli-conn-failed = Failed to connect to the Zallet wallet's JSON-RPC port.
+err-rpc-cli-invalid-param = Invalid parameter '{$parameter}'
+err-rpc-cli-no-server = No JSON-RPC port is available.
+err-rpc-cli-request-failed = JSON-RPC request failed: {$error}
 
 ## zallet manpage
 

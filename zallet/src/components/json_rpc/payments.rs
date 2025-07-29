@@ -456,7 +456,7 @@ pub(super) async fn broadcast_transactions(
     chain: FetchServiceSubscriber,
     txids: Vec<TxId>,
 ) -> RpcResult<SendResult> {
-    if APP.config().broadcast() {
+    if APP.config().external.broadcast() {
         for txid in &txids {
             let tx = wallet
                 .get_transaction(*txid)

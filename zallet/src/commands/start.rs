@@ -17,6 +17,7 @@ use crate::{
 impl StartCmd {
     async fn start(&self) -> Result<(), Error> {
         let config = APP.config();
+        let _lock = config.lock_datadir()?;
 
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db.clone())?;
@@ -32,6 +33,7 @@ impl StartCmd {
         let (
             wallet_sync_steady_state_task_handle,
             wallet_sync_recover_history_task_handle,
+            wallet_sync_poll_transparent_task_handle,
             wallet_sync_data_requests_task_handle,
         ) = WalletSync::spawn(&config, db, chain_view).await?;
 
@@ -42,6 +44,7 @@ impl StartCmd {
         pin!(rpc_task_handle);
         pin!(wallet_sync_steady_state_task_handle);
         pin!(wallet_sync_recover_history_task_handle);
+        pin!(wallet_sync_poll_transparent_task_handle);
         pin!(wallet_sync_data_requests_task_handle);
 
         // Wait for tasks to finish.
@@ -77,6 +80,13 @@ impl StartCmd {
                     Ok(())
                 }
 
+                wallet_sync_join_result = &mut wallet_sync_poll_transparent_task_handle => {
+                    let wallet_sync_result = wallet_sync_join_result
+                        .expect("unexpected panic in the wallet poll-transparent sync task");
+                    info!(?wallet_sync_result, "Wallet poll-transparent sync task exited");
+                    Ok(())
+                }
+
                 wallet_sync_join_result = &mut wallet_sync_data_requests_task_handle => {
                     let wallet_sync_result = wallet_sync_join_result
                         .expect("unexpected panic in the wallet data-requests sync task");
@@ -101,6 +111,7 @@ impl StartCmd {
         rpc_task_handle.abort();
         wallet_sync_steady_state_task_handle.abort();
         wallet_sync_recover_history_task_handle.abort();
+        wallet_sync_poll_transparent_task_handle.abort();
         wallet_sync_data_requests_task_handle.abort();
 
         info!("All tasks have been asked to stop, waiting for remaining tasks to finish");
@@ -114,11 +125,11 @@ impl Runnable for StartCmd {
         match abscissa_tokio::run(&APP, self.start()) {
             Ok(Ok(())) => (),
             Ok(Err(e)) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
         }

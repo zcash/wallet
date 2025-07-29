@@ -4,8 +4,12 @@ use documented::Documented;
 use jsonrpsee::{core::RpcResult, tracing::warn};
 use schemars::JsonSchema;
 use serde::Serialize;
+use zcash_protocol::value::Zatoshis;
 
-use crate::components::keystore::KeyStore;
+use crate::components::{
+    json_rpc::utils::{JsonZec, value_from_zatoshis},
+    keystore::KeyStore,
+};
 
 /// Response to a `getwalletinfo` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -18,15 +22,15 @@ pub(crate) struct GetWalletInfo {
     walletversion: u64,
 
     /// The total confirmed transparent balance of the wallet in ZEC.
-    balance: f64,
+    balance: JsonZec,
 
     /// The total unconfirmed transparent balance of the wallet in ZEC.
     ///
     /// Not included if `asOfHeight` is specified.
-    unconfirmed_balance: Option<f64>,
+    unconfirmed_balance: Option<JsonZec>,
 
     /// The total immature transparent balance of the wallet in ZEC.
-    immature_balance: f64,
+    immature_balance: JsonZec,
 
     /// The total confirmed shielded balance of the wallet in ZEC.
     shielded_balance: String,
@@ -72,9 +76,9 @@ pub(crate) async fn call(keystore: &KeyStore) -> Response {
 
     Ok(GetWalletInfo {
         walletversion: 0,
-        balance: 0.0,
-        unconfirmed_balance: Some(0.0),
-        immature_balance: 0.0,
+        balance: value_from_zatoshis(Zatoshis::ZERO),
+        unconfirmed_balance: Some(value_from_zatoshis(Zatoshis::ZERO)),
+        immature_balance: value_from_zatoshis(Zatoshis::ZERO),
         shielded_balance: "0.00".into(),
         shielded_unconfirmed_balance: Some("0.00".into()),
         txcount: 0,

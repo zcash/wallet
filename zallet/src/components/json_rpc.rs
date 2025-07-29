@@ -46,7 +46,10 @@ impl JsonRpc {
         } else {
             warn!("Configure `rpc.bind` to start the RPC server");
             // Emulate a normally-operating ongoing task to simplify subsequent logic.
-            Ok(tokio::spawn(std::future::pending().in_current_span()))
+            Ok(crate::spawn!(
+                "No JSON-RPC",
+                std::future::pending().in_current_span()
+            ))
         }
     }
 }

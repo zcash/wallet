@@ -524,6 +524,14 @@ impl WalletWrite for DbConnection {
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.set_transaction_status(txid, status))
     }
+
+    fn notify_address_checked(
+        &mut self,
+        request: zcash_client_backend::data_api::TransactionsInvolvingAddress,
+        as_of_height: BlockHeight,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.notify_address_checked(request, as_of_height))
+    }
 }
 
 impl WalletCommitmentTrees for DbConnection {

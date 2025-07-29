@@ -1,0 +1,26 @@
+name: Build and Run Docker Container
+
+on:
+  pull_request:
+  push:
+    branches: main
+
+permissions: {}
+
+jobs:
+  build_and_run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build Docker image
+        run: |
+          docker build -t zallet .
+
+      - name: Run command inside Docker container
+        run: |
+          docker run --rm zallet -h

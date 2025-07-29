@@ -28,9 +28,17 @@ pub struct EntryPoint {
     #[arg(short, long)]
     pub(crate) verbose: bool,
 
-    /// Use the specified config file
+    /// Specify the data directory for the Zallet wallet.
+    ///
+    /// This must be an absolute path.
     #[arg(short, long)]
-    pub(crate) config: Option<String>,
+    pub(crate) datadir: Option<PathBuf>,
+
+    /// Use the specified configuration file.
+    ///
+    /// Relative paths will be prefixed by the datadir.
+    #[arg(short, long)]
+    pub(crate) config: Option<PathBuf>,
 }
 
 #[derive(Debug, Parser)]
@@ -53,6 +61,10 @@ pub(crate) enum ZalletCmd {
 
     /// Import a BIP 39 mnemonic phrase into the wallet.
     ImportMnemonic(ImportMnemonicCmd),
+
+    /// Communicate with a Zallet wallet's JSON-RPC interface.
+    #[cfg(feature = "rpc-cli")]
+    Rpc(RpcCliCmd),
 }
 
 /// `start` subcommand
@@ -128,3 +140,15 @@ pub(crate) struct GenerateMnemonicCmd {}
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct ImportMnemonicCmd {}
+
+/// `rpc` subcommand
+#[cfg(feature = "rpc-cli")]
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct RpcCliCmd {
+    /// The JSON-RPC command to send to Zallet.
+    pub(crate) command: String,
+
+    /// Any parameters for the command.
+    pub(crate) params: Vec<String>,
+}

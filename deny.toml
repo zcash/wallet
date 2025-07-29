@@ -22,6 +22,7 @@ exceptions = [
     { name = "arrayref", allow = ["BSD-2-Clause"] },
     { name = "bindgen", allow = ["BSD-3-Clause"] },
     { name = "curve25519-dalek", allow = ["BSD-3-Clause"] },
+    { name = "dcbor", allow = ["BSD-2-Clause-Patent"] },
     { name = "human_bytes", allow = ["BSD-2-Clause"] },
     { name = "icu_collections", allow = ["Unicode-3.0"] },
     { name = "icu_locid", allow = ["Unicode-3.0"] },

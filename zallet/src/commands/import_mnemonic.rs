@@ -14,6 +14,7 @@ use crate::{
 impl ImportMnemonicCmd {
     async fn start(&self) -> Result<(), Error> {
         let config = APP.config();
+        let _lock = config.lock_datadir()?;
 
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db)?;
@@ -41,11 +42,11 @@ impl Runnable for ImportMnemonicCmd {
         match abscissa_tokio::run(&APP, self.start()) {
             Ok(Ok(())) => (),
             Ok(Err(e)) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
         }

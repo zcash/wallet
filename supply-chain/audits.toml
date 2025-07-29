@@ -59,6 +59,11 @@ who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.7.2 -> 0.7.4"
 
+[[audits.documented]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.3.0 -> 0.9.1"
+
 [[audits.errno]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
@@ -194,6 +199,11 @@ existing usage.
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "8.5.0 -> 8.6.0"
+
+[[audits.rust_decimal]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.37.0 -> 1.37.2"
 
 [[audits.ryu]]
 who = "Jack Grigg <jack@electriccoin.co>"

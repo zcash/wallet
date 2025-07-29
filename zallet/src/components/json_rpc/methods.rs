@@ -29,7 +29,10 @@ mod list_unspent;
 mod lock_wallet;
 mod openrpc;
 mod recover_accounts;
+mod stop;
 mod unlock_wallet;
+mod view_transaction;
+mod z_get_total_balance;
 mod z_send_many;
 
 #[rpc(server)]
@@ -206,8 +209,30 @@ pub(crate) trait Rpc {
     #[method(name = "listaddresses")]
     async fn list_addresses(&self) -> list_addresses::Response;
 
+    /// Returns the total value of funds stored in the node's wallet.
+    ///
+    /// TODO: Currently watchonly addresses cannot be omitted; `includeWatchonly` must be
+    /// set to true.
+    ///
+    /// # Arguments
+    ///
+    /// - `minconf` (numeric, optional, default=1) Only include private and transparent
+    ///   transactions confirmed at least this many times.
+    /// - `includeWatchonly` (bool, optional, default=false) Also include balance in
+    ///   watchonly addresses (see 'importaddress' and 'z_importviewingkey').
+    #[method(name = "z_gettotalbalance")]
+    async fn z_get_total_balance(
+        &self,
+        minconf: Option<u32>,
+        #[argument(rename = "includeWatchonly")] include_watch_only: Option<bool>,
+    ) -> z_get_total_balance::Response;
+
     #[method(name = "z_listunifiedreceivers")]
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response;
+
+    /// Returns detailed shielded information about in-wallet transaction `txid`.
+    #[method(name = "z_viewtransaction")]
+    async fn view_transaction(&self, txid: &str) -> view_transaction::Response;
 
     /// Returns an array of unspent shielded notes with between minconf and maxconf
     /// (inclusive) confirmations.
@@ -296,6 +321,15 @@ pub(crate) trait Rpc {
         fee: Option<JsonValue>,
         #[argument(rename = "privacyPolicy")] privacy_policy: Option<String>,
     ) -> z_send_many::Response;
+
+    /// Stop the running zallet process.
+    ///
+    /// # Notes
+    ///
+    /// - Works for non windows targets only.
+    /// - Works only if the network of the running zallet process is `Regtest`.
+    #[method(name = "stop")]
+    async fn stop(&self) -> stop::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -432,8 +466,20 @@ impl RpcServer for RpcImpl {
         list_addresses::call(self.wallet().await?.as_ref())
     }
 
+    async fn z_get_total_balance(
+        &self,
+        minconf: Option<u32>,
+        include_watch_only: Option<bool>,
+    ) -> z_get_total_balance::Response {
+        z_get_total_balance::call(self.wallet().await?.as_ref(), minconf, include_watch_only)
+    }
+
     fn list_unified_receivers(&self, unified_address: &str) -> list_unified_receivers::Response {
         list_unified_receivers::call(unified_address)
+    }
+
+    async fn view_transaction(&self, txid: &str) -> view_transaction::Response {
+        view_transaction::call(self.wallet().await?.as_ref(), txid)
     }
 
     async fn list_unspent(&self) -> list_unspent::Response {
@@ -471,5 +517,9 @@ impl RpcServer for RpcImpl {
                 .await?,
             )
             .await)
+    }
+
+    async fn stop(&self) -> stop::Response {
+        stop::call(self.wallet().await?)
     }
 }

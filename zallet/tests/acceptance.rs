@@ -31,9 +31,13 @@ pub static RUNNER: Lazy<CmdRunner> = Lazy::new(CmdRunner::default);
 /// Use `ZalletConfig::default()` value if no config or args
 #[test]
 fn start_no_args() {
+    let datadir = tempdir().unwrap();
     let mut runner = RUNNER.clone();
-    let mut cmd = runner.arg("start").capture_stdout().run();
-    cmd.stdout().expect_line("");
+    let cmd = runner
+        .arg("--datadir")
+        .arg(datadir.path())
+        .arg("start")
+        .run();
     cmd.wait().unwrap().expect_code(1);
 }
 
@@ -52,18 +56,24 @@ fn version_no_args() {
 fn setup_new_wallet() {
     let datadir = tempdir().unwrap();
     let config_file = datadir.path().join("zallet.toml");
-    let identity_file = datadir.path().join("identity.txt");
-    let wallet_db = datadir.path().join("data.sqlite");
+    let identity_file = datadir.path().join("encryption-identity.txt");
 
     {
         let mut f = File::create(&config_file).unwrap();
-        writeln!(f, "network = \"test\"").unwrap();
-        writeln!(f, "wallet_db = \"{}\"", wallet_db.display()).unwrap();
         writeln!(f, "[builder]").unwrap();
+        writeln!(f, "[builder.limits]").unwrap();
+        writeln!(f, "[consensus]").unwrap();
+        writeln!(f, "network = \"test\"").unwrap();
+        writeln!(f, "[database]").unwrap();
+        writeln!(f, "[external]").unwrap();
+        writeln!(f, "[features]").unwrap();
+        writeln!(f, "as_of_version = \"{}\"", env!("CARGO_PKG_VERSION")).unwrap();
+        writeln!(f, "[features.deprecated]").unwrap();
+        writeln!(f, "[features.experimental]").unwrap();
         writeln!(f, "[indexer]").unwrap();
+        writeln!(f, "validator_address = \"127.0.0.1:65536\"").unwrap();
         writeln!(f, "[keystore]").unwrap();
-        writeln!(f, "identity = \"{}\"", identity_file.display()).unwrap();
-        writeln!(f, "[limits]").unwrap();
+        writeln!(f, "[note_management]").unwrap();
         writeln!(f, "[rpc]").unwrap();
         writeln!(f, "bind = []").unwrap();
     }
@@ -83,8 +93,8 @@ fn setup_new_wallet() {
     {
         let mut runner = RUNNER.clone();
         let mut cmd = runner
-            .arg("-c")
-            .arg(&config_file)
+            .arg("--datadir")
+            .arg(datadir.path())
             .arg("init-wallet-encryption")
             .capture_stdout()
             .run();
@@ -95,8 +105,8 @@ fn setup_new_wallet() {
     {
         let mut runner = RUNNER.clone();
         let mut cmd = runner
-            .arg("-c")
-            .arg(&config_file)
+            .arg("--datadir")
+            .arg(datadir.path())
             .arg("generate-mnemonic")
             .capture_stdout()
             .run();
@@ -107,9 +117,12 @@ fn setup_new_wallet() {
 
     {
         let mut runner = RUNNER.clone();
-        let cmd = runner.arg("-c").arg(&config_file).arg("start").run();
-        // We omitted some config lines necessary for `start` in order to ensure
-        // that it fails.
+        let cmd = runner
+            .arg("--datadir")
+            .arg(datadir.path())
+            .arg("start")
+            .run();
+        // We added invalid data to the config in order to ensure that `start` fails.
         cmd.wait().unwrap().expect_code(1);
     }
 }
