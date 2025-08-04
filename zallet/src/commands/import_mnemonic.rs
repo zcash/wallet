@@ -1,9 +1,10 @@
-use abscissa_core::{Runnable, Shutdown};
+use abscissa_core::Runnable;
 use bip0039::{English, Mnemonic};
 use secrecy::{ExposeSecret, SecretString};
 
 use crate::{
     cli::ImportMnemonicCmd,
+    commands::AsyncRunnable,
     components::{
         database::Database, json_rpc::utils::encode_seedfp_parameter, keystore::KeyStore,
     },
@@ -11,8 +12,8 @@ use crate::{
     prelude::*,
 };
 
-impl ImportMnemonicCmd {
-    async fn start(&self) -> Result<(), Error> {
+impl AsyncRunnable for ImportMnemonicCmd {
+    async fn run(&self) -> Result<(), Error> {
         let config = APP.config();
         let _lock = config.lock_datadir()?;
 
@@ -39,16 +40,6 @@ impl ImportMnemonicCmd {
 
 impl Runnable for ImportMnemonicCmd {
     fn run(&self) {
-        match abscissa_tokio::run(&APP, self.start()) {
-            Ok(Ok(())) => (),
-            Ok(Err(e)) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-            Err(e) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-        }
+        self.run_on_runtime();
     }
 }
