@@ -13,7 +13,6 @@ use zcash_client_backend::fees::SplitPolicy;
 use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 use zip32::fingerprint::SeedFingerprint;
 
-use crate::commands::{lock_datadir, resolve_datadir_path};
 use crate::network::{Network, RegTestNuParam};
 
 /// Zallet Configuration
@@ -35,34 +34,99 @@ pub struct ZalletConfig {
     pub(crate) datadir: Option<PathBuf>,
 
     /// Settings that affect transactions created by Zallet.
+    #[serde(default)]
     pub builder: BuilderSection,
 
     /// Zallet's understanding of the consensus rules.
+    #[serde(default)]
     pub consensus: ConsensusSection,
 
     /// Settings for how Zallet stores wallet data.
+    #[serde(default)]
     pub database: DatabaseSection,
 
     /// Settings controlling how Zallet interacts with the outside world.
+    #[serde(default)]
     pub external: ExternalSection,
 
     /// Settings for Zallet features.
+    #[serde(default)]
     pub features: FeaturesSection,
 
     /// Settings for the Zaino chain indexer.
+    #[serde(default)]
     pub indexer: IndexerSection,
 
     /// Settings for the key store.
+    #[serde(default)]
     pub keystore: KeyStoreSection,
 
     /// Settings for how Zallet manages notes.
+    #[serde(default)]
     pub note_management: NoteManagementSection,
 
     /// Settings for the JSON-RPC interface.
+    #[serde(default)]
     pub rpc: RpcSection,
 }
 
+/// Zallet Configuration Filename
+pub const CONFIG_FILE: &str = "zallet.toml";
+
 impl ZalletConfig {
+    /// Loads Zallet configuration from conventional sources.
+    ///
+    /// Configuration is loaded from three sources, in order of precedence:
+    /// 1. Hard-coded defaults (lowest precedence)
+    /// 2. TOML configuration file (if provided)
+    /// 3. Environment variables with `ZALLET_` prefix (highest precedence)
+    ///
+    /// Environment variables use the format `ZALLET_SECTION__KEY` where:
+    /// - `SECTION` is the configuration section (e.g., `builder`, `rpc`)
+    /// - `KEY` is the configuration key within that section
+    /// - Double underscores (`__`) separate nested keys
+    ///
+    /// # Examples
+    /// - `ZALLET_BUILDER__SPEND_ZEROCONF_CHANGE=true` sets `builder.spend_zeroconf_change = true`
+    /// - `ZALLET_RPC__BIND=127.0.0.1:28232,127.0.0.1:28233` sets multiple bind addresses (comma-separated)
+    /// - `ZALLET_RPC__BIND=["127.0.0.1:28232"]` also works (JSON array format)
+    /// - `ZALLET_RPC__TIMEOUT=30` sets `rpc.timeout = 30`
+    pub fn load(config_path: Option<&Path>) -> Result<Self, config::ConfigError> {
+        let mut builder = config::Config::builder();
+
+        // Add config file if provided
+        if let Some(path) = config_path {
+            builder = builder.add_source(config::File::from(path).required(true));
+        }
+
+        // Add environment variables (highest precedence)
+        builder = builder.add_source(
+            config::Environment::with_prefix("ZALLET")
+                .prefix_separator("_")
+                .separator("__")
+                .list_separator(",")
+                .with_list_parse_key("rpc.bind")
+                .try_parsing(true),
+        );
+
+        // Build and deserialize the configuration
+        builder.build()?.try_deserialize()
+    }
+
+    /// Returns the config file path relative to the data directory, if it exists.
+    pub fn resolve_config_path(datadir: &Path, config_override: Option<&Path>) -> Option<PathBuf> {
+        let filename = crate::commands::resolve_datadir_path(
+            datadir,
+            config_override.unwrap_or_else(|| Path::new(CONFIG_FILE)),
+        );
+
+        if filename.exists() {
+            Some(filename)
+        } else {
+            None
+        }
+    }
+
     /// Returns the data directory to use.
     fn datadir(&self) -> &Path {
         self.datadir
@@ -74,22 +138,22 @@ impl ZalletConfig {
     ///
     /// This should be called inside any command that writes to the Zallet datadir.
     pub(crate) fn lock_datadir(&self) -> Result<fmutex::Guard<'static>, crate::error::Error> {
-        lock_datadir(self.datadir())
+        crate::commands::lock_datadir(self.datadir())
     }
 
     /// Returns the path to the encryption identity.
     pub(crate) fn encryption_identity(&self) -> PathBuf {
-        resolve_datadir_path(self.datadir(), self.keystore.encryption_identity())
+        crate::commands::resolve_datadir_path(self.datadir(), self.keystore.encryption_identity())
     }
 
     /// Returns the path to the indexer's database.
     pub(crate) fn indexer_db_path(&self) -> PathBuf {
-        resolve_datadir_path(self.datadir(), self.indexer.db_path())
+        crate::commands::resolve_datadir_path(self.datadir(), self.indexer.db_path())
     }
 
     /// Returns the path to the wallet database.
     pub(crate) fn wallet_db_path(&self) -> PathBuf {
-        resolve_datadir_path(self.datadir(), self.database.wallet_path())
+        crate::commands::resolve_datadir_path(self.datadir(), self.database.wallet_path())
     }
 }
 
@@ -136,6 +200,7 @@ pub struct BuilderSection {
 
     /// Configurable limits on transaction builder operation (to prevent e.g. memory
     /// exhaustion).
+    #[serde(default)]
     pub limits: BuilderLimitsSection,
 }
 
@@ -365,9 +430,11 @@ pub struct FeaturesSection {
     pub legacy_pool_seed_fingerprint: Option<SeedFingerprint>,
 
     /// Deprecated features.
+    #[serde(default)]
     pub deprecated: DeprecatedFeaturesSection,
 
     /// Experimental features.
+    #[serde(default)]
     pub experimental: ExperimentalFeaturesSection,
 }
 

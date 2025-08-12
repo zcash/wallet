@@ -41,6 +41,7 @@ i18n-embed-fl = "0.9"
 rust-embed = "8"
 
 # Parsing and serialization
+config = { version = "0.15.13", features = ["toml", "json"] }
 hex = "0.4"
 serde = { version = "1", features = ["serde_derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "raw_value"] }

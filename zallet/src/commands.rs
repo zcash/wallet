@@ -1,9 +1,6 @@
 //! Zallet Subcommands
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use abscissa_core::{
     Application, Configurable, FrameworkError, FrameworkErrorKind, Runnable, Shutdown,
@@ -30,11 +27,10 @@ mod start;
 #[cfg(feature = "rpc-cli")]
 pub(crate) mod rpc_cli;
 
-/// Zallet Configuration Filename
-pub const CONFIG_FILE: &str = "zallet.toml";
-
 /// Ensures only a single Zallet process is using the data directory.
 pub(crate) fn lock_datadir(datadir: &Path) -> Result<fmutex::Guard<'static>, Error> {
+    use std::fs;
+
     let lockfile_path = resolve_datadir_path(datadir, Path::new(".lock"));
 
     {
@@ -117,29 +113,19 @@ impl Runnable for EntryPoint {
 }
 
 impl Configurable<ZalletConfig> for EntryPoint {
-    fn config_path(&self) -> Option<PathBuf> {
-        // Check if the config file exists, and if it does not, ignore it.
-        // If you'd like for a missing configuration file to be a hard error
-        // instead, always return `Some(CONFIG_FILE)` here.
-        let filename = resolve_datadir_path(
-            &self.datadir().ok()?,
-            self.config
-                .as_deref()
-                .unwrap_or_else(|| Path::new(CONFIG_FILE)),
-        );
+    fn process_config(&self, _config: ZalletConfig) -> Result<ZalletConfig, FrameworkError> {
+        // Load configuration using config-rs
+        let datadir = self.datadir()?;
+        let config_path = ZalletConfig::resolve_config_path(&datadir, self.config.as_deref());
 
-        if filename.exists() {
-            Some(filename)
-        } else {
-            None
-        }
-    }
+        // Convert config-rs error to FrameworkError at the Abscissa boundary
+        let mut config = ZalletConfig::load(config_path.as_deref())
+            .map_err(|e| FrameworkErrorKind::ConfigError.context(e))?;
 
-    fn process_config(&self, mut config: ZalletConfig) -> Result<ZalletConfig, FrameworkError> {
-        // Components access top-level CLI settings solely through `ZalletConfig`.
-        // Load them in here.
-        config.datadir = Some(self.datadir()?);
+        // Set datadir from CLI argument
+        config.datadir = Some(datadir);
 
+        // Apply command-specific overrides
         match &self.cmd {
             ZalletCmd::Start(cmd) => cmd.override_config(config),
             _ => Ok(config),
