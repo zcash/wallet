@@ -1,6 +1,7 @@
 //! Zallet Config
 
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::fmt::Write;
 use std::net::SocketAddr;
 use std::num::NonZeroU16;
@@ -14,6 +15,17 @@ use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 use zip32::fingerprint::SeedFingerprint;
 
 use crate::network::{Network, RegTestNuParam};
+
+/// Returns true if a leaf key name should be considered sensitive and blocked
+/// from environment variable overrides.
+fn is_sensitive_leaf_key(leaf_key: &str) -> bool {
+    let lower = leaf_key.to_ascii_lowercase();
+    lower.ends_with("password")
+        || lower.ends_with("secret")
+        || lower.ends_with("token")
+        || lower.ends_with("cookie")
+        || lower.ends_with("private_key")
+}
 
 /// Zallet Configuration
 ///
@@ -91,6 +103,10 @@ impl ZalletConfig {
     /// - `ZALLET_RPC__BIND=127.0.0.1:28232,127.0.0.1:28233` sets multiple bind addresses (comma-separated)
     /// - `ZALLET_RPC__BIND=["127.0.0.1:28232"]` also works (JSON array format)
     /// - `ZALLET_RPC__TIMEOUT=30` sets `rpc.timeout = 30`
+    ///
+    /// # Security
+    /// Environment variables whose leaf key names end with sensitive suffixes (case-insensitive)
+    /// are blocked from overriding config values: `password`, `secret`, `token`, `cookie`, `private_key`.
     pub fn load(config_path: Option<&Path>) -> Result<Self, config::ConfigError> {
         let mut builder = config::Config::builder();
 
@@ -99,9 +115,23 @@ impl ZalletConfig {
             builder = builder.add_source(config::File::from(path).required(true));
         }
 
-        // Add environment variables (highest precedence)
+        // Load from standard ZALLET_ environment variables with a sensitive-leaf deny-list
+        let mut filtered_env: HashMap<String, String> = HashMap::new();
+        for (key, value) in env::vars() {
+            if let Some(stripped) = key.strip_prefix("ZALLET_") {
+                // Extract the leaf key (rightmost part after splitting on __)
+                let leaf_key = stripped.split("__").last().unwrap_or(stripped);
+                if !is_sensitive_leaf_key(leaf_key) {
+                    filtered_env.insert(key, value);
+                }
+                // Sensitive keys are silently ignored
+            }
+        }
+
+        // Add filtered environment variables (highest precedence)
         builder = builder.add_source(
             config::Environment::with_prefix("ZALLET")
+                .source(Some(filtered_env))
                 .prefix_separator("_")
                 .separator("__")
                 .list_separator(",")

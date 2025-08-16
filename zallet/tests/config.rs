@@ -459,3 +459,80 @@ fn test_numeric_env_parsing() {
         50000u64.try_into().unwrap()
     );
 }
+
+// --- Sensitive env deny-list behavior ---
+
+#[test]
+fn test_env_unknown_non_sensitive_key_errors() {
+    let env = EnvGuard::new();
+    let temp_dir = env.temp_dir();
+
+    let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
+    // Unknown non-sensitive key should cause an error due to deny_unknown_fields
+    env.set_var("ZALLET_FOO", "bar");
+    let result = ZalletConfig::load(Some(&test_config_path));
+    assert!(
+        result.is_err(),
+        "Unknown non-sensitive env key should error (deny_unknown_fields)"
+    );
+}
+
+#[test]
+fn test_env_unknown_sensitive_key_is_ignored() {
+    let env = EnvGuard::new();
+    let temp_dir = env.temp_dir();
+
+    let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
+    // Unknown sensitive-suffix key should be filtered and ignored
+    env.set_var("ZALLET_SOME__SECRET", "topsecret");
+    env.set_var("ZALLET_ANOTHER__TOKEN", "secret-token");
+    let result = ZalletConfig::load(Some(&test_config_path));
+    assert!(
+        result.is_ok(),
+        "Unknown sensitive-suffix env keys should be ignored (no error)"
+    );
+}
+
+#[test]
+fn test_env_validator_password_is_ignored() {
+    let env = EnvGuard::new();
+    let temp_dir = env.temp_dir();
+
+    let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
+    // validator_password should be filtered out and not override the default
+    env.set_var("ZALLET_INDEXER__VALIDATOR_PASSWORD", "topsecret");
+    let config = ZalletConfig::load(Some(&test_config_path))
+        .expect("Setting validator password via env should not cause errors (filtered)");
+
+    // Ensure env override didn't apply and default remains
+    assert_eq!(config.indexer.validator_password, None);
+}
+
+#[test]
+fn test_env_non_sensitive_keys_still_work() {
+    let env = EnvGuard::new();
+    let temp_dir = env.temp_dir();
+
+    let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
+    // Non-sensitive keys should still work
+    env.set_var("ZALLET_INDEXER__VALIDATOR_ADDRESS", "127.0.0.1:8233");
+    env.set_var("ZALLET_INDEXER__VALIDATOR_USER", "testuser");
+    env.set_var("ZALLET_INDEXER__VALIDATOR_COOKIE_PATH", "/path/to/cookie");
+    // This sensitive one should be ignored
+    env.set_var("ZALLET_INDEXER__VALIDATOR_PASSWORD", "shouldbeignored");
+
+    let config = ZalletConfig::load(Some(&test_config_path)).expect("Should load config");
+
+    // Non-sensitive fields should be set from env
+    assert_eq!(
+        config.indexer.validator_address,
+        Some("127.0.0.1:8233".to_string())
+    );
+    assert_eq!(config.indexer.validator_user, Some("testuser".to_string()));
+    assert_eq!(
+        config.indexer.validator_cookie_path,
+        Some("/path/to/cookie".to_string())
+    );
+    // Sensitive field should remain default (None)
+    assert_eq!(config.indexer.validator_password, None);
+}
