@@ -1,17 +1,18 @@
-use abscissa_core::{Runnable, Shutdown};
+use abscissa_core::Runnable;
 use bip0039::{Count, English, Mnemonic};
 use rand::{RngCore, rngs::OsRng};
 use secrecy::SecretString;
 
 use crate::{
     cli::GenerateMnemonicCmd,
+    commands::AsyncRunnable,
     components::{database::Database, keystore::KeyStore},
     error::Error,
     prelude::*,
 };
 
-impl GenerateMnemonicCmd {
-    async fn start(&self) -> Result<(), Error> {
+impl AsyncRunnable for GenerateMnemonicCmd {
+    async fn run(&self) -> Result<(), Error> {
         let config = APP.config();
         let _lock = config.lock_datadir()?;
 
@@ -39,16 +40,6 @@ impl GenerateMnemonicCmd {
 
 impl Runnable for GenerateMnemonicCmd {
     fn run(&self) {
-        match abscissa_tokio::run(&APP, self.start()) {
-            Ok(Ok(())) => (),
-            Ok(Err(e)) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-            Err(e) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-        }
+        self.run_on_runtime();
     }
 }

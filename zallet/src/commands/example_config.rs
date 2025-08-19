@@ -1,18 +1,18 @@
 //! `example-config` subcommand
 
-use abscissa_core::{Runnable, Shutdown};
+use abscissa_core::Runnable;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use crate::{
     cli::ExampleConfigCmd,
+    commands::AsyncRunnable,
     config::ZalletConfig,
     error::{Error, ErrorKind},
     fl,
-    prelude::*,
 };
 
-impl ExampleConfigCmd {
-    async fn start(&self) -> Result<(), Error> {
+impl AsyncRunnable for ExampleConfigCmd {
+    async fn run(&self) -> Result<(), Error> {
         if !self.this_is_alpha_code_and_you_will_need_to_recreate_the_example_later {
             return Err(ErrorKind::Generic.context(fl!("example-alpha-code")).into());
         }
@@ -47,16 +47,6 @@ impl ExampleConfigCmd {
 
 impl Runnable for ExampleConfigCmd {
     fn run(&self) {
-        match abscissa_tokio::run(&APP, self.start()) {
-            Ok(Ok(())) => (),
-            Ok(Err(e)) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-            Err(e) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-        }
+        self.run_on_runtime();
     }
 }

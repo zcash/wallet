@@ -1,10 +1,11 @@
 //! `start` subcommand
 
-use abscissa_core::{FrameworkError, Runnable, Shutdown, config};
+use abscissa_core::{FrameworkError, Runnable, config};
 use tokio::{pin, select};
 
 use crate::{
     cli::StartCmd,
+    commands::AsyncRunnable,
     components::{
         chain_view::ChainView, database::Database, json_rpc::JsonRpc, keystore::KeyStore,
         sync::WalletSync,
@@ -14,8 +15,8 @@ use crate::{
     prelude::*,
 };
 
-impl StartCmd {
-    async fn start(&self) -> Result<(), Error> {
+impl AsyncRunnable for StartCmd {
+    async fn run(&self) -> Result<(), Error> {
         let config = APP.config();
         let _lock = config.lock_datadir()?;
 
@@ -122,17 +123,8 @@ impl StartCmd {
 
 impl Runnable for StartCmd {
     fn run(&self) {
-        match abscissa_tokio::run(&APP, self.start()) {
-            Ok(Ok(())) => (),
-            Ok(Err(e)) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-            Err(e) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-        }
+        self.run_on_runtime();
+        info!("Shutting down Zallet");
     }
 }
 

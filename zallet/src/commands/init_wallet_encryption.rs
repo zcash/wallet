@@ -1,14 +1,15 @@
-use abscissa_core::{Runnable, Shutdown};
+use abscissa_core::Runnable;
 
 use crate::{
     cli::InitWalletEncryptionCmd,
+    commands::AsyncRunnable,
     components::{database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
     prelude::*,
 };
 
-impl InitWalletEncryptionCmd {
-    async fn start(&self) -> Result<(), Error> {
+impl AsyncRunnable for InitWalletEncryptionCmd {
+    async fn run(&self) -> Result<(), Error> {
         let config = APP.config();
         let _lock = config.lock_datadir()?;
 
@@ -61,16 +62,6 @@ impl InitWalletEncryptionCmd {
 
 impl Runnable for InitWalletEncryptionCmd {
     fn run(&self) {
-        match abscissa_tokio::run(&APP, self.start()) {
-            Ok(Ok(())) => (),
-            Ok(Err(e)) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-            Err(e) => {
-                eprintln!("{e}");
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-        }
+        self.run_on_runtime();
     }
 }
