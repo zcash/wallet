@@ -1,0 +1,9 @@
+[book]
+authors = ["Jack Grigg"]
+language = "en"
+src = "src"
+title = "The Zallet Book"
+
+[output.html]
+site-url = "/wallet/"
+git-repository-url = "https://github.com/zcash/wallet/tree/main/book"
