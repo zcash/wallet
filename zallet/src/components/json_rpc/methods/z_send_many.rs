@@ -14,7 +14,8 @@ use zcash_client_backend::{
     data_api::{
         Account,
         wallet::{
-            create_proposed_transactions, input_selection::GreedyInputSelector, propose_transfer,
+            ConfirmationsPolicy, create_proposed_transactions,
+            input_selection::GreedyInputSelector, propose_transfer,
         },
     },
     fees::{DustOutputPolicy, StandardFeeRule, standard::MultiOutputChangeStrategy},
@@ -326,7 +327,7 @@ async fn run(
         &input_selector,
         &change_strategy,
         request,
-        min_confirmations,
+        ConfirmationsPolicy::new_symmetrical(min_confirmations, true),
     )
     // TODO: Map errors to `zcashd` shape.
     .map_err(|e| LegacyCode::Wallet.with_message(format!("Failed to propose transaction: {e}")))?;

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, num::NonZeroU32};
 
 use documented::Documented;
 use jsonrpsee::{
@@ -9,7 +9,10 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use zcash_client_backend::{
     address::UnifiedAddress,
-    data_api::{Account, AccountPurpose, InputSource, NullifierQuery, TargetValue, WalletRead},
+    data_api::{
+        Account, AccountPurpose, InputSource, NullifierQuery, TargetValue, WalletRead,
+        wallet::ConfirmationsPolicy,
+    },
     encoding::AddressCodec,
     fees::{orchard::InputView as _, sapling::InputView as _},
     wallet::NoteId,
@@ -84,16 +87,16 @@ pub(crate) struct UnspentNote {
 }
 
 pub(crate) fn call(wallet: &DbConnection) -> Response {
-    // Use the height of the maximum scanned block as the anchor height, to emulate a
-    // zero-conf transaction in order to select every note in the wallet.
-    let anchor_height = match wallet.block_max_scanned().map_err(|e| {
-        RpcError::owned(
-            LegacyCode::Database.into(),
-            "WalletDb::block_max_scanned failed",
-            Some(format!("{e}")),
-        )
-    })? {
-        Some(block) => block.block_height(),
+    let target_height = match wallet
+        .get_target_and_anchor_heights(NonZeroU32::new(1).unwrap())
+        .map_err(|e| {
+            RpcError::owned(
+                LegacyCode::Database.into(),
+                "WalletDb::block_max_scanned failed",
+                Some(format!("{e}")),
+            )
+        })? {
+        Some((h, _)) => h,
         None => return Ok(ResultType(vec![])),
     };
 
@@ -132,7 +135,8 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                 account_id,
                 TargetValue::AtLeast(Zatoshis::const_from_u64(MAX_MONEY)),
                 &[ShieldedProtocol::Sapling, ShieldedProtocol::Orchard],
-                anchor_height,
+                target_height,
+                ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), true),
                 &[],
             )
             .map_err(|e| {
@@ -188,7 +192,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                         Some(format!("{e}")),
                     )
                 })?
-                .map(|h| anchor_height + 1 - h)
+                .map(|h| target_height - h)
                 .unwrap_or(0);
 
             let is_internal = note.spending_key_scope() == Scope::Internal;
@@ -256,7 +260,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                         Some(format!("{e}")),
                     )
                 })?
-                .map(|h| anchor_height + 1 - h)
+                .map(|h| target_height - h)
                 .unwrap_or(0);
 
             let is_internal = note.spending_key_scope() == Scope::Internal;
