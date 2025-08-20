@@ -47,6 +47,7 @@ fn verify_schema() {
         WHERE type = 'table' AND tbl_name LIKE 'ext_zallet_%'
         ORDER BY tbl_name",
         &[
+            database::ext::TABLE_VERSION_METADATA,
             keystore::db::TABLE_AGE_RECIPIENTS,
             keystore::db::TABLE_LEGACY_SEEDS,
             keystore::db::TABLE_MNEMONICS,
