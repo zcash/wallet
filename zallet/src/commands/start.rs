@@ -20,6 +20,27 @@ impl AsyncRunnable for StartCmd {
         let config = APP.config();
         let _lock = config.lock_datadir()?;
 
+        // ALPHA: Warn when currently-unused config options are set.
+        let warn_unused = |option| {
+            warn!("Config option '{option}' is not yet implemented in Zallet; ignoring its value.")
+        };
+        // TODO: https://github.com/zcash/wallet/issues/199
+        if config.builder.spend_zeroconf_change.is_some() {
+            warn_unused("builder.spend_zeroconf_change");
+        }
+        // TODO: https://github.com/zcash/wallet/issues/200
+        if config.builder.tx_expiry_delta.is_some() {
+            warn_unused("builder.tx_expiry_delta");
+        }
+        // TODO: https://github.com/zcash/wallet/issues/138
+        if config.features.legacy_pool_seed_fingerprint.is_some() {
+            warn_unused("features.legacy_pool_seed_fingerprint");
+        }
+        // TODO: https://github.com/zcash/wallet/issues/201
+        if config.keystore.require_backup.is_some() {
+            warn_unused("keystore.require_backup");
+        }
+
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db.clone())?;
 
