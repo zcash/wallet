@@ -3,7 +3,10 @@ use rusqlite::Connection;
 use zcash_client_sqlite::{WalletDb, util::SystemClock, wallet::init::WalletMigrator};
 use zcash_protocol::consensus;
 
-use crate::{components::keystore, network::Network};
+use crate::{
+    components::{database, keystore},
+    network::Network,
+};
 
 #[test]
 fn verify_schema() {
@@ -16,7 +19,7 @@ fn verify_schema() {
     );
 
     WalletMigrator::new()
-        .with_external_migrations(keystore::db::migrations::all())
+        .with_external_migrations(database::all_external_migrations())
         .init_or_migrate(&mut db_data)
         .unwrap();
 

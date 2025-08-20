@@ -1,6 +1,7 @@
 use std::fmt;
 
 use abscissa_core::tracing::info;
+use schemerz_rusqlite::RusqliteMigration;
 use tokio::fs;
 use zcash_client_sqlite::wallet::init::{WalletMigrationError, WalletMigrator};
 
@@ -18,6 +19,12 @@ pub(crate) use connection::DbConnection;
 mod tests;
 
 pub(crate) type DbHandle = deadpool::managed::Object<connection::WalletManager>;
+
+/// Returns the full list of migrations defined in Zallet, to be applied alongside the
+/// migrations internal to `zcash_client_sqlite`.
+fn all_external_migrations() -> Vec<Box<dyn RusqliteMigration<Error = WalletMigrationError>>> {
+    keystore::db::migrations::all().collect()
+}
 
 #[derive(Clone)]
 pub(crate) struct Database {
@@ -51,7 +58,7 @@ impl Database {
         let handle = database.handle().await?;
         handle.with_mut(|mut db_data| {
             match WalletMigrator::new()
-                .with_external_migrations(keystore::db::migrations::all())
+                .with_external_migrations(all_external_migrations())
                 .init_or_migrate(&mut db_data)
             {
                 Ok(()) => Ok(()),
