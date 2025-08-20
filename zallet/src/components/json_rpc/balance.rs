@@ -99,9 +99,9 @@ pub(super) fn wtx_get_value_out(tx: &Transaction) -> Option<Zatoshis> {
                 .into_iter()
                 .flat_map(|bundle| bundle.vout.iter().map(|txout| txout.value)),
         )
-        // NB: negative valueBalanceSapling "takes" money from the transparent value pool just as outputs do
+        // Note: negative valueBalanceSapling "takes" money from the transparent value pool just as outputs do
         .chain((-tx.sapling_value_balance()).try_into().ok())
-        // NB: negative valueBalanceOrchard "takes" money from the transparent value pool just as outputs do
+        // Note: negative valueBalanceOrchard "takes" money from the transparent value pool just as outputs do
         .chain(
             tx.orchard_bundle()
                 .and_then(|b| (-*b.value_balance()).try_into().ok()),
