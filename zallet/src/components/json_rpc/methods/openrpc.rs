@@ -27,8 +27,8 @@ pub(crate) fn call() -> Response {
         openrpc: "1.3.2",
         info: Info {
             title: "Zallet",
-            description: env!("CARGO_PKG_DESCRIPTION"),
-            version: env!("CARGO_PKG_VERSION"),
+            description: crate::build::PKG_DESCRIPTION,
+            version: crate::build::PKG_VERSION,
         },
         methods,
         components: generator.into_components(),

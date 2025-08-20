@@ -27,6 +27,9 @@ mod task;
 // Needed for the `Component` derive to work.
 use abscissa_core::{Application, Version, component};
 
+// Loads the build-time information.
+shadow_rs::shadow!(build);
+
 /// A macro to obtain localized Zallet messages and optionally their attributes, and check
 /// the `message_id`, `attribute_id` and arguments at compile time.
 ///

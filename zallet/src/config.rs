@@ -397,7 +397,7 @@ mod seedfp {
 impl Default for FeaturesSection {
     fn default() -> Self {
         Self {
-            as_of_version: env!("CARGO_PKG_VERSION").into(),
+            as_of_version: crate::build::PKG_VERSION.into(),
             legacy_pool_seed_fingerprint: None,
             deprecated: Default::default(),
             experimental: Default::default(),
