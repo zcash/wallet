@@ -210,7 +210,6 @@ pub(super) fn wtx_is_from_me(
             }
         }
 
-        // TODO: Fix bug in `zcashd` where we forgot to add Orchard here.
         if let Some(bundle) = tx.orchard_bundle() {
             let mut stmt_note_exists = conn.prepare(
                 "SELECT EXISTS(
