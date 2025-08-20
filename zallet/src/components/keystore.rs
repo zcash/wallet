@@ -505,6 +505,7 @@ impl KeyStore {
         Ok(seed_fp)
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn encrypt_and_store_legacy_seed(
         &self,
         legacy_seed: &SecretVec<u8>,
