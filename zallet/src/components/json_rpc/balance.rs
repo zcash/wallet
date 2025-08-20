@@ -60,10 +60,10 @@ fn is_mine(
                     SELECT 1
                     FROM addresses
                     JOIN accounts ON account_id = accounts.id
-                    WHERE address = :address
+                    WHERE cached_transparent_receiver_address = :address
                     AND (
                         :allow_either = 1
-                        OR has_spend_key = :has_spend_key
+                        OR accounts.has_spend_key = :has_spend_key
                     )
                 )",
             )?;
