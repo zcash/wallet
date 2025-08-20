@@ -48,6 +48,7 @@ fn verify_schema() {
         ORDER BY tbl_name",
         &[
             database::ext::TABLE_VERSION_METADATA,
+            database::ext::TABLE_WALLET_METADATA,
             keystore::db::TABLE_AGE_RECIPIENTS,
             keystore::db::TABLE_LEGACY_SEEDS,
             keystore::db::TABLE_MNEMONICS,

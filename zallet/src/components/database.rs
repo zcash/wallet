@@ -9,6 +9,7 @@ use zcash_client_sqlite::wallet::init::{WalletMigrationError, WalletMigrator};
 use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
+    fl,
 };
 
 use super::keystore;
@@ -54,13 +55,40 @@ impl Database {
 
         let database = Self { db_data_pool };
 
-        // Initialize the database before we go any further.
+        let handle = database.handle().await?;
+
         if db_exists {
+            // Verify that the database matches the configured network type before we make
+            // any changes (including migrations, some of which make use of the network
+            // params), to avoid leaving the database in an inconsistent state. We can
+            // assume the presence of this table, as it's added by the initial migrations.
+            handle.with_raw(|conn| {
+                let wallet_network_type = conn
+                    .query_row(
+                        "SELECT network_type FROM ext_zallet_db_wallet_metadata",
+                        [],
+                        |row| row.get::<_, crate::network::kind::Sql>("network_type"),
+                    )
+                    .map_err(|e| ErrorKind::Init.context(e))?;
+
+                if wallet_network_type.0 == config.consensus.network {
+                    Ok(())
+                } else {
+                    Err(ErrorKind::Init.context(fl!(
+                        "err-init-config-db-mismatch",
+                        db_network_type = crate::network::kind::type_to_str(&wallet_network_type.0),
+                        config_network_type =
+                            crate::network::kind::type_to_str(&config.consensus.network),
+                    )))
+                }
+            })?;
+
             info!("Applying latest database migrations");
         } else {
             info!("Creating empty database");
         }
-        let handle = database.handle().await?;
+
+        // Initialize the database before we go any further.
         handle.with_mut(|mut db_data| {
             match WalletMigrator::new()
                 .with_external_migrations(all_external_migrations())
@@ -86,6 +114,21 @@ impl Database {
         })?;
 
         let now = ::time::OffsetDateTime::now_utc();
+
+        // If the database was newly created, store the wallet metadata.
+        if !db_exists {
+            handle
+                .with_raw_mut(|conn| {
+                    conn.execute(
+                        "INSERT INTO ext_zallet_db_wallet_metadata
+                        VALUES (:network_type)",
+                        named_params! {
+                            ":network_type": crate::network::kind::Sql(config.consensus.network),
+                        },
+                    )
+                })
+                .map_err(|e| ErrorKind::Init.context(e))?;
+        }
 
         // Record that we migrated the database using this Zallet version. We don't have
         // an easy way to detect whether any migrations actually ran, so we check whether

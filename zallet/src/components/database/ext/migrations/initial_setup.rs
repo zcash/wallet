@@ -27,7 +27,10 @@ impl RusqliteMigration for Migration {
 
     fn up(&self, transaction: &rusqlite::Transaction<'_>) -> Result<(), Self::Error> {
         transaction.execute_batch(
-            "CREATE TABLE ext_zallet_db_version_metadata (
+            "CREATE TABLE ext_zallet_db_wallet_metadata (
+                network_type STRING NOT NULL
+            );
+            CREATE TABLE ext_zallet_db_version_metadata (
                 version STRING NOT NULL,
                 git_revision STRING,
                 clean INTEGER,

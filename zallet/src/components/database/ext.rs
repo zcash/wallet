@@ -15,6 +15,19 @@
 
 pub(in crate::components) mod migrations;
 
+/// Stores metadata about the Zallet wallet.
+///
+/// This table is a pseudo-key-value store, and should only ever contain at most one row.
+///
+/// ### Columns
+///
+/// - `network`: The network type that the wallet was created with.
+pub(crate) const TABLE_WALLET_METADATA: &str = r#"
+CREATE TABLE ext_zallet_db_wallet_metadata (
+    network_type STRING NOT NULL
+)
+"#;
+
 /// Stores metadata about the Zallet versions that the user has run with this database.
 ///
 /// ### Columns
