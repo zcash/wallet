@@ -10,7 +10,7 @@ use zcash_protocol::{consensus::BlockHeight, value::Zatoshis};
 use crate::components::database::DbConnection;
 
 /// Coinbase transaction outputs can only be spent after this number of new blocks
-/// (network rule).
+/// (consensus rule).
 const COINBASE_MATURITY: u32 = 100;
 
 enum IsMine {
@@ -46,6 +46,12 @@ pub(super) fn is_mine_spendable_or_watchonly(
 }
 
 /// Logically equivalent to [`IsMine(CTxDestination)`] in `zcashd`.
+///
+/// A transaction is only considered "mine" by virtue of having a P2SH multisig
+/// output if we own *all* of the keys involved. Multi-signature transactions that
+/// are partially owned (somebody else has a key that can spend them) enable
+/// spend-out-from-under-you attacks, especially in shared-wallet situations.
+/// Non-P2SH ("bare") multisig outputs never make a transaction "mine".
 ///
 /// [`IsMine(CTxDestination)`]: https://github.com/zcash/zcash/blob/2352fbc1ed650ac4369006bea11f7f20ee046b84/src/script/ismine.cpp#L121
 fn is_mine(
