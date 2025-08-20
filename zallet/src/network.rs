@@ -33,7 +33,8 @@ impl Network {
 
                 // If a NU is omitted, ensure that it activates at the same height as the
                 // subsequent specified NU (if any).
-                let nu6 = find_nu(consensus::BranchId::Nu6);
+                let nu6_1 = find_nu(consensus::BranchId::Nu6_1);
+                let nu6 = find_nu(consensus::BranchId::Nu6).or(nu6_1);
                 let nu5 = find_nu(consensus::BranchId::Nu5).or(nu6);
                 let canopy = find_nu(consensus::BranchId::Canopy).or(nu5);
                 let heartwood = find_nu(consensus::BranchId::Heartwood).or(canopy);
@@ -49,6 +50,7 @@ impl Network {
                     canopy,
                     nu5,
                     nu6,
+                    nu6_1,
                 })
             }
         }

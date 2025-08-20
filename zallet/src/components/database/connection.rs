@@ -7,7 +7,8 @@ use rand::rngs::OsRng;
 use secrecy::SecretVec;
 use shardtree::{ShardTree, error::ShardTreeError};
 use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
-use zcash_client_backend::data_api::{AddressInfo, TargetValue};
+use zcash_client_backend::data_api::wallet::{ConfirmationsPolicy, TargetHeight};
+use zcash_client_backend::data_api::{AddressInfo, Balance, TargetValue, Zip32Derivation};
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
@@ -19,8 +20,8 @@ use zcash_client_backend::{
 };
 use zcash_client_sqlite::{WalletDb, util::SystemClock};
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
-use zcash_protocol::{ShieldedProtocol, consensus::BlockHeight, value::Zatoshis};
-use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
+use zcash_protocol::{ShieldedProtocol, consensus::BlockHeight};
+use zip32::DiversifierIndex;
 
 use crate::{
     error::{Error, ErrorKind},
@@ -162,10 +163,9 @@ impl WalletRead for DbConnection {
 
     fn get_derived_account(
         &self,
-        seed: &SeedFingerprint,
-        account_id: zip32::AccountId,
+        derivation: &Zip32Derivation,
     ) -> Result<Option<Self::Account>, Self::Error> {
-        self.with(|db_data| db_data.get_derived_account(seed, account_id))
+        self.with(|db_data| db_data.get_derived_account(derivation))
     }
 
     fn validate_seed(
@@ -212,10 +212,10 @@ impl WalletRead for DbConnection {
 
     fn get_wallet_summary(
         &self,
-        min_confirmations: u32,
+        confirmations_policy: ConfirmationsPolicy,
     ) -> Result<Option<zcash_client_backend::data_api::WalletSummary<Self::AccountId>>, Self::Error>
     {
-        self.with(|db_data| db_data.get_wallet_summary(min_confirmations))
+        self.with(|db_data| db_data.get_wallet_summary(confirmations_policy))
     }
 
     fn chain_height(&self) -> Result<Option<BlockHeight>, Self::Error> {
@@ -258,7 +258,7 @@ impl WalletRead for DbConnection {
     fn get_target_and_anchor_heights(
         &self,
         min_confirmations: std::num::NonZeroU32,
-    ) -> Result<Option<(BlockHeight, BlockHeight)>, Self::Error> {
+    ) -> Result<Option<(TargetHeight, BlockHeight)>, Self::Error> {
         self.with(|db_data| db_data.get_target_and_anchor_heights(min_confirmations))
     }
 
@@ -314,9 +314,12 @@ impl WalletRead for DbConnection {
     fn get_transparent_balances(
         &self,
         account: Self::AccountId,
-        max_height: BlockHeight,
-    ) -> Result<HashMap<TransparentAddress, Zatoshis>, Self::Error> {
-        self.with(|db_data| db_data.get_transparent_balances(account, max_height))
+        target_height: TargetHeight,
+        confirmations_policy: ConfirmationsPolicy,
+    ) -> Result<HashMap<TransparentAddress, Balance>, Self::Error> {
+        self.with(|db_data| {
+            db_data.get_transparent_balances(account, target_height, confirmations_policy)
+        })
     }
 
     fn get_transparent_address_metadata(
@@ -375,11 +378,19 @@ impl InputSource for DbConnection {
         account: Self::AccountId,
         target_value: TargetValue,
         sources: &[ShieldedProtocol],
-        anchor_height: BlockHeight,
+        target_height: TargetHeight,
+        confirmations_policy: ConfirmationsPolicy,
         exclude: &[Self::NoteRef],
     ) -> Result<SpendableNotes<Self::NoteRef>, Self::Error> {
         self.with(|db_data| {
-            db_data.select_spendable_notes(account, target_value, sources, anchor_height, exclude)
+            db_data.select_spendable_notes(
+                account,
+                target_value,
+                sources,
+                target_height,
+                confirmations_policy,
+                exclude,
+            )
         })
     }
 
@@ -393,11 +404,11 @@ impl InputSource for DbConnection {
     fn get_spendable_transparent_outputs(
         &self,
         address: &TransparentAddress,
-        target_height: BlockHeight,
-        min_confirmations: u32,
+        target_height: TargetHeight,
+        confirmations_policy: ConfirmationsPolicy,
     ) -> Result<Vec<WalletTransparentOutput>, Self::Error> {
         self.with(|db_data| {
-            db_data.get_spendable_transparent_outputs(address, target_height, min_confirmations)
+            db_data.get_spendable_transparent_outputs(address, target_height, confirmations_policy)
         })
     }
 

@@ -1,8 +1,10 @@
+use std::num::NonZeroU32;
+
 use documented::Documented;
 use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
-use zcash_client_backend::data_api::WalletRead;
+use zcash_client_backend::data_api::{WalletRead, wallet::ConfirmationsPolicy};
 use zcash_protocol::value::Zatoshis;
 
 use crate::components::{
@@ -43,8 +45,16 @@ pub(crate) fn call(
             .with_message("include_watch_only argument must be set to true (for now)")),
     }?;
 
+    let confirmations_policy = match minconf {
+        Some(minconf) => match NonZeroU32::new(minconf) {
+            Some(c) => ConfirmationsPolicy::new_symmetrical(c, false),
+            None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), true),
+        },
+        None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), false),
+    };
+
     let (transparent, private) = if let Some(summary) = wallet
-        .get_wallet_summary(minconf.unwrap_or(1))
+        .get_wallet_summary(confirmations_policy)
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
     {
         // TODO: support `include_watch_only = false`
