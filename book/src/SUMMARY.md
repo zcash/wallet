@@ -18,3 +18,5 @@
   - [generate-mnemonic](cli/generate-mnemonic.md)
   - [import-mnemonic](cli/import-mnemonic.md)
   - [rpc-cli](cli/rpc-cli.md)
+- [Migrating from `zcashd`](zcashd/README.md)
+  - [JSON-RPC altered semantics](zcashd/json_rpc.md)
