@@ -259,6 +259,8 @@ pub struct DatabaseSection {
     /// Path to the wallet database file.
     ///
     /// This can be either an absolute path, or a path relative to the data directory.
+    /// Note that on Windows, you must either use single quotes for this field's value, or
+    /// replace all backslashes `\` with forward slashes `/`.
     pub wallet: Option<PathBuf>,
 }
 
@@ -285,6 +287,8 @@ pub struct ExternalSection {
     /// Directory to be used when exporting data.
     ///
     /// This must be an absolute path; relative paths are not resolved within the datadir.
+    /// Note that on Windows, you must either use single quotes for this field's value, or
+    /// replace all backslashes `\` with forward slashes `/`.
     pub export_dir: Option<PathBuf>,
 
     /// Executes the specified command when a wallet transaction changes.
@@ -453,6 +457,8 @@ pub struct IndexerSection {
     /// Path to the folder where the indexer maintains its state.
     ///
     /// This can be either an absolute path, or a path relative to the data directory.
+    /// Note that on Windows, you must either use single quotes for this field's value, or
+    /// replace all backslashes `\` with forward slashes `/`.
     pub db_path: Option<PathBuf>,
 }
 
@@ -476,6 +482,8 @@ pub struct KeyStoreSection {
     /// Path to the age identity file that encrypts key material.
     ///
     /// This can be either an absolute path, or a path relative to the data directory.
+    /// Note that on Windows, you must either use single quotes for this field's value, or
+    /// replace all backslashes `\` with forward slashes `/`.
     pub encryption_identity: Option<PathBuf>,
 
     /// By default, the wallet will not allow generation of new spending keys & addresses

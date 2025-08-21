@@ -91,6 +91,8 @@ network = "main"
 # Path to the wallet database file.
 #
 # This can be either an absolute path, or a path relative to the data directory.
+# Note that on Windows, you must either use single quotes for this field's value, or
+# replace all backslashes `/` with forward slashes `/`.
 #wallet = "wallet.db"
 
 
@@ -105,6 +107,8 @@ network = "main"
 # Directory to be used when exporting data.
 #
 # This must be an absolute path; relative paths are not resolved within the datadir.
+# Note that on Windows, you must either use single quotes for this field's value, or
+# replace all backslashes `/` with forward slashes `/`.
 #export_dir = UNSET
 
 # Executes the specified command when a wallet transaction changes.
@@ -214,6 +218,8 @@ as_of_version = "0.0.0"
 # Path to the folder where the indexer maintains its state.
 #
 # This can be either an absolute path, or a path relative to the data directory.
+# Note that on Windows, you must either use single quotes for this field's value, or
+# replace all backslashes `/` with forward slashes `/`.
 #db_path = "zaino"
 
 
@@ -225,6 +231,8 @@ as_of_version = "0.0.0"
 # Path to the age identity file that encrypts key material.
 #
 # This can be either an absolute path, or a path relative to the data directory.
+# Note that on Windows, you must either use single quotes for this field's value, or
+# replace all backslashes `/` with forward slashes `/`.
 #encryption_identity = "encryption-identity.txt"
 
 # By default, the wallet will not allow generation of new spending keys & addresses
