@@ -134,9 +134,17 @@ impl ZalletConfig {
                 .source(Some(filtered_env))
                 .prefix_separator("_")
                 .separator("__")
+                // Unlike the fields of a TOML file, environment variables are always
+                // strings. While serde can handle that internally for primitive types, we
+                // are forced to enable parsing env vars as one of `bool`, `i64`, `f64`
+                // before we can parse comma-separated lists (to regain the ability to
+                // configure arrays of values like we can in TOML files).
+                .try_parsing(true)
                 .list_separator(",")
-                .with_list_parse_key("rpc.bind")
-                .try_parsing(true),
+                // We need to specify explicitly which environment variables should be
+                // parsed as comma-separated lists, otherwise we lose the ability to
+                // represent a plain string.
+                .with_list_parse_key("rpc.bind"),
         );
 
         // Build and deserialize the configuration
