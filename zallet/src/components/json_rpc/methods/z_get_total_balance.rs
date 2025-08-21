@@ -48,9 +48,9 @@ pub(crate) fn call(
     let confirmations_policy = match minconf {
         Some(minconf) => match NonZeroU32::new(minconf) {
             Some(c) => ConfirmationsPolicy::new_symmetrical(c, false),
-            None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), true),
+            None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::MIN, true),
         },
-        None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), false),
+        None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::MIN, false),
     };
 
     let (transparent, private) = if let Some(summary) = wallet

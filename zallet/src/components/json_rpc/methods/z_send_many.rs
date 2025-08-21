@@ -177,12 +177,17 @@ pub(crate) async fn call(
     // Sanity check for transaction size
     // TODO
 
-    let min_confirmations = match minconf {
-        Some(minconf) => NonZeroU32::new(minconf)
-            // TODO: Fix this inconsistency with `zcashd` (inability to create zero-conf txs).
-            // https://github.com/zcash/wallet/issues/139
-            .ok_or_else(|| LegacyCode::InvalidParameter.with_static("minconf must be non-zero"))?,
-        None => NonZeroU32::new(APP.config().builder.default_minconf()).unwrap_or(NonZeroU32::MIN),
+    let confirmations_policy = match minconf {
+        Some(minconf) => NonZeroU32::new(minconf).map_or(
+            ConfirmationsPolicy::new_symmetrical(NonZeroU32::MIN, true),
+            |c| ConfirmationsPolicy::new_symmetrical(c, false),
+        ),
+        None => {
+            APP.config().builder.confirmations_policy().map_err(|_| {
+                LegacyCode::Wallet.with_message(
+                    "Configuration error: minimum confirmations for spending trusted TXOs cannot exceed that for untrusted TXOs.")
+            })?
+        }
     };
 
     // Fetch spending key last, to avoid a keystore decryption if unnecessary.
@@ -209,7 +214,7 @@ pub(crate) async fn call(
             json!({
                 "fromaddress": fromaddress,
                 "amounts": amounts,
-                "minconf": min_confirmations,
+                "minconf": minconf
             }),
         )),
         run(
@@ -217,7 +222,7 @@ pub(crate) async fn call(
             chain,
             account.id(),
             request,
-            min_confirmations,
+            confirmations_policy,
             privacy_policy,
             usk,
         ),
@@ -238,7 +243,7 @@ async fn run(
     chain: FetchServiceSubscriber,
     spend_from_account: AccountUuid,
     request: TransactionRequest,
-    min_confirmations: NonZeroU32,
+    confirmations_policy: ConfirmationsPolicy,
     privacy_policy: PrivacyPolicy,
     // TODO: Support legacy transparent pool of funds. https://github.com/zcash/wallet/issues/138
     usk: UnifiedSpendingKey,
@@ -327,7 +332,7 @@ async fn run(
         &input_selector,
         &change_strategy,
         request,
-        ConfirmationsPolicy::new_symmetrical(min_confirmations, true),
+        confirmations_policy,
     )
     // TODO: Map errors to `zcashd` shape.
     .map_err(|e| LegacyCode::Wallet.with_message(format!("Failed to propose transaction: {e}")))?;

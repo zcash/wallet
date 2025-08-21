@@ -3,12 +3,13 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::net::SocketAddr;
-use std::num::NonZeroU16;
+use std::num::{NonZeroU16, NonZeroU32};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
 use serde::{Deserialize, Serialize};
+use zcash_client_backend::data_api::wallet::ConfirmationsPolicy;
 use zcash_client_backend::fees::SplitPolicy;
 use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 use zip32::fingerprint::SeedFingerprint;
@@ -192,11 +193,19 @@ impl BuilderSection {
         self.untrusted_confirmations.unwrap_or(10)
     }
 
-    /// TODO: Remove this once we have proper ZIP 315 confirmation handling in
-    /// `zcash_client_backend`.
-    pub(crate) fn default_minconf(&self) -> u32 {
-        self.untrusted_confirmations()
-            .max(self.trusted_confirmations())
+    /// Returns the confirmations policy used for spending, based on number of trusted and
+    /// untrusted confirmations specified by this configuration section.
+    ///
+    /// This will return an error if the number of confirmations required for spending untrusted
+    /// TXOs is less than the number of confirmations required for spending trusted TXOs
+    #[allow(clippy::result_unit_err)]
+    pub fn confirmations_policy(&self) -> Result<ConfirmationsPolicy, ()> {
+        let allow_zero_conf_shielding = self.untrusted_confirmations() == 0;
+        ConfirmationsPolicy::new(
+            NonZeroU32::new(self.trusted_confirmations()).unwrap_or(NonZeroU32::MIN),
+            NonZeroU32::new(self.untrusted_confirmations()).unwrap_or(NonZeroU32::MIN),
+            allow_zero_conf_shielding,
+        )
     }
 }
 

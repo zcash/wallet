@@ -88,7 +88,7 @@ pub(crate) struct UnspentNote {
 
 pub(crate) fn call(wallet: &DbConnection) -> Response {
     let target_height = match wallet
-        .get_target_and_anchor_heights(NonZeroU32::new(1).unwrap())
+        .get_target_and_anchor_heights(NonZeroU32::MIN)
         .map_err(|e| {
             RpcError::owned(
                 LegacyCode::Database.into(),
@@ -136,7 +136,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                 TargetValue::AtLeast(Zatoshis::const_from_u64(MAX_MONEY)),
                 &[ShieldedProtocol::Sapling, ShieldedProtocol::Orchard],
                 target_height,
-                ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), true),
+                ConfirmationsPolicy::new_symmetrical(NonZeroU32::MIN, true),
                 &[],
             )
             .map_err(|e| {
