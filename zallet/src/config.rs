@@ -14,6 +14,7 @@ use zcash_client_backend::fees::SplitPolicy;
 use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 use zip32::fingerprint::SeedFingerprint;
 
+use crate::commands::{lock_datadir, resolve_datadir_path};
 use crate::network::{Network, RegTestNuParam};
 
 /// Returns true if a leaf key name should be considered sensitive and blocked
@@ -82,9 +83,6 @@ pub struct ZalletConfig {
     pub rpc: RpcSection,
 }
 
-/// Zallet Configuration Filename
-pub const CONFIG_FILE: &str = "zallet.toml";
-
 impl ZalletConfig {
     /// Loads Zallet configuration from conventional sources.
     ///
@@ -151,20 +149,6 @@ impl ZalletConfig {
         builder.build()?.try_deserialize()
     }
 
-    /// Returns the config file path relative to the data directory, if it exists.
-    pub fn resolve_config_path(datadir: &Path, config_override: Option<&Path>) -> Option<PathBuf> {
-        let filename = crate::commands::resolve_datadir_path(
-            datadir,
-            config_override.unwrap_or_else(|| Path::new(CONFIG_FILE)),
-        );
-
-        if filename.exists() {
-            Some(filename)
-        } else {
-            None
-        }
-    }
-
     /// Returns the data directory to use.
     fn datadir(&self) -> &Path {
         self.datadir
@@ -176,22 +160,22 @@ impl ZalletConfig {
     ///
     /// This should be called inside any command that writes to the Zallet datadir.
     pub(crate) fn lock_datadir(&self) -> Result<fmutex::Guard<'static>, crate::error::Error> {
-        crate::commands::lock_datadir(self.datadir())
+        lock_datadir(self.datadir())
     }
 
     /// Returns the path to the encryption identity.
     pub(crate) fn encryption_identity(&self) -> PathBuf {
-        crate::commands::resolve_datadir_path(self.datadir(), self.keystore.encryption_identity())
+        resolve_datadir_path(self.datadir(), self.keystore.encryption_identity())
     }
 
     /// Returns the path to the indexer's database.
     pub(crate) fn indexer_db_path(&self) -> PathBuf {
-        crate::commands::resolve_datadir_path(self.datadir(), self.indexer.db_path())
+        resolve_datadir_path(self.datadir(), self.indexer.db_path())
     }
 
     /// Returns the path to the wallet database.
     pub(crate) fn wallet_db_path(&self) -> PathBuf {
-        crate::commands::resolve_datadir_path(self.datadir(), self.database.wallet_path())
+        resolve_datadir_path(self.datadir(), self.database.wallet_path())
     }
 }
 

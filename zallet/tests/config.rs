@@ -211,7 +211,7 @@ timeout = 30
 
 #[test]
 fn test_env_override_consensus_network() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     // Create TOML with Mainnet
@@ -230,7 +230,7 @@ network = "main"
 
 #[test]
 fn test_env_override_rpc_settings() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     let toml_content = r#"
@@ -250,7 +250,7 @@ timeout = 60
 
 #[test]
 fn test_env_override_builder_settings() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
 
     // Test with no TOML file, only env vars
     env.set_var("ZALLET_BUILDER__SPEND_ZEROCONF_CHANGE", "false");
@@ -265,7 +265,7 @@ fn test_env_override_builder_settings() {
 
 #[test]
 fn test_env_override_indexer_settings() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
 
     env.set_var("ZALLET_INDEXER__VALIDATOR_ADDRESS", "192.168.1.100:8233");
     env.set_var("ZALLET_INDEXER__VALIDATOR_COOKIE_AUTH", "true");
@@ -289,7 +289,7 @@ fn test_env_override_indexer_settings() {
 
 #[test]
 fn test_env_precedence_over_toml() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     // TOML says one thing
@@ -350,7 +350,7 @@ fn test_missing_required_file() {
 
 #[test]
 fn test_invalid_env_var_value() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
 
     // Set an invalid network value
     env.set_var("ZALLET_CONSENSUS__NETWORK", "InvalidNetwork");
@@ -361,7 +361,7 @@ fn test_invalid_env_var_value() {
 
 #[test]
 fn test_invalid_env_var_format() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
 
     // Set invalid socket address format
     env.set_var(
@@ -377,7 +377,7 @@ fn test_invalid_env_var_format() {
 
 #[test]
 fn test_partial_env_override() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     let toml_content = r#"
@@ -414,7 +414,7 @@ timeout = 60
 
 #[test]
 fn test_rpc_bind_multiple_addresses() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
 
     // Test comma-separated list of bind addresses
     env.set_var(
@@ -432,7 +432,7 @@ fn test_rpc_bind_multiple_addresses() {
 
 #[test]
 fn test_boolean_env_parsing() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
 
     // Test various boolean representations
     env.set_var("ZALLET_BUILDER__SPEND_ZEROCONF_CHANGE", "false");
@@ -449,7 +449,7 @@ fn test_boolean_env_parsing() {
 
 #[test]
 fn test_numeric_env_parsing() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
 
     env.set_var("ZALLET_BUILDER__TRUSTED_CONFIRMATIONS", "42");
     env.set_var("ZALLET_BUILDER__TX_EXPIRY_DELTA", "100");
@@ -470,7 +470,7 @@ fn test_numeric_env_parsing() {
 
 #[test]
 fn test_env_unknown_non_sensitive_key_errors() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
@@ -485,7 +485,7 @@ fn test_env_unknown_non_sensitive_key_errors() {
 
 #[test]
 fn test_env_unknown_sensitive_key_is_ignored() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
@@ -501,7 +501,7 @@ fn test_env_unknown_sensitive_key_is_ignored() {
 
 #[test]
 fn test_env_validator_password_is_ignored() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
@@ -516,7 +516,7 @@ fn test_env_validator_password_is_ignored() {
 
 #[test]
 fn test_env_non_sensitive_keys_still_work() {
-    let env = EnvGuard::new();
+    let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
