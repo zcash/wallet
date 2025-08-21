@@ -75,6 +75,7 @@ assets = [
 [dependencies]
 abscissa_core.workspace = true
 abscissa_tokio.workspace = true
+config.workspace = true
 age.workspace = true
 async-trait.workspace = true
 bip0039.workspace = true
