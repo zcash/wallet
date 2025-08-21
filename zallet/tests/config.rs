@@ -25,6 +25,7 @@ impl EnvGuard {
             .collect();
 
         for (key, _) in &original_vars {
+            // SAFETY: We ensure single-threaded operation with `TEST_MUTEX`.
             unsafe {
                 env::remove_var(key);
             }
@@ -37,7 +38,10 @@ impl EnvGuard {
     }
 
     /// Set a ZALLET_* environment variable for this test.
-    fn set_var(&self, key: &str, value: &str) {
+    fn set_var(&mut self, key: &str, value: &str) {
+        // SAFETY: We hold a lock on `TEST_MUTEX` to ensure single-threaded operation
+        // relative to other tests, and we take `&mut self` to ensure this method isn't
+        // called in parallel within a single test.
         unsafe {
             env::set_var(key, value);
         }
@@ -67,6 +71,8 @@ impl Drop for EnvGuard {
             .map(|(key, _)| key)
             .collect();
         for key in current_vars {
+            // SAFETY: The `TEST_MUTEX` lock is not dropped until the end of this method,
+            // and we have `&mut self` so we know this is the only drop method running.
             unsafe {
                 env::remove_var(&key);
             }
