@@ -595,7 +595,6 @@ fn encrypt_string(
     Ok(ciphertext)
 }
 
-#[allow(dead_code)]
 fn encrypt_legacy_seed_bytes(
     recipients: &[Box<dyn age::Recipient + Send>],
     seed: &SecretVec<u8>,
