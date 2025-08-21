@@ -30,12 +30,25 @@ fn is_sensitive_leaf_key(leaf_key: &str) -> bool {
 
 /// Zallet Configuration
 ///
+/// This structure uses a layered approach to configuration parsing and generation:
+///
+/// ## Field Types
 /// Most fields are `Option<T>` to enable distinguishing between a user relying on a
 /// default value (which may change over time), and a user explicitly configuring an
 /// option with the current default value (which should be preserved). The sole exceptions
 /// to this are:
 /// - `consensus.network`, which cannot change for the lifetime of the wallet.
 /// - `features.as_of_version`, which must always be set to some Zallet version.
+///
+/// ## Section Headers  
+/// All configuration sections use `#[serde(default)]`, which provides balanced UX:
+/// - Config generation: Always writes section headers, never writes default field values
+/// - Config parsing: Allows users to omit entire sections if using only defaults
+/// - Flexibility: Users can partially configure sections without providing all fields
+///
+/// This design supports both complete config files (with all sections) and minimal
+/// config files (omitting unused sections), while maintaining clear separation of
+/// configuration domains.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
