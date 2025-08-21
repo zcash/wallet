@@ -7,7 +7,6 @@ use transparent::{
     address::Script,
     bundle::{OutPoint, TxOut},
 };
-use zaino_fetch::jsonrpsee::error::JsonRpSeeConnectorError;
 use zaino_proto::proto::service::GetAddressUtxosArg;
 use zaino_state::{
     FetchServiceError, FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer,
@@ -444,9 +443,7 @@ async fn poll_transparent(
         // implement) or an equivalent Zaino index (once it exists).
         info!("Fetching mined UTXOs");
         let utxos = chain
-            .z_get_address_utxos(
-                AddressStrings::new_valid(addresses).expect("we just encoded these"),
-            )
+            .z_get_address_utxos(AddressStrings::new(addresses))
             .await?;
 
         // Notify the wallet about all mined UTXOs.
@@ -503,7 +500,7 @@ async fn data_requests(
                         // with an enum variant that should never occur.
                         Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => unreachable!(),
                         Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => tx
-                            .height
+                            .height()
                             .map(BlockHeight::from_u32)
                             .map(TransactionStatus::Mined)
                             .unwrap_or(TransactionStatus::NotInMainChain),
@@ -513,9 +510,11 @@ async fn data_requests(
                         // - "No such mempool or blockchain transaction" (zcashd -txindex)
                         // - "No such mempool transaction." (zcashd)
                         // - "No such mempool or main chain transaction" (zebrad)
-                        Err(FetchServiceError::JsonRpcConnectorError(
-                            JsonRpSeeConnectorError::JsonRpSeeClientError(e),
-                        )) if e.contains("No such mempool") => TransactionStatus::TxidNotRecognized,
+                        Err(FetchServiceError::RpcError(e))
+                            if e.message.contains("No such mempool") =>
+                        {
+                            TransactionStatus::TxidNotRecognized
+                        }
                         Err(e) => return Err(e.into()),
                     };
 
@@ -529,7 +528,7 @@ async fn data_requests(
                         // with an enum variant that should never occur.
                         Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => unreachable!(),
                         Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => {
-                            let mined_height = tx.height.map(BlockHeight::from_u32);
+                            let mined_height = tx.height().map(BlockHeight::from_u32);
 
                             // TODO: Zaino should either be doing the tx parsing for us,
                             // or telling us the consensus branch ID for which the tx is
@@ -554,7 +553,7 @@ async fn data_requests(
                                 }
                             };
                             let tx = Transaction::read(
-                                tx.hex.as_ref(),
+                                tx.hex().as_ref(),
                                 consensus::BranchId::for_height(params, parse_height),
                             )
                             .expect("TODO: Zaino's API should have caught this error for us");
@@ -567,9 +566,11 @@ async fn data_requests(
                         // - "No such mempool or blockchain transaction" (zcashd -txindex)
                         // - "No such mempool transaction." (zcashd)
                         // - "No such mempool or main chain transaction" (zebrad)
-                        Err(FetchServiceError::JsonRpcConnectorError(
-                            JsonRpSeeConnectorError::JsonRpSeeClientError(e),
-                        )) if e.contains("No such mempool") => None,
+                        Err(FetchServiceError::RpcError(e))
+                            if e.message.contains("No such mempool") =>
+                        {
+                            None
+                        }
                         Err(e) => return Err(e.into()),
                     };
 
@@ -605,10 +606,10 @@ async fn data_requests(
                         req.block_range_end().map(|h| h.to_string()).unwrap_or_default(),
                     );
 
-                    let request = GetAddressTxIdsRequest::from_parts(
+                    let request = GetAddressTxIdsRequest::new(
                         vec![address.clone()],
-                        req.block_range_start().into(),
-                        req.block_range_end().map(u32::from).unwrap_or(0),
+                        Some(u32::from(req.block_range_start())),
+                        req.block_range_end().map(u32::from),
                     );
 
                     // Zallet is a full node wallet with an index; we can safely look up
@@ -650,7 +651,7 @@ async fn data_requests(
                             zebra_rpc::methods::GetRawTransaction::Object(tx) => tx,
                         };
 
-                        let mined_height = tx.height.map(BlockHeight::from_u32);
+                        let mined_height = tx.height().map(BlockHeight::from_u32);
 
                         // Ignore transactions that don't match the status filter.
                         match (&req.tx_status_filter(), mined_height) {
@@ -690,7 +691,7 @@ async fn data_requests(
                             }
                         };
                         let tx = Transaction::read(
-                            tx.hex.as_ref(),
+                            tx.hex().as_ref(),
                             consensus::BranchId::for_height(params, parse_height),
                         )
                         .expect("TODO: Zaino's API should have caught this error for us");
