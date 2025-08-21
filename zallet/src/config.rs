@@ -117,7 +117,8 @@ impl ZalletConfig {
     ///
     /// # Security
     /// Environment variables whose leaf key names end with sensitive suffixes (case-insensitive)
-    /// are blocked from overriding config values: `password`, `secret`, `token`, `cookie`, `private_key`.
+    /// will cause configuration loading to fail with an error: `password`, `secret`, `token`, `cookie`, `private_key`.
+    /// This prevents both silent misconfigurations and process table exposure of sensitive values.
     pub fn load(config_path: Option<&Path>) -> Result<Self, config::ConfigError> {
         let mut builder = config::Config::builder();
 
@@ -132,10 +133,14 @@ impl ZalletConfig {
             if let Some(stripped) = key.strip_prefix("ZALLET_") {
                 // Extract the leaf key (rightmost part after splitting on __)
                 let leaf_key = stripped.split("__").last().unwrap_or(stripped);
-                if !is_sensitive_leaf_key(leaf_key) {
-                    filtered_env.insert(key, value);
+                if is_sensitive_leaf_key(leaf_key) {
+                    return Err(config::ConfigError::Message(format!(
+                        "Environment variable '{}' contains sensitive key '{}' which cannot be overridden via environment variables. \
+                         Use the configuration file instead to prevent process table exposure.",
+                        key, leaf_key
+                    )));
                 }
-                // Sensitive keys are silently ignored
+                filtered_env.insert(key, value);
             }
         }
 

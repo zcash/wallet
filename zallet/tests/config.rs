@@ -18,7 +18,10 @@ struct EnvGuard {
 impl EnvGuard {
     /// Acquire the global lock and clear all ZALLET_* env vars, saving originals.
     fn new() -> Self {
-        let guard = TEST_MUTEX.lock().unwrap();
+        let guard = TEST_MUTEX.lock().unwrap_or_else(|poisoned| {
+            // Handle poisoned mutex from previous test panics
+            poisoned.into_inner()
+        });
 
         let original_vars: Vec<(String, String)> = env::vars()
             .filter(|(key, _)| key.starts_with("ZALLET_"))
@@ -484,34 +487,48 @@ fn test_env_unknown_non_sensitive_key_errors() {
 }
 
 #[test]
-fn test_env_unknown_sensitive_key_is_ignored() {
+fn test_env_unknown_sensitive_key_errors() {
     let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
-    // Unknown sensitive-suffix key should be filtered and ignored
+    // Unknown sensitive-suffix key should cause an error
     env.set_var("ZALLET_SOME__SECRET", "topsecret");
-    env.set_var("ZALLET_ANOTHER__TOKEN", "secret-token");
     let result = ZalletConfig::load(Some(&test_config_path));
     assert!(
-        result.is_ok(),
-        "Unknown sensitive-suffix env keys should be ignored (no error)"
+        result.is_err(),
+        "Unknown sensitive-suffix env keys should cause configuration loading to fail"
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("sensitive key 'SECRET'"),
+        "Error message should mention the sensitive key"
     );
 }
 
 #[test]
-fn test_env_validator_password_is_ignored() {
+fn test_env_validator_password_errors() {
     let mut env = EnvGuard::new();
     let temp_dir = env.temp_dir();
 
     let test_config_path = env.create_file(&temp_dir, "test_config.toml", "");
-    // validator_password should be filtered out and not override the default
+    // validator_password should cause configuration loading to fail
     env.set_var("ZALLET_INDEXER__VALIDATOR_PASSWORD", "topsecret");
-    let config = ZalletConfig::load(Some(&test_config_path))
-        .expect("Setting validator password via env should not cause errors (filtered)");
+    let result = ZalletConfig::load(Some(&test_config_path));
 
-    // Ensure env override didn't apply and default remains
-    assert_eq!(config.indexer.validator_password, None);
+    assert!(
+        result.is_err(),
+        "Sensitive env keys should cause configuration loading to fail"
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("sensitive key 'VALIDATOR_PASSWORD'"),
+        "Error message should mention the sensitive key"
+    );
 }
 
 #[test]
@@ -524,8 +541,6 @@ fn test_env_non_sensitive_keys_still_work() {
     env.set_var("ZALLET_INDEXER__VALIDATOR_ADDRESS", "127.0.0.1:8233");
     env.set_var("ZALLET_INDEXER__VALIDATOR_USER", "testuser");
     env.set_var("ZALLET_INDEXER__VALIDATOR_COOKIE_PATH", "/path/to/cookie");
-    // This sensitive one should be ignored
-    env.set_var("ZALLET_INDEXER__VALIDATOR_PASSWORD", "shouldbeignored");
 
     let config = ZalletConfig::load(Some(&test_config_path)).expect("Should load config");
 
