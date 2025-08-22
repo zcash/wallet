@@ -1,4 +1,4 @@
-//! `example-config` subcommand
+//! `rpc` subcommand
 
 use std::fmt;
 

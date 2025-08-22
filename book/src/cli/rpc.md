@@ -1,0 +1,3 @@
+# The `rpc` command
+
+TODO
