@@ -87,6 +87,10 @@ err-init-failed-to-read-lockfile = Failed to read lockfile at {$path}: {$error}
 err-init-zallet-already-running =
     Cannot obtain a lock on data directory {$datadir}. {-zallet} is probably already running.
 
+err-init-config-db-mismatch =
+    The wallet database was created for network type {$db_network_type}, but the
+    config is using network type {$config_network_type}.
+
 # errors in migration of configuration data from the zcashd `zcash.conf` config file format
 
 err-migrate-allow-warnings = To allow a migration with warnings, use '{-allow-warnings}'

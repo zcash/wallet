@@ -3,7 +3,10 @@ use rusqlite::Connection;
 use zcash_client_sqlite::{WalletDb, util::SystemClock, wallet::init::WalletMigrator};
 use zcash_protocol::consensus;
 
-use crate::{components::keystore, network::Network};
+use crate::{
+    components::{database, keystore},
+    network::Network,
+};
 
 #[test]
 fn verify_schema() {
@@ -16,7 +19,7 @@ fn verify_schema() {
     );
 
     WalletMigrator::new()
-        .with_external_migrations(keystore::db::migrations::all())
+        .with_external_migrations(database::all_external_migrations())
         .init_or_migrate(&mut db_data)
         .unwrap();
 
@@ -44,6 +47,8 @@ fn verify_schema() {
         WHERE type = 'table' AND tbl_name LIKE 'ext_zallet_%'
         ORDER BY tbl_name",
         &[
+            database::ext::TABLE_VERSION_METADATA,
+            database::ext::TABLE_WALLET_METADATA,
             keystore::db::TABLE_AGE_RECIPIENTS,
             keystore::db::TABLE_LEGACY_SEEDS,
             keystore::db::TABLE_MNEMONICS,
