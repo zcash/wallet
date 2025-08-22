@@ -40,6 +40,12 @@ audit-as-crates-io = true
 
 [policy.sapling-crypto]
 
+[policy.tower-batch-control]
+audit-as-crates-io = true
+
+[policy.tower-fallback]
+audit-as-crates-io = true
+
 [policy.zaino-fetch]
 audit-as-crates-io = true
 
@@ -77,6 +83,27 @@ audit-as-crates-io = true
 audit-as-crates-io = true
 
 [policy.zcash_transparent]
+audit-as-crates-io = true
+
+[policy.zebra-chain]
+audit-as-crates-io = true
+
+[policy.zebra-consensus]
+audit-as-crates-io = true
+
+[policy.zebra-network]
+audit-as-crates-io = true
+
+[policy.zebra-node-services]
+audit-as-crates-io = true
+
+[policy.zebra-rpc]
+audit-as-crates-io = true
+
+[policy.zebra-script]
+audit-as-crates-io = true
+
+[policy.zebra-state]
 audit-as-crates-io = true
 
 [policy.zip321]
@@ -1662,6 +1689,10 @@ criteria = "safe-to-deploy"
 version = "7.0.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.which]]
+version = "8.0.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.whoami]]
 version = "1.6.0"
 criteria = "safe-to-deploy"
@@ -1715,15 +1746,15 @@ version = "2.5.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-fetch]]
-version = "0.1.2@git:27369f8753172d8b8a41583033e00c01db92457e"
+version = "0.1.2@git:642261116cbaf0c7a27ac37f58060164cd686575"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-proto]]
-version = "0.1.2@git:27369f8753172d8b8a41583033e00c01db92457e"
+version = "0.1.2@git:642261116cbaf0c7a27ac37f58060164cd686575"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-state]]
-version = "0.1.2@git:27369f8753172d8b8a41583033e00c01db92457e"
+version = "0.1.2@git:642261116cbaf0c7a27ac37f58060164cd686575"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_address]]
@@ -1783,7 +1814,7 @@ version = "1.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-rpc]]
-version = "2.0.0"
+version = "2.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-script]]
