@@ -53,7 +53,7 @@ CREATE TABLE ext_zallet_keystore_mnemonics (
 )
 "#;
 
-/// Stores encrypted raw HD seeds.
+/// Stores encrypted raw HD seeds. These are likely to only be produced via `zcashd` wallet import.
 ///
 /// ### Columns
 ///
@@ -68,5 +68,43 @@ pub(crate) const TABLE_LEGACY_SEEDS: &str = r#"
 CREATE TABLE ext_zallet_keystore_legacy_seeds (
     hd_seed_fingerprint BLOB NOT NULL UNIQUE,
     encrypted_legacy_seed BLOB NOT NULL
+)
+"#;
+
+/// Stores encrypted standalone Sapling spending keys.
+///
+/// ### Columns
+///
+/// - `dfvk` is the [`DiversifiableFullViewingKey`] derived from the spending key.
+/// - `encrypted_sapling_extsk` is a [ZIP 32]-encoded [`ExtendedFullViewingKey`] in an
+///   [age encrypted file].
+///
+/// [ZIP 32]: https://zips.z.cash/zip-0032
+/// [`DiversifiableFullViewingKey`]: sapling::zip32::DiversifiableFullViewingKey
+/// [`ExtendedFullViewingKey`]: sapling::zip32::ExtendedFullViewingKey
+/// [age encrypted file]: https://c2sp.org/age#encrypted-file-format
+pub(crate) const TABLE_STANDALONE_SAPLING_KEYS: &str = r#"
+CREATE TABLE ext_zallet_keystore_standalone_sapling_keys (
+    dfvk BLOB NOT NULL UNIQUE,
+    encrypted_sapling_extsk BLOB NOT NULL
+)
+"#;
+
+/// Stores encrypted standalone transparent secret keys.
+///
+/// ### Columns
+///
+/// - `pubkey` is the [`PublicKey`] derived from the spending key.
+/// - `encrypted_transparent_privkey` is a [`SecretKey`] serialized in its compressed form in an
+///   [age encrypted file].
+///
+/// [ZIP 32]: https://zips.z.cash/zip-0032
+/// [`Publickey`]: secp256k1::PublicKey
+/// [`SecretKey`]: secp256k1::SecretKey
+/// [age encrypted file]: https://c2sp.org/age#encrypted-file-format
+pub(crate) const TABLE_STANDALONE_TRANSPARENT_KEYS: &str = r#"
+CREATE TABLE ext_zallet_keystore_standalone_transparent_keys (
+    pubkey BLOB NOT NULL UNIQUE,
+    encrypted_transparent_privkey BLOB NOT NULL
 )
 "#;
