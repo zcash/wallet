@@ -146,6 +146,15 @@ pub(crate) struct ImportMnemonicCmd {}
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct RpcCliCmd {
+    /// Client timeout in seconds during HTTP requests, or 0 for no timeout.
+    ///
+    /// Default is 900 seconds.
+    ///
+    /// The server timeout is configured with the `rpc.timeout` option in the
+    /// configuration file.
+    #[arg(long)]
+    pub(crate) timeout: Option<u64>,
+
     /// The JSON-RPC command to send to Zallet.
     pub(crate) command: String,
 

@@ -26,7 +26,7 @@ below:
 | `zcash-cli -rpcwait`              | Not implemented                    |
 | `zcash-cli -rpcuser=<user>`       | Not implemented                    |
 | `zcash-cli -rpcpassword=<pw>`     | Not implemented                    |
-| `zcash-cli -rpcclienttimeout=<n>` | Not implemented, always 60s        |
+| `zcash-cli -rpcclienttimeout=<n>` | `zallet rpc --timeout <n>`         |
 | Hostname, domain, or IP address   | Only IP address                    |
 | `zcash-cli <method> [<param> ..]` | `zallet rpc <method> [<param> ..]` |
 
