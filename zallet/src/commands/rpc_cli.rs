@@ -1,12 +1,15 @@
-//! `example-config` subcommand
+//! `rpc` subcommand
 
 use std::fmt;
+use std::time::Duration;
 
 use abscissa_core::Runnable;
 use jsonrpsee::core::{client::ClientT, params::ArrayParams};
 use jsonrpsee_http_client::HttpClientBuilder;
 
 use crate::{cli::RpcCliCmd, commands::AsyncRunnable, error::Error, prelude::*};
+
+const DEFAULT_HTTP_CLIENT_TIMEOUT: u64 = 900;
 
 macro_rules! wfl {
     ($f:ident, $message_id:literal) => {
@@ -33,16 +36,24 @@ impl AsyncRunnable for RpcCliCmd {
     async fn run(&self) -> Result<(), Error> {
         let config = APP.config();
 
+        let timeout = Duration::from_secs(match self.timeout {
+            Some(0) => u64::MAX,
+            Some(timeout) => timeout,
+            None => DEFAULT_HTTP_CLIENT_TIMEOUT,
+        });
+
         // Connect to the Zallet wallet.
         let client = match config.rpc.bind.as_slice() {
             &[] => Err(RpcCliError::WalletHasNoRpcServer),
             &[bind] => HttpClientBuilder::default()
+                .request_timeout(timeout)
                 .build(format!("http://{bind}"))
                 .map_err(|_| RpcCliError::FailedToConnect),
             addrs => addrs
                 .iter()
                 .find_map(|bind| {
                     HttpClientBuilder::default()
+                        .request_timeout(timeout)
                         .build(format!("http://{bind}"))
                         .ok()
                 })

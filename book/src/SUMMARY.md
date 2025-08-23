@@ -17,6 +17,6 @@
   - [init-wallet-encryption](cli/init-wallet-encryption.md)
   - [generate-mnemonic](cli/generate-mnemonic.md)
   - [import-mnemonic](cli/import-mnemonic.md)
-  - [rpc-cli](cli/rpc-cli.md)
+  - [rpc](cli/rpc.md)
 - [Migrating from `zcashd`](zcashd/README.md)
   - [JSON-RPC altered semantics](zcashd/json_rpc.md)
