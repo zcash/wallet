@@ -43,6 +43,20 @@ Changes to response:
   listed in a new `derived_transparent` field (an array of objects) instead of
   the `transparent` field.
 
+### `z_viewtransaction`
+
+Changes to response:
+- Information about all transparent inputs and outputs (which are always visible
+  to the wallet) are now included. This causes the following semantic changes:
+  - `pool` field on both inputs and outputs can be `"transparent"`.
+  - New fields `tIn` and `tOutPrev` on inputs.
+  - New field `tOut` on outputs.
+  - `address` field on outputs is no longer only omitted if the output was
+    received on an account-internal address; use `walletInternal` for this.
+  - `memo` field on outputs is omitted if `pool = "transparent"`.
+  - `memoStr` field on outputs is no longer only omitted if `memo` does not
+    contain valid UTF-8.
+
 ### `z_sendmany`
 
 Changes to parameters:

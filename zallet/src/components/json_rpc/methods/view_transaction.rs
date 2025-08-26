@@ -6,13 +6,17 @@ use orchard::note_encryption::OrchardDomain;
 use rusqlite::{OptionalExtension, named_params};
 use schemars::JsonSchema;
 use serde::Serialize;
+use transparent::keys::TransparentKeyScope;
+use zaino_state::{FetchServiceSubscriber, ZcashIndexer};
 use zcash_address::{
     ToAddress, ZcashAddress,
     unified::{self, Encoding},
 };
 use zcash_client_backend::data_api::WalletRead;
+use zcash_keys::encoding::AddressCodec;
 use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
 use zcash_protocol::{ShieldedProtocol, TxId, consensus::Parameters, memo::Memo, value::Zatoshis};
+use zebra_rpc::methods::GetRawTransaction;
 
 use crate::components::{
     database::DbConnection,
@@ -22,6 +26,7 @@ use crate::components::{
     },
 };
 
+const POOL_TRANSPARENT: &str = "transparent";
 const POOL_SAPLING: &str = "sapling";
 const POOL_ORCHARD: &str = "orchard";
 
@@ -29,7 +34,7 @@ const POOL_ORCHARD: &str = "orchard";
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = Transaction;
 
-/// Detailed shielded information about an in-wallet transaction.
+/// Detailed information about an in-wallet transaction.
 #[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct Transaction {
     /// The transaction ID.
@@ -44,10 +49,15 @@ pub(crate) struct Transaction {
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 struct Spend {
-    /// The shielded value pool.
+    /// The value pool.
     ///
-    /// One of `["sapling", "orchard"]`.
+    /// One of `["transparent", "sapling", "orchard"]`.
     pool: &'static str,
+
+    /// (transparent) the index of the spend within `vin`.
+    #[serde(rename = "tIn")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    t_in: Option<u16>,
 
     /// (sapling) the index of the spend within `vShieldedSpend`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -60,6 +70,12 @@ struct Spend {
     /// The id for the transaction this note was created in.
     #[serde(rename = "txidPrev")]
     txid_prev: String,
+
+    /// (transparent) the index of the corresponding output within the previous
+    /// transaction's `vout`.
+    #[serde(rename = "tOutPrev")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    t_out_prev: Option<u16>,
 
     /// (sapling) the index of the corresponding output within the previous transaction's
     /// `vShieldedOutput`.
@@ -90,10 +106,15 @@ struct Spend {
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 struct Output {
-    /// The shielded value pool.
+    /// The value pool.
     ///
-    /// One of `["sapling", "orchard"]`.
+    /// One of `["transparent", "sapling", "orchard"]`.
     pool: &'static str,
+
+    /// (transparent) the index of the output within the `vout`.
+    #[serde(rename = "tOut")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    t_out: Option<u16>,
 
     /// (sapling) the index of the output within the `vShieldedOutput`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -106,7 +127,8 @@ struct Output {
     /// The Zcash address involved in the transaction.
     ///
     /// Omitted if this output was received on an account-internal address (e.g. change
-    /// outputs).
+    /// outputs), or is a transparent output to a script that is not either P2PKH or P2SH
+    /// (and thus doesn't have an address encoding).
     #[serde(skip_serializing_if = "Option::is_none")]
     address: Option<String>,
 
@@ -125,9 +147,14 @@ struct Output {
     value_zat: u64,
 
     /// Hexadecimal string representation of the memo field.
-    memo: String,
+    ///
+    /// Omitted if this is a transparent output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memo: Option<String>,
 
     /// UTF-8 string representation of memo field (if it contains valid UTF-8).
+    ///
+    /// Omitted if this is a transparent output.
     #[serde(rename = "memoStr")]
     #[serde(skip_serializing_if = "Option::is_none")]
     memo_str: Option<String>,
@@ -135,7 +162,11 @@ struct Output {
 
 pub(super) const PARAM_TXID_DESC: &str = "The ID of the transaction to view.";
 
-pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
+pub(crate) async fn call(
+    wallet: &DbConnection,
+    chain: FetchServiceSubscriber,
+    txid_str: &str,
+) -> Response {
     let txid = parse_txid(txid_str)?;
 
     let tx = wallet
@@ -264,6 +295,93 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
             .unwrap_or_else(fallback_addr))
     }
 
+    if let Some(bundle) = tx.transparent_bundle() {
+        // Transparent inputs
+        for (input, idx) in bundle.vin.iter().zip(0u16..) {
+            let txid_prev = input.prevout().txid().to_string();
+
+            // TODO: Migrate to a hopefully much nicer Rust API once we migrate to the new Zaino ChainIndex trait.
+            let (address, value) = match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await
+            {
+                Ok(GetRawTransaction::Object(tx)) => {
+                    let output = tx
+                        .outputs()
+                        .get(usize::from(idx))
+                        .expect("Zaino should have rejected this earlier");
+                    (
+                        transparent::address::Script::from(output.script_pub_key().hex())
+                            .address()
+                            .map(|addr| addr.encode(wallet.params())),
+                        Zatoshis::from_nonnegative_i64(output.value_zat())
+                            .expect("Zaino should have rejected this earlier"),
+                    )
+                }
+                Ok(_) => unreachable!(),
+                Err(_) => todo!(),
+            };
+
+            spends.push(Spend {
+                pool: POOL_TRANSPARENT,
+                t_in: Some(idx),
+                spend: None,
+                action: None,
+                txid_prev,
+                t_out_prev: Some(
+                    input
+                        .prevout()
+                        .n()
+                        .try_into()
+                        .expect("should always be small enough"),
+                ),
+                output_prev: None,
+                action_prev: None,
+                address,
+                value: value_from_zatoshis(value),
+                value_zat: value.into_u64(),
+            });
+        }
+
+        // Transparent outputs
+        for (output, idx) in bundle.vout.iter().zip(0..) {
+            let (address, outgoing, wallet_internal) = match output.recipient_address() {
+                None => (None, true, false),
+                Some(address) => {
+                    let wallet_scope =
+                        wallet
+                            .get_account_ids()
+                            .unwrap()
+                            .into_iter()
+                            .find_map(|account| {
+                                match wallet.get_transparent_address_metadata(account, &address) {
+                                    Ok(Some(metadata)) => Some(metadata.scope()),
+                                    _ => None,
+                                }
+                            });
+
+                    (
+                        Some(address.encode(wallet.params())),
+                        wallet_scope.is_none(),
+                        matches!(wallet_scope, Some(TransparentKeyScope::INTERNAL)),
+                    )
+                }
+            };
+
+            outputs.push(Output {
+                pool: POOL_TRANSPARENT,
+                t_out: Some(idx),
+                output: None,
+                action: None,
+                address,
+                outgoing,
+                wallet_internal,
+                value: value_from_zatoshis(output.value()),
+                value_zat: output.value().into_u64(),
+                memo: None,
+                memo_str: None,
+            });
+        }
+    }
+
     if let Some(bundle) = tx.sapling_bundle() {
         let incoming: BTreeMap<u16, (sapling::Note, Option<sapling::PaymentAddress>, [u8; 512])> =
             bundle
@@ -317,9 +435,11 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
             if let Some((txid_prev, output_prev, address, value)) = spent_note {
                 spends.push(Spend {
                     pool: POOL_SAPLING,
+                    t_in: None,
                     spend: Some(idx),
                     action: None,
                     txid_prev: txid_prev.to_string(),
+                    t_out_prev: None,
                     output_prev: Some(output_prev),
                     action_prev: None,
                     address,
@@ -354,10 +474,11 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
                     Ok(Memo::Text(text_memo)) => Some(text_memo.into()),
                     _ => None,
                 };
-                let memo = hex::encode(memo);
+                let memo = Some(hex::encode(memo));
 
                 outputs.push(Output {
                     pool: POOL_SAPLING,
+                    t_out: None,
                     output: Some(idx),
                     action: None,
                     address,
@@ -424,9 +545,11 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
             if let Some((txid_prev, action_prev, address, value)) = spent_note {
                 spends.push(Spend {
                     pool: POOL_ORCHARD,
+                    t_in: None,
                     spend: None,
                     action: Some(idx),
                     txid_prev: txid_prev.to_string(),
+                    t_out_prev: None,
                     output_prev: None,
                     action_prev: Some(action_prev),
                     address,
@@ -461,10 +584,11 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
                     Ok(Memo::Text(text_memo)) => Some(text_memo.into()),
                     _ => None,
                 };
-                let memo = hex::encode(memo);
+                let memo = Some(hex::encode(memo));
 
                 outputs.push(Output {
                     pool: POOL_ORCHARD,
+                    t_out: None,
                     output: None,
                     action: Some(idx),
                     address,
