@@ -4,12 +4,13 @@ use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fmt::Write;
 use std::net::SocketAddr;
-use std::num::NonZeroU16;
+use std::num::{NonZeroU16, NonZeroU32};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
 use serde::{Deserialize, Serialize};
+use zcash_client_backend::data_api::wallet::ConfirmationsPolicy;
 use zcash_client_backend::fees::SplitPolicy;
 use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
 use zip32::fingerprint::SeedFingerprint;
@@ -297,11 +298,19 @@ impl BuilderSection {
         self.untrusted_confirmations.unwrap_or(10)
     }
 
-    /// TODO: Remove this once we have proper ZIP 315 confirmation handling in
-    /// `zcash_client_backend`.
-    pub(crate) fn default_minconf(&self) -> u32 {
-        self.untrusted_confirmations()
-            .max(self.trusted_confirmations())
+    /// Returns the confirmations policy used for spending, based on number of trusted and
+    /// untrusted confirmations specified by this configuration section.
+    ///
+    /// This will return an error if the number of confirmations required for spending untrusted
+    /// TXOs is less than the number of confirmations required for spending trusted TXOs
+    #[allow(clippy::result_unit_err)]
+    pub fn confirmations_policy(&self) -> Result<ConfirmationsPolicy, ()> {
+        let allow_zero_conf_shielding = self.untrusted_confirmations() == 0;
+        ConfirmationsPolicy::new(
+            NonZeroU32::new(self.trusted_confirmations()).unwrap_or(NonZeroU32::MIN),
+            NonZeroU32::new(self.untrusted_confirmations()).unwrap_or(NonZeroU32::MIN),
+            allow_zero_conf_shielding,
+        )
     }
 }
 
@@ -364,6 +373,8 @@ pub struct DatabaseSection {
     /// Path to the wallet database file.
     ///
     /// This can be either an absolute path, or a path relative to the data directory.
+    /// Note that on Windows, you must either use single quotes for this field's value, or
+    /// replace all backslashes `\` with forward slashes `/`.
     pub wallet: Option<PathBuf>,
 }
 
@@ -390,6 +401,8 @@ pub struct ExternalSection {
     /// Directory to be used when exporting data.
     ///
     /// This must be an absolute path; relative paths are not resolved within the datadir.
+    /// Note that on Windows, you must either use single quotes for this field's value, or
+    /// replace all backslashes `\` with forward slashes `/`.
     pub export_dir: Option<PathBuf>,
 
     /// Executes the specified command when a wallet transaction changes.
@@ -504,7 +517,7 @@ mod seedfp {
 impl Default for FeaturesSection {
     fn default() -> Self {
         Self {
-            as_of_version: env!("CARGO_PKG_VERSION").into(),
+            as_of_version: crate::build::PKG_VERSION.into(),
             legacy_pool_seed_fingerprint: None,
             deprecated: Default::default(),
             experimental: Default::default(),
@@ -560,6 +573,8 @@ pub struct IndexerSection {
     /// Path to the folder where the indexer maintains its state.
     ///
     /// This can be either an absolute path, or a path relative to the data directory.
+    /// Note that on Windows, you must either use single quotes for this field's value, or
+    /// replace all backslashes `\` with forward slashes `/`.
     pub db_path: Option<PathBuf>,
 }
 
@@ -583,6 +598,8 @@ pub struct KeyStoreSection {
     /// Path to the age identity file that encrypts key material.
     ///
     /// This can be either an absolute path, or a path relative to the data directory.
+    /// Note that on Windows, you must either use single quotes for this field's value, or
+    /// replace all backslashes `\` with forward slashes `/`.
     pub encryption_identity: Option<PathBuf>,
 
     /// By default, the wallet will not allow generation of new spending keys & addresses

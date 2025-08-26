@@ -1,7 +1,7 @@
 use incrementalmerkletree::frontier::Frontier;
 use jsonrpsee::tracing::info;
 use orchard::tree::MerkleHashOrchard;
-use zaino_fetch::jsonrpsee::error::JsonRpSeeConnectorError;
+use zaino_fetch::jsonrpsee::connector::RpcError;
 use zaino_state::{
     FetchServiceError, FetchServiceSubscriber, LightWalletIndexer as _, ZcashIndexer as _,
 };
@@ -21,10 +21,13 @@ use zcash_protocol::consensus::{BlockHeight, NetworkUpgrade, Parameters};
 use zebra_chain::{
     block::Block, serialization::ZcashDeserialize as _, subtree::NoteCommitmentSubtreeIndex,
 };
-use zebra_rpc::methods::GetBlock;
+use zebra_rpc::{methods::GetBlock, server::error::LegacyCode};
 use zebra_state::HashOrHeight;
 
-use crate::{components::database::DbConnection, network::Network};
+use crate::{
+    components::{database::DbConnection, sync::error::IndexerError},
+    network::Network,
+};
 
 use super::SyncError;
 
@@ -100,16 +103,15 @@ pub(super) async fn update_subtree_roots(
     let sapling_roots = chain
         .z_get_subtrees_by_index("sapling".into(), NoteCommitmentSubtreeIndex(0), None)
         .await?
-        .subtrees
-        .into_iter()
+        .subtrees()
+        .iter()
         .map(|subtree| {
             let mut root_hash = [0; 32];
             hex::decode_to_slice(&subtree.root, &mut root_hash).map_err(|e| {
-                FetchServiceError::JsonRpcConnectorError(
-                    JsonRpSeeConnectorError::JsonRpSeeClientError(format!(
-                        "Invalid subtree root: {e}"
-                    )),
-                )
+                FetchServiceError::RpcError(RpcError::new_from_legacycode(
+                    LegacyCode::Deserialization,
+                    format!("Invalid subtree root: {e}"),
+                ))
             })?;
             Ok(CommitmentTreeRoot::from_parts(
                 BlockHeight::from_u32(subtree.end_height.0),
@@ -124,16 +126,15 @@ pub(super) async fn update_subtree_roots(
     let orchard_roots = chain
         .z_get_subtrees_by_index("orchard".into(), NoteCommitmentSubtreeIndex(0), None)
         .await?
-        .subtrees
-        .into_iter()
+        .subtrees()
+        .iter()
         .map(|subtree| {
             let mut root_hash = [0; 32];
             hex::decode_to_slice(&subtree.root, &mut root_hash).map_err(|e| {
-                FetchServiceError::JsonRpcConnectorError(
-                    JsonRpSeeConnectorError::JsonRpSeeClientError(format!(
-                        "Invalid subtree root: {e}"
-                    )),
-                )
+                FetchServiceError::RpcError(RpcError::new_from_legacycode(
+                    LegacyCode::Deserialization,
+                    format!("Invalid subtree root: {e}"),
+                ))
             })?;
             Ok(CommitmentTreeRoot::from_parts(
                 BlockHeight::from_u32(subtree.end_height.0),
@@ -309,17 +310,14 @@ pub(super) async fn fetch_chain_state(
     let final_sapling_tree = if params.is_nu_active(NetworkUpgrade::Sapling, height.into()) {
         read_frontier_v0(
             sapling
-                .ok_or_else(|| {
-                    FetchServiceError::JsonRpcConnectorError(
-                        JsonRpSeeConnectorError::JsonRpSeeClientError(
-                            "Missing Sapling tree state".into(),
-                        ),
-                    )
+                .ok_or_else(|| IndexerError::InvalidData {
+                    message: "Missing Sapling tree state".into(),
                 })?
                 .as_slice(),
         )
-        .map_err(JsonRpSeeConnectorError::IoError)
-        .map_err(FetchServiceError::JsonRpcConnectorError)?
+        .map_err(|e| IndexerError::InvalidData {
+            message: format!("{e}"),
+        })?
     } else {
         // Sapling is not yet active; the Sapling tree is empty.
         Frontier::empty()
@@ -328,17 +326,14 @@ pub(super) async fn fetch_chain_state(
     let final_orchard_tree = if params.is_nu_active(NetworkUpgrade::Nu5, height.into()) {
         read_frontier_v0(
             orchard
-                .ok_or_else(|| {
-                    FetchServiceError::JsonRpcConnectorError(
-                        JsonRpSeeConnectorError::JsonRpSeeClientError(
-                            "Missing Orchard tree state".into(),
-                        ),
-                    )
+                .ok_or_else(|| IndexerError::InvalidData {
+                    message: "Missing Orchard tree state".into(),
                 })?
                 .as_slice(),
         )
-        .map_err(JsonRpSeeConnectorError::IoError)
-        .map_err(FetchServiceError::JsonRpcConnectorError)?
+        .map_err(|e| IndexerError::InvalidData {
+            message: format!("{e}"),
+        })?
     } else {
         // NU5 is not yet active; the Orchard tree is empty.
         Frontier::empty()

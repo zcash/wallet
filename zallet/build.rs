@@ -10,6 +10,7 @@ use clap_mangen::Man;
 use flate2::{Compression, write::GzEncoder};
 use i18n_embed::unic_langid::LanguageIdentifier;
 use quote::ToTokens;
+use shadow_rs::ShadowBuilder;
 
 const JSON_RPC_METHODS_RS: &str = "src/components/json_rpc/methods.rs";
 
@@ -54,6 +55,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .nth(3)
         .expect("should be absolute path")
         .to_path_buf();
+
+    // Collect build-time information.
+    ShadowBuilder::builder().build()?;
 
     generate_rpc_openrpc(&out_dir)?;
 

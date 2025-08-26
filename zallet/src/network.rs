@@ -33,7 +33,8 @@ impl Network {
 
                 // If a NU is omitted, ensure that it activates at the same height as the
                 // subsequent specified NU (if any).
-                let nu6 = find_nu(consensus::BranchId::Nu6);
+                let nu6_1 = find_nu(consensus::BranchId::Nu6_1);
+                let nu6 = find_nu(consensus::BranchId::Nu6).or(nu6_1);
                 let nu5 = find_nu(consensus::BranchId::Nu5).or(nu6);
                 let canopy = find_nu(consensus::BranchId::Canopy).or(nu5);
                 let heartwood = find_nu(consensus::BranchId::Heartwood).or(canopy);
@@ -49,6 +50,7 @@ impl Network {
                     canopy,
                     nu5,
                     nu6,
+                    nu6_1,
                 })
             }
         }
@@ -143,8 +145,29 @@ impl From<RegTestNuParam> for String {
 pub(crate) mod kind {
     use std::fmt;
 
+    use rusqlite::{
+        ToSql,
+        types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
+    };
     use serde::{Deserializer, Serializer, de::Visitor};
     use zcash_protocol::consensus::NetworkType;
+
+    fn str_to_type(s: &str) -> Option<NetworkType> {
+        match s {
+            "main" => Some(NetworkType::Main),
+            "test" => Some(NetworkType::Test),
+            "regtest" => Some(NetworkType::Regtest),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn type_to_str(network_type: &NetworkType) -> &'static str {
+        match network_type {
+            NetworkType::Main => "main",
+            NetworkType::Test => "test",
+            NetworkType::Regtest => "regtest",
+        }
+    }
 
     pub(crate) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
@@ -161,15 +184,9 @@ pub(crate) mod kind {
             where
                 E: serde::de::Error,
             {
-                match v {
-                    "main" => Ok(NetworkType::Main),
-                    "test" => Ok(NetworkType::Test),
-                    "regtest" => Ok(NetworkType::Regtest),
-                    _ => Err(serde::de::Error::invalid_type(
-                        serde::de::Unexpected::Str(v),
-                        &self,
-                    )),
-                }
+                str_to_type(v).ok_or_else(|| {
+                    serde::de::Error::invalid_type(serde::de::Unexpected::Str(v), &self)
+                })
             }
         }
 
@@ -180,13 +197,27 @@ pub(crate) mod kind {
         network_type: &NetworkType,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(match network_type {
-            NetworkType::Main => "main",
-            NetworkType::Test => "test",
-            NetworkType::Regtest => "regtest",
-        })
+        serializer.serialize_str(type_to_str(network_type))
     }
 
     #[derive(serde::Serialize)]
     pub(crate) struct Serializable(#[serde(with = "crate::network::kind")] pub(crate) NetworkType);
+
+    pub(crate) struct Sql(pub(crate) NetworkType);
+
+    impl FromSql for Sql {
+        fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+            str_to_type(value.as_str()?)
+                .ok_or(FromSqlError::InvalidType)
+                .map(Self)
+        }
+    }
+
+    impl ToSql for Sql {
+        fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+            Ok(ToSqlOutput::Borrowed(ValueRef::Text(
+                type_to_str(&self.0).as_bytes(),
+            )))
+        }
+    }
 }

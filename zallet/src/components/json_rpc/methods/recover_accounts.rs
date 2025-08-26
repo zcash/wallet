@@ -106,15 +106,17 @@ pub(crate) async fn call(
                 time: treestate.time,
                 sapling_tree: treestate
                     .sapling
-                    .inner()
-                    .inner()
-                    .clone()
+                    .commitments()
+                    .final_state()
+                    .as_ref()
+                    .map(hex::encode)
                     .unwrap_or_default(),
                 orchard_tree: treestate
                     .orchard
-                    .inner()
-                    .inner()
-                    .clone()
+                    .commitments()
+                    .final_state()
+                    .as_ref()
+                    .map(hex::encode)
                     .unwrap_or_default(),
             }
         };

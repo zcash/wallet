@@ -47,6 +47,9 @@ Changes to response:
 
 Changes to parameters:
 - `fee` must be `null` if set; ZIP 317 fees are always used.
+- If the `minconf` field is omitted, the default ZIP 315 confirmation policy
+  (3 confirmations for trusted notes, 10 confirmations for untrusted notes)
+  is used.
 
 Changes to response:
 - New `txids` array field in response.
