@@ -32,8 +32,10 @@ pub(crate) struct Transaction {
     /// The transaction ID.
     txid: String,
 
+    /// The inputs to the transaction that the wallet is capable of viewing.
     spends: Vec<Spend>,
 
+    /// The outputs of the transaction that the wallet is capable of viewing.
     outputs: Vec<Output>,
 }
 
@@ -56,12 +58,14 @@ struct Spend {
     #[serde(rename = "txidPrev")]
     txid_prev: String,
 
-    /// (sapling) the index of the output within the `vShieldedOutput`.
+    /// (sapling) the index of the corresponding output within the previous transaction's
+    /// `vShieldedOutput`.
     #[serde(rename = "outputPrev")]
     #[serde(skip_serializing_if = "Option::is_none")]
     output_prev: Option<u16>,
 
-    /// (orchard) the index of the action within the orchard bundle.
+    /// (orchard) the index of the corresponding action within the previous transaction's
+    /// Orchard bundle.
     #[serde(rename = "actionPrev")]
     #[serde(skip_serializing_if = "Option::is_none")]
     action_prev: Option<u16>,
@@ -88,11 +92,11 @@ struct Output {
     /// One of `["sapling", "orchard"]`.
     pool: &'static str,
 
-    /// (sapling) the index of the output within the vShieldedOutput\n"
+    /// (sapling) the index of the output within the `vShieldedOutput`.
     #[serde(skip_serializing_if = "Option::is_none")]
     output: Option<u16>,
 
-    /// (orchard) the index of the action within the orchard bundle\n"
+    /// (orchard) the index of the action within the orchard bundle.
     #[serde(skip_serializing_if = "Option::is_none")]
     action: Option<u16>,
 
