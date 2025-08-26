@@ -22,6 +22,9 @@ use crate::components::{
     },
 };
 
+const POOL_SAPLING: &str = "sapling";
+const POOL_ORCHARD: &str = "orchard";
+
 /// Response to a `z_viewtransaction` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = Transaction;
@@ -313,7 +316,7 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
 
             if let Some((txid_prev, output_prev, address, value)) = spent_note {
                 spends.push(Spend {
-                    pool: "sapling",
+                    pool: POOL_SAPLING,
                     spend: Some(idx),
                     action: None,
                     txid_prev: txid_prev.to_string(),
@@ -354,7 +357,7 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
                 let memo = hex::encode(memo);
 
                 outputs.push(Output {
-                    pool: "sapling",
+                    pool: POOL_SAPLING,
                     output: Some(idx),
                     action: None,
                     address,
@@ -420,7 +423,7 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
 
             if let Some((txid_prev, action_prev, address, value)) = spent_note {
                 spends.push(Spend {
-                    pool: "orchard",
+                    pool: POOL_ORCHARD,
                     spend: None,
                     action: Some(idx),
                     txid_prev: txid_prev.to_string(),
@@ -461,7 +464,7 @@ pub(crate) fn call(wallet: &DbConnection, txid_str: &str) -> Response {
                 let memo = hex::encode(memo);
 
                 outputs.push(Output {
-                    pool: "orchard",
+                    pool: POOL_ORCHARD,
                     output: None,
                     action: Some(idx),
                     address,
