@@ -1,6 +1,7 @@
 //! Zallet Config
 
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::fmt::Write;
 use std::net::SocketAddr;
 use std::num::{NonZeroU16, NonZeroU32};
@@ -17,14 +18,38 @@ use zip32::fingerprint::SeedFingerprint;
 use crate::commands::{lock_datadir, resolve_datadir_path};
 use crate::network::{Network, RegTestNuParam};
 
+/// Returns true if a leaf key name should be considered sensitive and blocked
+/// from environment variable overrides.
+fn is_sensitive_leaf_key(leaf_key: &str) -> bool {
+    let lower = leaf_key.to_ascii_lowercase();
+    lower.ends_with("password")
+        || lower.ends_with("secret")
+        || lower.ends_with("token")
+        || lower.ends_with("cookie")
+        || lower.ends_with("private_key")
+}
+
 /// Zallet Configuration
 ///
+/// This structure uses a layered approach to configuration parsing and generation:
+///
+/// ## Field Types
 /// Most fields are `Option<T>` to enable distinguishing between a user relying on a
 /// default value (which may change over time), and a user explicitly configuring an
 /// option with the current default value (which should be preserved). The sole exceptions
 /// to this are:
 /// - `consensus.network`, which cannot change for the lifetime of the wallet.
 /// - `features.as_of_version`, which must always be set to some Zallet version.
+///
+/// ## Section Headers  
+/// All configuration sections use `#[serde(default)]`, which provides balanced UX:
+/// - Config generation: Always writes section headers, never writes default field values
+/// - Config parsing: Allows users to omit entire sections if using only defaults
+/// - Flexibility: Users can partially configure sections without providing all fields
+///
+/// This design supports both complete config files (with all sections) and minimal
+/// config files (omitting unused sections), while maintaining clear separation of
+/// configuration domains.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ZalletConfig {
@@ -36,34 +61,113 @@ pub struct ZalletConfig {
     pub(crate) datadir: Option<PathBuf>,
 
     /// Settings that affect transactions created by Zallet.
+    #[serde(default)]
     pub builder: BuilderSection,
 
     /// Zallet's understanding of the consensus rules.
+    #[serde(default)]
     pub consensus: ConsensusSection,
 
     /// Settings for how Zallet stores wallet data.
+    #[serde(default)]
     pub database: DatabaseSection,
 
     /// Settings controlling how Zallet interacts with the outside world.
+    #[serde(default)]
     pub external: ExternalSection,
 
     /// Settings for Zallet features.
+    #[serde(default)]
     pub features: FeaturesSection,
 
     /// Settings for the Zaino chain indexer.
+    #[serde(default)]
     pub indexer: IndexerSection,
 
     /// Settings for the key store.
+    #[serde(default)]
     pub keystore: KeyStoreSection,
 
     /// Settings for how Zallet manages notes.
+    #[serde(default)]
     pub note_management: NoteManagementSection,
 
     /// Settings for the JSON-RPC interface.
+    #[serde(default)]
     pub rpc: RpcSection,
 }
 
 impl ZalletConfig {
+    /// Loads Zallet configuration from conventional sources.
+    ///
+    /// Configuration is loaded from three sources, in order of precedence:
+    /// 1. Hard-coded defaults (lowest precedence)
+    /// 2. TOML configuration file (if provided)
+    /// 3. Environment variables with `ZALLET_` prefix (highest precedence)
+    ///
+    /// Environment variables use the format `ZALLET_SECTION__KEY` where:
+    /// - `SECTION` is the configuration section (e.g., `builder`, `rpc`)
+    /// - `KEY` is the configuration key within that section
+    /// - Double underscores (`__`) separate nested keys
+    ///
+    /// # Examples
+    /// - `ZALLET_BUILDER__SPEND_ZEROCONF_CHANGE=true` sets `builder.spend_zeroconf_change = true`
+    /// - `ZALLET_RPC__BIND=127.0.0.1:28232,127.0.0.1:28233` sets multiple bind addresses (comma-separated)
+    /// - `ZALLET_RPC__BIND=["127.0.0.1:28232"]` also works (JSON array format)
+    /// - `ZALLET_RPC__TIMEOUT=30` sets `rpc.timeout = 30`
+    ///
+    /// # Security
+    /// Environment variables whose leaf key names end with sensitive suffixes (case-insensitive)
+    /// will cause configuration loading to fail with an error: `password`, `secret`, `token`, `cookie`, `private_key`.
+    /// This prevents both silent misconfigurations and process table exposure of sensitive values.
+    pub fn load(config_path: Option<&Path>) -> Result<Self, config::ConfigError> {
+        let mut builder = config::Config::builder();
+
+        // Add config file if provided
+        if let Some(path) = config_path {
+            builder = builder.add_source(config::File::from(path).required(true));
+        }
+
+        // Load from standard ZALLET_ environment variables with a sensitive-leaf deny-list
+        let mut filtered_env: HashMap<String, String> = HashMap::new();
+        for (key, value) in env::vars() {
+            if let Some(stripped) = key.strip_prefix("ZALLET_") {
+                // Extract the leaf key (rightmost part after splitting on __)
+                let leaf_key = stripped.split("__").last().unwrap_or(stripped);
+                if is_sensitive_leaf_key(leaf_key) {
+                    return Err(config::ConfigError::Message(format!(
+                        "Environment variable '{}' contains sensitive key '{}' which cannot be overridden via environment variables. \
+                         Use the configuration file instead to prevent process table exposure.",
+                        key, leaf_key
+                    )));
+                }
+                filtered_env.insert(key, value);
+            }
+        }
+
+        // Add filtered environment variables (highest precedence)
+        builder = builder.add_source(
+            config::Environment::with_prefix("ZALLET")
+                .source(Some(filtered_env))
+                .prefix_separator("_")
+                .separator("__")
+                // Unlike the fields of a TOML file, environment variables are always
+                // strings. While serde can handle that internally for primitive types, we
+                // are forced to enable parsing env vars as one of `bool`, `i64`, `f64`
+                // before we can parse comma-separated lists (to regain the ability to
+                // configure arrays of values like we can in TOML files).
+                .try_parsing(true)
+                .list_separator(",")
+                // We need to specify explicitly which environment variables should be
+                // parsed as comma-separated lists, otherwise we lose the ability to
+                // represent a plain string.
+                .with_list_parse_key("rpc.bind"),
+        );
+
+        // Build and deserialize the configuration
+        builder.build()?.try_deserialize()
+    }
+
     /// Returns the data directory to use.
     fn datadir(&self) -> &Path {
         self.datadir
@@ -137,6 +241,7 @@ pub struct BuilderSection {
 
     /// Configurable limits on transaction builder operation (to prevent e.g. memory
     /// exhaustion).
+    #[serde(default)]
     pub limits: BuilderLimitsSection,
 }
 
@@ -378,9 +483,11 @@ pub struct FeaturesSection {
     pub legacy_pool_seed_fingerprint: Option<SeedFingerprint>,
 
     /// Deprecated features.
+    #[serde(default)]
     pub deprecated: DeprecatedFeaturesSection,
 
     /// Experimental features.
+    #[serde(default)]
     pub experimental: ExperimentalFeaturesSection,
 }
 
