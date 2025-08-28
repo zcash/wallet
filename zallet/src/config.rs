@@ -388,13 +388,13 @@ mod seedfp {
     use serde::{Deserialize, Deserializer, Serializer, de::Error};
     use zip32::fingerprint::SeedFingerprint;
 
-    use crate::components::json_rpc::utils::{encode_seedfp_parameter, parse_seedfp};
+    use crate::components::json_rpc::utils::parse_seedfp;
 
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Option<SeedFingerprint>, D::Error> {
         Option::<String>::deserialize(deserializer).and_then(|v| {
-            v.map(|s| parse_seedfp(&s).map_err(|e| D::Error::custom(e.to_string())))
+            v.map(|s| parse_seedfp(&s).map_err(|e| D::Error::custom(format!("{e:?}"))))
                 .transpose()
         })
     }
@@ -403,7 +403,7 @@ mod seedfp {
         seedfp: &Option<SeedFingerprint>,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serializer.serialize_some(&seedfp.as_ref().map(encode_seedfp_parameter))
+        serializer.serialize_some(&seedfp.as_ref().map(|seedfp| seedfp.to_string()))
     }
 }
 

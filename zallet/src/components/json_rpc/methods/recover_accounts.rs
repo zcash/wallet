@@ -18,7 +18,7 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{encode_seedfp_parameter, ensure_wallet_is_unlocked, parse_seedfp_parameter},
+        utils::{ensure_wallet_is_unlocked, parse_seedfp_parameter},
     },
     keystore::KeyStore,
 };
@@ -152,7 +152,7 @@ pub(crate) async fn call(
 
             Ok::<_, ErrorObjectOwned>(Account {
                 account_uuid: account.id().expose_uuid().to_string(),
-                seedfp: encode_seedfp_parameter(&seed_fp),
+                seedfp: seed_fp.to_string(),
                 zip32_account_index: account_index.into(),
             })
         })
