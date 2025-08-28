@@ -7,6 +7,7 @@ use jsonrpsee::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::error;
 use zaino_state::FetchServiceSubscriber;
 use zcash_client_backend::{
     data_api::{Account as _, AccountBirthday, WalletRead, WalletWrite},
@@ -101,28 +102,51 @@ pub(crate) async fn call(
                     NetworkType::Test => "test".into(),
                     NetworkType::Regtest => "regtest".into(),
                 },
-                height: u64::try_from(treestate.height).map_err(|_| RpcErrorCode::InternalError)?,
+                height: u64::try_from(treestate.height).map_err(|e| {
+                    error!("Treestate from Zaino has invalid height: {e}");
+                    RpcErrorCode::InternalError
+                })?,
                 hash: treestate.hash,
                 time: treestate.time,
                 sapling_tree: treestate
                     .sapling
                     .commitments()
                     .final_state()
-                    .as_ref()
-                    .map(hex::encode)
+                    .clone()
+                    .map(|s| String::from_utf8(s))
+                    .transpose()
+                    .map_err(|e| {
+                        error!("Treestate from Zaino has invalid Sapling frontier: {e}");
+                        RpcErrorCode::InternalError
+                    })?
                     .unwrap_or_default(),
                 orchard_tree: treestate
                     .orchard
                     .commitments()
                     .final_state()
-                    .as_ref()
-                    .map(hex::encode)
+                    .clone()
+                    .map(|s| String::from_utf8(s))
+                    .transpose()
+                    .map_err(|e| {
+                        error!("Treestate from Zaino has invalid Orchard frontier: {e}");
+                        RpcErrorCode::InternalError
+                    })?
                     .unwrap_or_default(),
             }
         };
 
-        let birthday = AccountBirthday::from_treestate(treestate, Some(recover_until))
-            .map_err(|_| RpcErrorCode::InternalError)?;
+        let birthday =
+            AccountBirthday::from_treestate(treestate, Some(recover_until)).map_err(|e| {
+                match e {
+                    zcash_client_backend::data_api::BirthdayError::HeightInvalid(e) => {
+                        error!("Failed to parse treestate from Zaino: {e}");
+                    }
+                    zcash_client_backend::data_api::BirthdayError::Decode(e) => {
+                        error!("Failed to parse treestate from Zaino: {e}");
+                    }
+                }
+                RpcErrorCode::InternalError
+            })?;
 
         account_args.push((account.name, seed_fp, account_index, birthday));
     }
