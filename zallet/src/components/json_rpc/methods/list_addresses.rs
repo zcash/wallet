@@ -12,9 +12,7 @@ use zcash_client_backend::data_api::{
     Account as _, AccountPurpose, AccountSource, WalletRead, Zip32Derivation,
 };
 use zcash_keys::address::Address;
-use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::NetworkConstants;
-use zip32::fingerprint::SeedFingerprint;
 
 use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
@@ -199,14 +197,10 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
             }
         }
 
-        // `zcashd` used `uint256::GetHex()` for rendering this, which byte-reverses the
-        // data just like for block hashes.
-        let seedfp_to_hex = |seedfp: &SeedFingerprint| BlockHash(seedfp.to_bytes()).to_string();
-
         let add_addrs = |source: &mut AddressSource, derivation: Option<&Zip32Derivation>| {
             let seedfp = derivation
                 .as_ref()
-                .map(|d| seedfp_to_hex(d.seed_fingerprint()));
+                .map(|d| d.seed_fingerprint().to_string());
             let account = derivation.as_ref().map(|d| d.account_index().into());
 
             if !(transparent_addresses.is_empty()
