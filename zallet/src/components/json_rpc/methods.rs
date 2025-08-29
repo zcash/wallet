@@ -495,7 +495,7 @@ impl RpcServer for RpcImpl {
     }
 
     async fn view_transaction(&self, txid: &str) -> view_transaction::Response {
-        view_transaction::call(self.wallet().await?.as_ref(), txid)
+        view_transaction::call(self.wallet().await?.as_ref(), self.chain().await?, txid).await
     }
 
     async fn list_unspent(&self) -> list_unspent::Response {
