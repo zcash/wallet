@@ -12,6 +12,7 @@ use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
 use zcash_protocol::{
     TxId,
+    consensus::BlockHeight,
     value::{BalanceError, COIN, ZatBalance, Zatoshis},
 };
 use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
@@ -130,6 +131,37 @@ pub(super) fn parse_diversifier_index(diversifier_index: u128) -> RpcResult<Dive
     diversifier_index
         .try_into()
         .map_err(|_| LegacyCode::InvalidParameter.with_static("diversifier index is too large."))
+}
+
+/// Parses the `asOfHeight` parameter present in many wallet RPCs.
+///
+/// Returns:
+/// - `Ok(None)` if no height was requested. In this case:
+///   - The RPC must be evaluated in the context of the latest chain tip.
+///   - The mempool must be included (if relevant to the RPC in question).
+/// - `Ok(Some(requested_height))` if a valid height was specified. In this case:
+///   - The RPC must be evaluated as if the block at that height were the chain tip.
+///   - Heights above the current chain tip must be treated as if the chain tip height was
+///     provided (i.e. they fall back to the current height).
+///   - The mempool must be ignored, even if the specified height is the chain tip height.
+///
+/// Equivalent to [`parseAsOfHeight`] in `zcashd`.
+///
+/// [`parseAsOfHeight`]: https://github.com/zcash/zcash/blob/2352fbc1ed650ac4369006bea11f7f20ee046b84/src/rpc/server.cpp#L598
+pub(super) fn parse_as_of_height(as_of_height: Option<i64>) -> RpcResult<Option<BlockHeight>> {
+    match as_of_height {
+        None | Some(-1) => Ok(None),
+        Some(..0) => Err(LegacyCode::InvalidParameter
+            .with_static("Can not perform the query as of a negative block height")),
+        Some(0) => Err(LegacyCode::InvalidParameter
+            .with_static("Can not perform the query as of the genesis block")),
+        Some(requested_height @ 1..) => u32::try_from(requested_height)
+            .map(BlockHeight::from_u32)
+            .map(Some)
+            .map_err(|_| {
+                LegacyCode::InvalidParameter.with_static("asOfHeight parameter is too big")
+            }),
+    }
 }
 
 /// Equivalent of `AmountFromValue` in `zcashd`, permitting the same input formats.
