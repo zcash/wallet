@@ -453,10 +453,10 @@ async fn poll_transparent(
 
             let output = WalletTransparentOutput::from_parts(
                 OutPoint::new(txid.0, index.index()),
-                TxOut {
-                    value: Zatoshis::const_from_u64(value_zat),
-                    script_pubkey: Script(script.as_raw_bytes().to_vec()),
-                },
+                TxOut::new(
+                    Zatoshis::const_from_u64(value_zat),
+                    Script(script.as_raw_bytes().to_vec()),
+                ),
                 Some(BlockHeight::from_u32(mined_height.0)),
             )
             .expect("the UTXO was detected via a supported address kind");
