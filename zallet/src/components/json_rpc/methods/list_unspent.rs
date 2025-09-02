@@ -7,6 +7,7 @@ use jsonrpsee::{
 };
 use schemars::JsonSchema;
 use serde::Serialize;
+
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
@@ -16,6 +17,7 @@ use zcash_client_backend::{
     fees::{orchard::InputView as _, sapling::InputView as _},
     wallet::NoteId,
 };
+use zcash_keys::address::Address;
 use zcash_protocol::{ShieldedProtocol, consensus::BlockHeight};
 use zip32::Scope;
 
@@ -98,30 +100,29 @@ pub(super) const PARAM_AS_OF_HEIGHT_DESC: &str = "Execute the query as if it wer
 // FIXME: the following parameters are not yet properly supported
 // * maxconf
 // * include_watch_only
-// * addresses
 pub(crate) fn call(
     wallet: &DbConnection,
     minconf: Option<u32>,
     _maxconf: Option<u32>,
     _include_watch_only: Option<bool>,
-    _addresses: Option<Vec<String>>,
+    addresses: Option<Vec<String>>,
     as_of_height: Option<u32>,
 ) -> Response {
     let minconf = minconf.unwrap_or(1);
     //let include_watch_only = include_watch_only.unwrap_or(false);
-    //let addresses = addresses
-    //    .unwrap_or(vec![])
-    //    .iter()
-    //    .map(|addr| {
-    //        Address::decode(wallet.params(), &addr).ok_or_else(|| {
-    //            RpcError::owned(
-    //                LegacyCode::InvalidParameter.into(),
-    //                "Not a valid Zcash address",
-    //                Some(addr),
-    //            )
-    //        })
-    //    })
-    //    .collect::<Result<Vec<Address>, _>>()?;
+    let addresses = addresses
+        .unwrap_or_default()
+        .iter()
+        .map(|addr| {
+            Address::decode(wallet.params(), addr).ok_or_else(|| {
+                RpcError::owned(
+                    LegacyCode::InvalidParameter.into(),
+                    "Not a valid Zcash address",
+                    Some(addr),
+                )
+            })
+        })
+        .collect::<Result<Vec<Address>, _>>()?;
 
     let target_height = match as_of_height.map_or_else(
         || {
@@ -236,7 +237,11 @@ pub(crate) fn call(
             })
         };
 
-        for note in notes.sapling() {
+        for note in notes.sapling().iter().filter(|n| {
+            addresses
+                .iter()
+                .all(|addr| addr.to_sapling_address() == Some(n.note().recipient()))
+        }) {
             let tx_mined_height = get_mined_height(*note.txid())?;
 
             // skip notes that do not have sufficient confirmations according to minconf
@@ -305,7 +310,18 @@ pub(crate) fn call(
             })
         }
 
-        for note in notes.orchard() {
+        for note in notes.orchard().iter().filter(|n| {
+            addresses.iter().all(|addr| {
+                addr.as_understood_unified_receivers()
+                    .iter()
+                    .any(|r| match r {
+                        zcash_keys::address::Receiver::Orchard(address) => {
+                            address == &n.note().recipient()
+                        }
+                        _ => false,
+                    })
+            })
+        }) {
             let tx_mined_height = get_mined_height(*note.txid())?;
 
             // skip notes that do not have sufficient confirmations according to minconf
