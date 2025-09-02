@@ -7,15 +7,22 @@ use rusqlite::{OptionalExtension, named_params};
 use schemars::JsonSchema;
 use serde::Serialize;
 use transparent::keys::TransparentKeyScope;
-use zaino_state::{FetchServiceSubscriber, ZcashIndexer};
+use zaino_proto::proto::service::BlockId;
+use zaino_state::{FetchServiceSubscriber, LightWalletIndexer, ZcashIndexer};
 use zcash_address::{
     ToAddress, ZcashAddress,
     unified::{self, Encoding},
 };
 use zcash_client_backend::data_api::WalletRead;
+use zcash_client_sqlite::error::SqliteClientError;
 use zcash_keys::encoding::AddressCodec;
 use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
-use zcash_protocol::{ShieldedProtocol, TxId, consensus::Parameters, memo::Memo, value::Zatoshis};
+use zcash_protocol::{
+    ShieldedProtocol, TxId,
+    consensus::{BlockHeight, Parameters},
+    memo::Memo,
+    value::{BalanceError, Zatoshis},
+};
 use zebra_rpc::methods::GetRawTransaction;
 
 use crate::components::{
@@ -30,6 +37,9 @@ const POOL_TRANSPARENT: &str = "transparent";
 const POOL_SAPLING: &str = "sapling";
 const POOL_ORCHARD: &str = "orchard";
 
+/// The number of blocks within expiry height when a tx is considered to be expiring soon.
+const TX_EXPIRING_SOON_THRESHOLD: u32 = 3;
+
 /// Response to a `z_viewtransaction` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 pub(crate) type ResultType = Transaction;
@@ -39,6 +49,58 @@ pub(crate) type ResultType = Transaction;
 pub(crate) struct Transaction {
     /// The transaction ID.
     txid: String,
+
+    /// The transaction status.
+    ///
+    /// One of 'mined', 'waiting', 'expiringsoon' or 'expired'.
+    status: &'static str,
+
+    /// The number of confirmations.
+    ///
+    /// - A positive value is the number of blocks that have been mined including the
+    ///   transaction in the chain. For example, 1 confirmation means the transaction is
+    ///   in the block currently at the chain tip.
+    /// - 0 means the transaction is in the mempool. If `asOfHeight` was set, this case
+    ///   will not occur.
+    /// - -1 means the transaction cannot be mined.
+    confirmations: i32,
+
+    /// The hash of the main chain block that this transaction is mined in.
+    ///
+    /// Omitted if this transaction is not mined within a block in the current best chain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blockhash: Option<String>,
+
+    /// The index of the transaction within its block's `vtx` field.
+    ///
+    /// Omitted if this transaction is not mined within a block in the current best chain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blockindex: Option<u16>,
+
+    /// The time in seconds since epoch (1 Jan 1970 GMT) that the main chain block
+    /// containing this transaction was mined.
+    ///
+    /// Omitted if this transaction is not mined within a block in the current best chain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blocktime: Option<u64>,
+
+    /// The transaction version.
+    version: u32,
+
+    /// The greatest height at which this transaction can be mined, or 0 if this
+    /// transaction does not expire.
+    expiryheight: u64,
+
+    /// The fee paid by the transaction.
+    ///
+    /// Omitted if the fee cannot be determined because one or more transparent inputs of
+    /// the transaction cannot be found.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fee: Option<JsonZec>,
+
+    /// Set to `true` if this is a coinbase transaction, omitted otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    generated: Option<bool>,
 
     /// The inputs to the transaction that the wallet is capable of viewing.
     spends: Vec<Spend>,
@@ -169,6 +231,13 @@ pub(crate) async fn call(
 ) -> Response {
     let txid = parse_txid(txid_str)?;
 
+    // Fetch this early so we can detect if the wallet is not ready yet.
+    // TODO: Replace with Zaino `ChainIndex` so we can operate against a chain snapshot.
+    let chain_height = wallet
+        .chain_height()
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+        .ok_or_else(|| LegacyCode::InWarmup.with_static("Wait for the wallet to start up"))?;
+
     let tx = wallet
         .get_transaction(txid)
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
@@ -182,6 +251,8 @@ pub(crate) async fn call(
 
     let mut spends = vec![];
     let mut outputs = vec![];
+
+    let mut transparent_input_values = BTreeMap::new();
 
     // Collect viewing keys for recovering output information.
     // - OVKs are used cross-protocol and thus are collected as byte arrays.
@@ -319,6 +390,8 @@ pub(crate) async fn call(
                 Ok(_) => unreachable!(),
                 Err(_) => todo!(),
             };
+
+            transparent_input_values.insert(input.prevout(), value);
 
             spends.push(Spend {
                 pool: POOL_TRANSPARENT,
@@ -603,9 +676,141 @@ pub(crate) async fn call(
         }
     }
 
+    let wallet_tx_info = WalletTxInfo::fetch(wallet, &chain, &tx, chain_height)
+        .await
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+
+    let fee = tx
+        .fee_paid(|prevout| Ok::<_, BalanceError>(transparent_input_values.get(prevout).copied()))
+        // This should never occur, as a transaction that violated balance would be
+        // rejected by the backing full node.
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+
     Ok(Transaction {
-        txid: txid_str.into(),
+        txid: txid_str.to_ascii_lowercase(),
+        status: wallet_tx_info.status,
+        confirmations: wallet_tx_info.confirmations,
+        blockhash: wallet_tx_info.blockhash,
+        blockindex: wallet_tx_info.blockindex,
+        blocktime: wallet_tx_info.blocktime,
+        version: tx.version().header() & 0x7FFFFFFF,
+        expiryheight: wallet_tx_info.expiryheight,
+        fee: fee.map(value_from_zatoshis),
+        generated: wallet_tx_info.generated,
         spends,
         outputs,
     })
+}
+
+struct WalletTxInfo {
+    status: &'static str,
+    confirmations: i32,
+    generated: Option<bool>,
+    blockhash: Option<String>,
+    blockindex: Option<u16>,
+    blocktime: Option<u64>,
+    expiryheight: u64,
+}
+
+impl WalletTxInfo {
+    /// Logic adapted from `WalletTxToJSON` in `zcashd`, to match the semantics of the `gettransaction` fields.
+    async fn fetch(
+        wallet: &DbConnection,
+        chain: &FetchServiceSubscriber,
+        tx: &zcash_primitives::transaction::Transaction,
+        chain_height: BlockHeight,
+    ) -> Result<Self, SqliteClientError> {
+        let mined_height = wallet.get_tx_height(tx.txid())?;
+
+        let confirmations = {
+            match mined_height {
+                Some(mined_height) => (chain_height + 1 - mined_height) as i32,
+                None => {
+                    // TODO: Also check if the transaction is in the mempool for this branch.
+                    -1
+                }
+            }
+        };
+
+        let generated = if tx
+            .transparent_bundle()
+            .is_some_and(|bundle| bundle.is_coinbase())
+        {
+            Some(true)
+        } else {
+            None
+        };
+
+        let mut status = "waiting";
+
+        let (blockhash, blockindex, blocktime) = if let Some(height) = mined_height {
+            status = "mined";
+
+            // TODO: Once Zaino updates its API to support atomic queries, it should not
+            // be possible to fail to fetch the block that a transaction was observed
+            // mined in.
+            let block_metadata = wallet
+                .block_metadata(height)?
+                // This would be a race condition between this and a reorg.
+                .ok_or(SqliteClientError::ChainHeightUnknown)?;
+            let block = chain
+                .get_block(BlockId {
+                    height: 0,
+                    hash: block_metadata.block_hash().0.to_vec(),
+                })
+                .await
+                .map_err(|_| SqliteClientError::ChainHeightUnknown)?;
+
+            let tx_index = block
+                .vtx
+                .iter()
+                .find(|ctx| ctx.hash == tx.txid().as_ref())
+                .map(|tx| u16::try_from(tx.index).expect("Zaino should provide valid data"));
+
+            (
+                Some(block_metadata.block_hash().to_string()),
+                tx_index,
+                Some(block.time.into()),
+            )
+        } else {
+            match (
+                is_expired_tx(tx, chain_height),
+                is_expiring_soon_tx(tx, chain_height + 1),
+            ) {
+                (false, true) => status = "expiringsoon",
+                (true, _) => status = "expired",
+                _ => (),
+            }
+            (None, None, None)
+        };
+
+        Ok(Self {
+            status,
+            confirmations,
+            generated,
+            blockhash,
+            blockindex,
+            blocktime,
+            expiryheight: tx.expiry_height().into(),
+        })
+    }
+}
+
+fn is_expired_tx(tx: &zcash_primitives::transaction::Transaction, height: BlockHeight) -> bool {
+    if tx.expiry_height() == 0.into()
+        || tx
+            .transparent_bundle()
+            .is_some_and(|bundle| bundle.is_coinbase())
+    {
+        false
+    } else {
+        height > tx.expiry_height()
+    }
+}
+
+fn is_expiring_soon_tx(
+    tx: &zcash_primitives::transaction::Transaction,
+    next_height: BlockHeight,
+) -> bool {
+    is_expired_tx(tx, next_height + TX_EXPIRING_SOON_THRESHOLD)
 }

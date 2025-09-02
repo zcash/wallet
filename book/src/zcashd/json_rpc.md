@@ -46,6 +46,17 @@ Changes to response:
 ### `z_viewtransaction`
 
 Changes to response:
+- Some top-level fields from `gettransaction` have been added:
+  - `status`
+  - `confirmations`
+  - `blockhash`, `blockindex`, `blocktime`
+  - `version`
+  - `expiryheight`, which is now always included (instead of only when a
+    transaction has been mined).
+  - `fee`, which is now included even if the transaction does not spend any
+    value from any account in the wallet, but can also be omitted if the
+    transparent inputs for a transaction cannot be found.
+  - `generated`
 - Information about all transparent inputs and outputs (which are always visible
   to the wallet) are now included. This causes the following semantic changes:
   - `pool` field on both inputs and outputs can be `"transparent"`.
