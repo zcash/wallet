@@ -12,8 +12,8 @@ use zcash_client_backend::data_api::{AddressInfo, Balance, TargetValue, Zip32Der
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
-        AccountBirthday, AccountMeta, InputSource, NoteFilter, ORCHARD_SHARD_HEIGHT,
-        SAPLING_SHARD_HEIGHT, SpendableNotes, WalletCommitmentTrees, WalletRead, WalletWrite,
+        AccountBirthday, AccountMeta, InputSource, NoteFilter, ORCHARD_SHARD_HEIGHT, ReceivedNotes,
+        SAPLING_SHARD_HEIGHT, WalletCommitmentTrees, WalletRead, WalletWrite,
     },
     keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
     wallet::{Note, ReceivedNote, TransparentAddressMetadata, WalletTransparentOutput},
@@ -381,7 +381,7 @@ impl InputSource for DbConnection {
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
         exclude: &[Self::NoteRef],
-    ) -> Result<SpendableNotes<Self::NoteRef>, Self::Error> {
+    ) -> Result<ReceivedNotes<Self::NoteRef>, Self::Error> {
         self.with(|db_data| {
             db_data.select_spendable_notes(
                 account,
@@ -392,6 +392,16 @@ impl InputSource for DbConnection {
                 exclude,
             )
         })
+    }
+
+    fn select_unspent_notes(
+        &self,
+        account: Self::AccountId,
+        sources: &[ShieldedProtocol],
+        target_height: TargetHeight,
+        exclude: &[Self::NoteRef],
+    ) -> Result<ReceivedNotes<Self::NoteRef>, Self::Error> {
+        self.with(|db_data| db_data.select_unspent_notes(account, sources, target_height, exclude))
     }
 
     fn get_unspent_transparent_output(
