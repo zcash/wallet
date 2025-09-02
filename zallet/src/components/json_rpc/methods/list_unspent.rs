@@ -98,12 +98,11 @@ pub(super) const PARAM_ADDRESSES_DESC: &str =
 pub(super) const PARAM_AS_OF_HEIGHT_DESC: &str = "Execute the query as if it were run when the blockchain was at the height specified by this argument.";
 
 // FIXME: the following parameters are not yet properly supported
-// * maxconf
 // * include_watch_only
 pub(crate) fn call(
     wallet: &DbConnection,
     minconf: Option<u32>,
-    _maxconf: Option<u32>,
+    maxconf: Option<u32>,
     _include_watch_only: Option<bool>,
     addresses: Option<Vec<String>>,
     as_of_height: Option<u32>,
@@ -243,17 +242,19 @@ pub(crate) fn call(
                 .all(|addr| addr.to_sapling_address() == Some(n.note().recipient()))
         }) {
             let tx_mined_height = get_mined_height(*note.txid())?;
+            let confirmations = tx_mined_height
+                .map_or(0, |h| u32::from(target_height.saturating_sub(u32::from(h))));
 
-            // skip notes that do not have sufficient confirmations according to minconf
+            // skip notes that do not have sufficient confirmations according to minconf,
+            // or that have too many confirmations according to maxconf
             if tx_mined_height
                 .iter()
                 .any(|h| *h > target_height.saturating_sub(minconf))
+                || maxconf.iter().any(|c| confirmations > *c)
             {
                 continue;
             }
 
-            let confirmations = tx_mined_height
-                .map_or(0, |h| u32::from(target_height.saturating_sub(u32::from(h))));
             let is_internal = note.spending_key_scope() == Scope::Internal;
 
             let (memo, memo_str) =
@@ -323,17 +324,19 @@ pub(crate) fn call(
             })
         }) {
             let tx_mined_height = get_mined_height(*note.txid())?;
+            let confirmations = tx_mined_height
+                .map_or(0, |h| u32::from(target_height.saturating_sub(u32::from(h))));
 
-            // skip notes that do not have sufficient confirmations according to minconf
+            // skip notes that do not have sufficient confirmations according to minconf,
+            // or that have too many confirmations according to maxconf
             if tx_mined_height
                 .iter()
                 .any(|h| *h > target_height.saturating_sub(minconf))
+                || maxconf.iter().any(|c| confirmations > *c)
             {
                 continue;
             }
 
-            let confirmations = tx_mined_height
-                .map_or(0, |h| u32::from(target_height.saturating_sub(u32::from(h))));
             let is_internal = note.spending_key_scope() == Scope::Internal;
 
             let (memo, memo_str) =
