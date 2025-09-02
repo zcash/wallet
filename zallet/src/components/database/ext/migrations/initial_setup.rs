@@ -1,12 +1,16 @@
 use std::collections::HashSet;
 
+use rusqlite::named_params;
 use schemerz_rusqlite::RusqliteMigration;
 use uuid::Uuid;
 use zcash_client_sqlite::wallet::init::{WalletMigrationError, migrations::V_0_15_0};
+use zcash_protocol::consensus::NetworkType;
 
 pub(super) const MIGRATION_ID: Uuid = Uuid::from_u128(0xa2b3f7ed_b2ec_4b92_a390_3f9bed3f0324);
 
-pub(super) struct Migration;
+pub(super) struct Migration {
+    pub(crate) network_type: NetworkType,
+}
 
 impl schemerz::Migration<Uuid> for Migration {
     fn id(&self) -> Uuid {
@@ -37,6 +41,15 @@ impl RusqliteMigration for Migration {
                 migrated TEXT NOT NULL
             );",
         )?;
+
+        transaction.execute(
+            "INSERT INTO ext_zallet_db_wallet_metadata
+            VALUES (:network_type)",
+            named_params! {
+                ":network_type": crate::network::kind::Sql(self.network_type),
+            },
+        )?;
+
         Ok(())
     }
 

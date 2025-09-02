@@ -1,7 +1,7 @@
 use rand::rngs::OsRng;
 use rusqlite::Connection;
 use zcash_client_sqlite::{WalletDb, util::SystemClock, wallet::init::WalletMigrator};
-use zcash_protocol::consensus;
+use zcash_protocol::consensus::{self, Parameters};
 
 use crate::{
     components::{database, keystore},
@@ -19,7 +19,9 @@ fn verify_schema() {
     );
 
     WalletMigrator::new()
-        .with_external_migrations(database::all_external_migrations())
+        .with_external_migrations(database::all_external_migrations(
+            db_data.params().network_type(),
+        ))
         .init_or_migrate(&mut db_data)
         .unwrap();
 

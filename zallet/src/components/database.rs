@@ -4,7 +4,9 @@ use abscissa_core::tracing::info;
 use rusqlite::{OptionalExtension, named_params};
 use schemerz_rusqlite::RusqliteMigration;
 use tokio::fs;
+
 use zcash_client_sqlite::wallet::init::{WalletMigrationError, WalletMigrator};
+use zcash_protocol::consensus::{NetworkType, Parameters};
 
 use crate::{
     config::ZalletConfig,
@@ -26,8 +28,10 @@ pub(crate) type DbHandle = deadpool::managed::Object<connection::WalletManager>;
 
 /// Returns the full list of migrations defined in Zallet, to be applied alongside the
 /// migrations internal to `zcash_client_sqlite`.
-fn all_external_migrations() -> Vec<Box<dyn RusqliteMigration<Error = WalletMigrationError>>> {
-    ext::migrations::all()
+fn all_external_migrations(
+    network_type: NetworkType,
+) -> Vec<Box<dyn RusqliteMigration<Error = WalletMigrationError>>> {
+    ext::migrations::all(network_type)
         .chain(keystore::db::migrations::all())
         .collect()
 }
@@ -91,7 +95,7 @@ impl Database {
         // Initialize the database before we go any further.
         handle.with_mut(|mut db_data| {
             match WalletMigrator::new()
-                .with_external_migrations(all_external_migrations())
+                .with_external_migrations(all_external_migrations(db_data.params().network_type()))
                 .init_or_migrate(&mut db_data)
             {
                 Ok(()) => Ok(()),
@@ -114,21 +118,6 @@ impl Database {
         })?;
 
         let now = ::time::OffsetDateTime::now_utc();
-
-        // If the database was newly created, store the wallet metadata.
-        if !db_exists {
-            handle
-                .with_raw_mut(|conn| {
-                    conn.execute(
-                        "INSERT INTO ext_zallet_db_wallet_metadata
-                        VALUES (:network_type)",
-                        named_params! {
-                            ":network_type": crate::network::kind::Sql(config.consensus.network),
-                        },
-                    )
-                })
-                .map_err(|e| ErrorKind::Init.context(e))?;
-        }
 
         // Record that we migrated the database using this Zallet version. We don't have
         // an easy way to detect whether any migrations actually ran, so we check whether
