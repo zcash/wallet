@@ -305,7 +305,7 @@ pub(crate) async fn call(
                         "SELECT txid, {output_prefix}_index, address, value
                         FROM {pool_prefix}_received_notes
                         JOIN transactions ON tx = id_tx
-                        JOIN addresses ON address_id = addresses.id
+                        LEFT OUTER JOIN addresses ON address_id = addresses.id
                         WHERE nf = :nf"
                     ),
                     named_params! {
@@ -314,7 +314,7 @@ pub(crate) async fn call(
                     |row| {
                         Ok((
                             TxId::from_bytes(row.get("txid")?),
-                            row.get("output_index")?,
+                            row.get(format!("{output_prefix}_index").as_str())?,
                             row.get("address")?,
                             Zatoshis::const_from_u64(row.get("value")?),
                         ))
