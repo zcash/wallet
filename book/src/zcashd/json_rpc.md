@@ -43,6 +43,33 @@ Changes to response:
   listed in a new `derived_transparent` field (an array of objects) instead of
   the `transparent` field.
 
+### `z_viewtransaction`
+
+Changes to response:
+- Some top-level fields from `gettransaction` have been added:
+  - `status`
+  - `confirmations`
+  - `blockhash`, `blockindex`, `blocktime`
+  - `version`
+  - `expiryheight`, which is now always included (instead of only when a
+    transaction has been mined).
+  - `fee`, which is now included even if the transaction does not spend any
+    value from any account in the wallet, but can also be omitted if the
+    transparent inputs for a transaction cannot be found.
+  - `generated`
+- Information about all transparent inputs and outputs (which are always visible
+  to the wallet) are now included. This causes the following semantic changes:
+  - `pool` field on both inputs and outputs can be `"transparent"`.
+  - New fields `tIn` and `tOutPrev` on inputs.
+  - New field `tOut` on outputs.
+  - `address` field on outputs: in `zcashd`, this was omitted only if the output
+    was received on an account-internal address; it is now also omitted if it is
+    a transparent output to a script that doesn't have an address encoding. Use
+    `walletInternal` if you need to identify change outputs.
+  - `memo` field on outputs is omitted if `pool = "transparent"`.
+  - `memoStr` field on outputs is no longer only omitted if `memo` does not
+    contain valid UTF-8.
+
 ### `z_sendmany`
 
 Changes to parameters:
