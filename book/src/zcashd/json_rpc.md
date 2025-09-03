@@ -62,8 +62,10 @@ Changes to response:
   - `pool` field on both inputs and outputs can be `"transparent"`.
   - New fields `tIn` and `tOutPrev` on inputs.
   - New field `tOut` on outputs.
-  - `address` field on outputs is no longer only omitted if the output was
-    received on an account-internal address; use `walletInternal` for this.
+  - `address` field on outputs: in `zcashd`, this was omitted only if the output
+    was received on an account-internal address; it is now also omitted if it is
+    a transparent output to a script that doesn't have an address encoding. Use
+    `walletInternal` if you need to identify change outputs.
   - `memo` field on outputs is omitted if `pool = "transparent"`.
   - `memoStr` field on outputs is no longer only omitted if `memo` does not
     contain valid UTF-8.
