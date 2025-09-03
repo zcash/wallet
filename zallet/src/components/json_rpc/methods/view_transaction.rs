@@ -63,7 +63,7 @@ pub(crate) struct Transaction {
     /// - 0 means the transaction is in the mempool. If `asOfHeight` was set, this case
     ///   will not occur.
     /// - -1 means the transaction cannot be mined.
-    confirmations: i32,
+    confirmations: i64,
 
     /// The hash of the main chain block that this transaction is mined in.
     ///
@@ -75,7 +75,7 @@ pub(crate) struct Transaction {
     ///
     /// Omitted if this transaction is not mined within a block in the current best chain.
     #[serde(skip_serializing_if = "Option::is_none")]
-    blockindex: Option<u16>,
+    blockindex: Option<u32>,
 
     /// The time in seconds since epoch (1 Jan 1970 GMT) that the main chain block
     /// containing this transaction was mined.
@@ -137,7 +137,7 @@ struct Spend {
     /// transaction's `vout`.
     #[serde(rename = "tOutPrev")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    t_out_prev: Option<u16>,
+    t_out_prev: Option<u32>,
 
     /// (sapling) the index of the corresponding output within the previous transaction's
     /// `vShieldedOutput`.
@@ -399,13 +399,7 @@ pub(crate) async fn call(
                 spend: None,
                 action: None,
                 txid_prev,
-                t_out_prev: Some(
-                    input
-                        .prevout()
-                        .n()
-                        .try_into()
-                        .expect("should always be small enough"),
-                ),
+                t_out_prev: Some(input.prevout().n()),
                 output_prev: None,
                 action_prev: None,
                 address,
@@ -704,10 +698,10 @@ pub(crate) async fn call(
 
 struct WalletTxInfo {
     status: &'static str,
-    confirmations: i32,
+    confirmations: i64,
     generated: Option<bool>,
     blockhash: Option<String>,
-    blockindex: Option<u16>,
+    blockindex: Option<u32>,
     blocktime: Option<u64>,
     expiryheight: u64,
 }
@@ -724,7 +718,7 @@ impl WalletTxInfo {
 
         let confirmations = {
             match mined_height {
-                Some(mined_height) => (chain_height + 1 - mined_height) as i32,
+                Some(mined_height) => i64::from(chain_height + 1 - mined_height),
                 None => {
                     // TODO: Also check if the transaction is in the mempool for this branch.
                     -1
@@ -765,7 +759,7 @@ impl WalletTxInfo {
                 .vtx
                 .iter()
                 .find(|ctx| ctx.hash == tx.txid().as_ref())
-                .map(|tx| u16::try_from(tx.index).expect("Zaino should provide valid data"));
+                .map(|ctx| u32::try_from(ctx.index).expect("Zaino should provide valid data"));
 
             (
                 Some(block_metadata.block_hash().to_string()),
