@@ -43,6 +43,15 @@ Changes to response:
   listed in a new `derived_transparent` field (an array of objects) instead of
   the `transparent` field.
 
+### `getrawtransaction`
+
+Changes to parameters:
+- `blockhash` must be `null` if set; single-block lookups are not currently
+  supported.
+
+Changes to response:
+- `vjoinsplit`, `joinSplitPubKey`, and `joinSplitSig` fields are always omitted.
+
 ### `z_viewtransaction`
 
 Changes to response:
