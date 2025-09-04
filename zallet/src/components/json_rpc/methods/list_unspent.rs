@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, num::NonZeroU32};
+use std::num::NonZeroU32;
 
 use documented::Documented;
 use jsonrpsee::{
@@ -10,9 +10,7 @@ use serde::Serialize;
 
 use zcash_client_backend::{
     address::UnifiedAddress,
-    data_api::{
-        Account, AccountPurpose, InputSource, NullifierQuery, WalletRead, wallet::TargetHeight,
-    },
+    data_api::{Account, AccountPurpose, InputSource, WalletRead, wallet::TargetHeight},
     encoding::AddressCodec,
     fees::{orchard::InputView as _, sapling::InputView as _},
     wallet::NoteId,
@@ -39,7 +37,7 @@ pub(crate) struct ResultType(Vec<UnspentNote>);
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 pub(crate) struct UnspentNote {
-    /// The transaction ID.
+    /// The ID of the transaction that created this output.
     txid: String,
 
     /// The shielded value pool.
@@ -53,38 +51,45 @@ pub(crate) struct UnspentNote {
     /// The number of confirmations.
     confirmations: u32,
 
-    /// `true` if note can be spent by wallet, `false` if address is watchonly.
-    spendable: bool,
+    /// `true` if the account that received the output is watch-only
+    is_watch_only: bool,
 
-    /// The UUID for the wallet account that received this note.
-    account_uuid: String,
-
-    /// The unified account ID, if applicable.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    account: Option<u32>,
-
-    /// The shielded address.
+    /// The Zcash address that received the output.
     ///
-    /// Omitted if this note was sent to an internal receiver.
+    /// Omitted if this output was received on an account-internal address (for example, change
+    /// and shielding outputs).
     #[serde(skip_serializing_if = "Option::is_none")]
     address: Option<String>,
 
-    /// The amount of value in the note.
-    amount: JsonZec,
+    /// The UUID of the wallet account that received this output.
+    account_uuid: String,
 
-    /// Hexadecimal string representation of memo field.
-    memo: String,
+    /// `true` if the output was received by the account's internal viewing key.
+    ///
+    /// The `address` field is guaranteed be absent when this field is set to `true`, in which case
+    /// it indicates that this may be a change output, an output of a wallet-internal shielding
+    /// transaction, an output of a wallet-internal cross-account transfer, or otherwise is the
+    /// result of some wallet-internal operation.
+    #[serde(rename = "walletInternal")]
+    wallet_internal: bool,
+
+    /// The value of the output in ZEC.
+    value: JsonZec,
+
+    /// The value of the output in zatoshis.
+    #[serde(rename = "valueZat")]
+    value_zat: u64,
+
+    /// Hexadecimal string representation of the memo field.
+    ///
+    /// Omitted if this is a transparent output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memo: Option<String>,
 
     /// UTF-8 string representation of memo field (if it contains valid UTF-8).
     #[serde(rename = "memoStr")]
     #[serde(skip_serializing_if = "Option::is_none")]
     memo_str: Option<String>,
-
-    /// `true` if the address that received the note is also one of the sending addresses.
-    ///
-    /// Omitted if the note is not spendable.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    change: Option<bool>,
 }
 
 pub(super) const PARAM_MINCONF_DESC: &str =
@@ -167,14 +172,7 @@ pub(crate) fn call(
             // This would be a race condition between this and account deletion.
             .ok_or(RpcErrorCode::InternalError)?;
 
-        let spendable = matches!(account.purpose(), AccountPurpose::Spending { .. });
-
-        // `z_listunspent` assumes a single HD seed.
-        // TODO: Fix this limitation.
-        let account = account
-            .source()
-            .key_derivation()
-            .map(|derivation| u32::from(derivation.account_index()));
+        let is_watch_only = !matches!(account.purpose(), AccountPurpose::Spending { .. });
 
         let notes = wallet
             .select_unspent_notes(
@@ -190,19 +188,6 @@ pub(crate) fn call(
                     Some(format!("{e}")),
                 )
             })?;
-
-        let sapling_nullifiers = wallet
-            .get_sapling_nullifiers(NullifierQuery::All)
-            .map_err(|e| {
-                RpcError::owned(
-                    LegacyCode::Database.into(),
-                    "WalletDb::get_sapling_nullifiers failed",
-                    Some(format!("{e}")),
-                )
-            })?
-            .into_iter()
-            .map(|(account_uuid, nf)| (nf, account_uuid))
-            .collect::<BTreeMap<_, _>>();
 
         let get_memo = |txid, protocol, output_index| -> RpcResult<_> {
             Ok(wallet
@@ -260,54 +245,20 @@ pub(crate) fn call(
             let (memo, memo_str) =
                 get_memo(*note.txid(), ShieldedProtocol::Sapling, note.output_index())?;
 
-            let change = spendable
-                .then(|| {
-                    RpcResult::Ok(
-                        // Check against the wallet's change address for the associated
-                        // unified account.
-                        is_internal || {
-                            // A Note is marked as "change" if the address that received
-                            // it also spent Notes in the same transaction. This will
-                            // catch, for instance:
-                            // - Change created by spending fractions of Notes (because
-                            //   `z_sendmany` sends change to the originating z-address).
-                            // - Notes created by consolidation transactions (e.g. using
-                            //   `z_mergetoaddress`).
-                            // - Notes sent from one address to itself.
-                            wallet
-                                .get_transaction(*note.txid())
-                                // Can error if we haven't enhanced.
-                                // TODO: Improve this case so we can raise actual errors.
-                                .ok()
-                                .flatten()
-                                .as_ref()
-                                .and_then(|tx| tx.sapling_bundle())
-                                .map(|bundle| {
-                                    bundle.shielded_spends().iter().any(|spend| {
-                                        sapling_nullifiers.get(spend.nullifier())
-                                            == Some(&account_id)
-                                    })
-                                })
-                                .unwrap_or(false)
-                        },
-                    )
-                })
-                .transpose()?;
-
             unspent_notes.push(UnspentNote {
                 txid: note.txid().to_string(),
                 pool: "sapling".into(),
                 outindex: note.output_index(),
                 confirmations,
-                spendable,
+                is_watch_only,
                 account_uuid: account_id.expose_uuid().to_string(),
-                account,
                 // TODO: Ensure we generate the same kind of shielded address as `zcashd`.
                 address: (!is_internal).then(|| note.note().recipient().encode(wallet.params())),
-                amount: value_from_zatoshis(note.value()),
-                memo,
+                value: value_from_zatoshis(note.value()),
+                value_zat: u64::from(note.value()),
+                memo: Some(memo),
                 memo_str,
-                change,
+                wallet_internal: is_internal,
             })
         }
 
@@ -337,7 +288,7 @@ pub(crate) fn call(
                 continue;
             }
 
-            let is_internal = note.spending_key_scope() == Scope::Internal;
+            let wallet_internal = note.spending_key_scope() == Scope::Internal;
 
             let (memo, memo_str) =
                 get_memo(*note.txid(), ShieldedProtocol::Orchard, note.output_index())?;
@@ -347,19 +298,19 @@ pub(crate) fn call(
                 pool: "orchard".into(),
                 outindex: note.output_index(),
                 confirmations,
-                spendable,
+                is_watch_only,
                 account_uuid: account_id.expose_uuid().to_string(),
-                account,
                 // TODO: Ensure we generate the same kind of shielded address as `zcashd`.
-                address: (!is_internal).then(|| {
+                address: (!wallet_internal).then(|| {
                     UnifiedAddress::from_receivers(Some(note.note().recipient()), None, None)
                         .expect("valid")
                         .encode(wallet.params())
                 }),
-                amount: value_from_zatoshis(note.value()),
-                memo,
+                value: value_from_zatoshis(note.value()),
+                value_zat: u64::from(note.value()),
+                memo: Some(memo),
                 memo_str,
-                change: spendable.then_some(is_internal),
+                wallet_internal,
             })
         }
     }
