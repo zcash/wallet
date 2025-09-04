@@ -187,4 +187,5 @@ tokio-console = ["dep:console-subscriber", "tokio/tracing"]
 unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(outside_buildscript)',
     'cfg(tokio_unstable)',
+    'cfg(zallet_unimplemented)',
 ] }

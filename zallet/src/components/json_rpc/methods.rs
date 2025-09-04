@@ -19,6 +19,7 @@ mod get_address_for_account;
 mod get_new_account;
 mod get_notes_count;
 mod get_operation;
+mod get_raw_transaction;
 mod get_wallet_info;
 mod help;
 mod list_accounts;
@@ -242,6 +243,25 @@ pub(crate) trait Rpc {
         &self,
         unified_address: &str,
     ) -> list_unified_receivers::Response;
+
+    /// Returns the raw transaction data for the given transaction ID.
+    ///
+    /// NOTE: If `blockhash` is provided, only that block will be searched, and if the
+    /// transaction is in the mempool or other blocks, or if the node backing this wallet
+    /// does not have the given block available, the transaction will not be found.
+    ///
+    /// # Arguments
+    /// - `txid` (string, required) The transaction ID.
+    /// - `verbose` (numeric, optional, default=0) If 0, return a string of hex-encoded
+    ///   data. If non-zero, return a JSON object with information about `txid`.
+    /// - `blockhash` (string, optional) The block in which to look for the transaction.
+    #[method(name = "getrawtransaction")]
+    async fn get_raw_transaction(
+        &self,
+        txid: &str,
+        verbose: Option<u64>,
+        blockhash: Option<String>,
+    ) -> get_raw_transaction::Response;
 
     /// Returns detailed shielded information about in-wallet transaction `txid`.
     #[method(name = "z_viewtransaction")]
@@ -492,6 +512,22 @@ impl RpcServer for RpcImpl {
         unified_address: &str,
     ) -> list_unified_receivers::Response {
         list_unified_receivers::call(self.wallet().await?.as_ref(), unified_address)
+    }
+
+    async fn get_raw_transaction(
+        &self,
+        txid: &str,
+        verbose: Option<u64>,
+        blockhash: Option<String>,
+    ) -> get_raw_transaction::Response {
+        get_raw_transaction::call(
+            self.wallet().await?.as_ref(),
+            self.chain().await?,
+            txid,
+            verbose,
+            blockhash,
+        )
+        .await
     }
 
     async fn view_transaction(&self, txid: &str) -> view_transaction::Response {
