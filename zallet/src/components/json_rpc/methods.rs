@@ -489,10 +489,12 @@ impl RpcServer for RpcImpl {
     ) -> get_address_for_account::Response {
         get_address_for_account::call(
             self.wallet().await?.as_mut(),
+            self.keystore.clone(),
             account,
             receiver_types,
             diversifier_index,
         )
+        .await
     }
 
     async fn list_addresses(&self) -> list_addresses::Response {

@@ -108,6 +108,7 @@
 //!     protocol between a zallet foobar command and a running zallet start process?
 //!     Probably out of scope for the initial impl.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -456,6 +457,29 @@ impl KeyStore {
                 .prepare(
                     "SELECT hd_seed_fingerprint
                     FROM ext_zallet_keystore_mnemonics",
+                )
+                .map_err(|e| ErrorKind::Generic.context(e))?;
+
+            let rows = stmt
+                .query_map([], |row| row.get(0).map(SeedFingerprint::from_bytes))
+                .map_err(|e| ErrorKind::Generic.context(e))?;
+
+            Ok(rows
+                .collect::<Result<_, _>>()
+                .map_err(|e| ErrorKind::Generic.context(e))?)
+        })
+        .await
+    }
+
+    /// Lists the fingerprint of every legacy non-mnemonic seed available in the keystore.
+    pub(crate) async fn list_legacy_seed_fingerprints(
+        &self,
+    ) -> Result<HashSet<SeedFingerprint>, Error> {
+        self.with_db(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT hd_seed_fingerprint
+                    FROM ext_zallet_keystore_legacy_seeds",
                 )
                 .map_err(|e| ErrorKind::Generic.context(e))?;
 
