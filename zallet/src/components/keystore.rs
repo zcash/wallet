@@ -451,7 +451,7 @@ impl KeyStore {
     }
 
     /// Lists the fingerprint of every seed available in the keystore.
-    pub(crate) async fn list_seed_fingerprints(&self) -> Result<Vec<SeedFingerprint>, Error> {
+    pub(crate) async fn list_seed_fingerprints(&self) -> Result<HashSet<SeedFingerprint>, Error> {
         self.with_db(|conn| {
             let mut stmt = conn
                 .prepare(

@@ -101,13 +101,9 @@ pub(crate) async fn call(
         (1, None) => Ok(seed_fps.into_iter().next().expect("present")),
         (_, None) => Err(LegacyCode::InvalidParameter
             .with_static("Wallet has more than one seed; seedfp argument must be provided")),
-        (_, Some(seedfp)) => seed_fps
-            .into_iter()
-            .find(|fp| fp == &seedfp)
-            .ok_or_else(|| {
-                LegacyCode::InvalidParameter
-                    .with_static("seedfp does not match any seed in the wallet")
-            }),
+        (_, Some(seedfp)) => seed_fps.contains(&seedfp).then_some(seedfp).ok_or_else(|| {
+            LegacyCode::InvalidParameter.with_static("seedfp does not match any seed in the wallet")
+        }),
     }?;
 
     let seed = keystore
