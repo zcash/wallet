@@ -18,6 +18,7 @@ use crate::components::{
         server::LegacyCode,
         utils::{parse_account_parameter, parse_diversifier_index},
     },
+    keystore::KeyStore,
 };
 
 /// Response to a `z_getaddressforaccount` RPC request.
@@ -50,13 +51,14 @@ pub(super) const PARAM_RECEIVER_TYPES_DESC: &str =
     "Receiver types to include in the derived address.";
 pub(super) const PARAM_DIVERSIFIER_INDEX_DESC: &str = "A specific diversifier index to derive at.";
 
-pub(crate) fn call(
+pub(crate) async fn call(
     wallet: &mut DbConnection,
+    keystore: KeyStore,
     account: JsonValue,
     receiver_types: Option<Vec<String>>,
     diversifier_index: Option<u128>,
 ) -> Response {
-    let account_id = parse_account_parameter(wallet, &account)?;
+    let account_id = parse_account_parameter(wallet, &keystore, &account).await?;
 
     let (receiver_types, request) = match receiver_types {
         Some(receiver_types) if !receiver_types.is_empty() => {

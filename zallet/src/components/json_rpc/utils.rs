@@ -68,8 +68,9 @@ pub(crate) fn parse_seedfp(
 }
 
 /// Parses the `account` parameter present in many wallet RPCs.
-pub(super) fn parse_account_parameter(
+pub(super) async fn parse_account_parameter(
     wallet: &DbConnection,
+    keystore: &KeyStore,
     account: &JsonValue,
 ) -> RpcResult<AccountUuid> {
     match account {
@@ -86,6 +87,11 @@ pub(super) fn parse_account_parameter(
             let mut distinct_seeds = HashSet::new();
             let mut account_id = None;
 
+            let legacy_seeds = keystore
+                .list_legacy_seed_fingerprints()
+                .await
+                .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+
             for candidate_account_id in wallet
                 .get_account_ids()
                 .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
@@ -99,9 +105,17 @@ pub(super) fn parse_account_parameter(
                 // Ignore accounts from imported keys. `zcashd` did not support importing
                 // UFVKs as "accounts"; the latter always descended from the single seed.
                 if let Some(derivation) = account.source().key_derivation() {
-                    distinct_seeds.insert(*derivation.seed_fingerprint());
-                    if u64::from(u32::from(derivation.account_index())) == zip32_account_index {
-                        account_id = Some(candidate_account_id);
+                    let seed_fp = derivation.seed_fingerprint();
+
+                    // Ignore accounts using a legacy non-mnemonic seed. `zcashd` only
+                    // ever used this to derive a new Sapling spend authority for each
+                    // call to `z_getnewaddress`, and these were never accessible via
+                    // JSON-RPCs that took ZIP 32 account indices.
+                    if !legacy_seeds.contains(seed_fp) {
+                        distinct_seeds.insert(*seed_fp);
+                        if u64::from(u32::from(derivation.account_index())) == zip32_account_index {
+                            account_id = Some(candidate_account_id);
+                        }
                     }
                 }
             }
