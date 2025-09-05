@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, builder::Styles};
+use uuid::Uuid;
 
 #[cfg(outside_buildscript)]
 use abscissa_core::{Command, Runnable};
@@ -61,6 +62,9 @@ pub(crate) enum ZalletCmd {
 
     /// Import a BIP 39 mnemonic phrase into the wallet.
     ImportMnemonic(ImportMnemonicCmd),
+
+    /// Export an encrypted BIP 39 mnemonic phrase from the wallet.
+    ExportMnemonic(ExportMnemonicCmd),
 
     /// Communicate with a Zallet wallet's JSON-RPC interface.
     #[cfg(feature = "rpc-cli")]
@@ -140,6 +144,18 @@ pub(crate) struct GenerateMnemonicCmd {}
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct ImportMnemonicCmd {}
+
+/// `export-mnemonic` subcommand
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct ExportMnemonicCmd {
+    /// Output in a PEM encoded format.
+    #[arg(short, long)]
+    pub(crate) armor: bool,
+
+    /// The UUID of the account from which to export.
+    pub(crate) account_uuid: Uuid,
+}
 
 /// `rpc` subcommand
 #[cfg(feature = "rpc-cli")]
