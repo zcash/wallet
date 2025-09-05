@@ -21,7 +21,7 @@ use zcash_protocol::{
     ShieldedProtocol, TxId,
     consensus::{BlockHeight, Parameters},
     memo::Memo,
-    value::{BalanceError, Zatoshis},
+    value::{BalanceError, ZatBalance, Zatoshis},
 };
 use zebra_rpc::methods::GetRawTransaction;
 
@@ -29,7 +29,7 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{JsonZec, parse_txid, value_from_zatoshis},
+        utils::{JsonZec, JsonZecBalance, parse_txid, value_from_zat_balance, value_from_zatoshis},
     },
 };
 
@@ -107,6 +107,9 @@ pub(crate) struct Transaction {
 
     /// The outputs of the transaction that the wallet is capable of viewing.
     outputs: Vec<Output>,
+
+    /// A map from an involved account's UUID to the effects of this transaction on it.
+    accounts: BTreeMap<String, AccountEffect>,
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
@@ -234,6 +237,21 @@ struct Output {
     #[serde(rename = "memoStr")]
     #[serde(skip_serializing_if = "Option::is_none")]
     memo_str: Option<String>,
+}
+
+/// The effect of a transaction on an account's balance.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+struct AccountEffect {
+    /// The net change of the account's balance, in ZEC.
+    ///
+    /// This includes any contribution by this account to the transaction fee.
+    delta: JsonZecBalance,
+
+    /// The net change of the account's balance, in zatoshis.
+    ///
+    /// This includes any contribution by this account to the transaction fee.
+    #[serde(rename = "deltaZat")]
+    delta_zat: i64,
 }
 
 pub(super) const PARAM_TXID_DESC: &str = "The ID of the transaction to view.";
@@ -762,6 +780,43 @@ pub(crate) async fn call(
         // rejected by the backing full node.
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
 
+    let accounts = wallet.with_raw(|conn| {
+        let mut stmt = conn
+            .prepare(
+                "SELECT account_uuid, account_balance_delta
+                FROM v_transactions
+                WHERE txid = :txid",
+            )
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+        stmt.query_map(
+            named_params! {
+                ":txid": txid.as_ref(),
+            },
+            |row| {
+                Ok((
+                    AccountUuid::from_uuid(row.get("account_uuid")?),
+                    row.get("account_balance_delta")?,
+                ))
+            },
+        )
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+        .map(|res| {
+            res.map_err(|e| LegacyCode::Database.with_message(e.to_string()))
+                .and_then(|(account_id, delta_zat)| {
+                    let delta = ZatBalance::from_i64(delta_zat)
+                        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+                    Ok((
+                        account_id.expose_uuid().to_string(),
+                        AccountEffect {
+                            delta: value_from_zat_balance(delta),
+                            delta_zat,
+                        },
+                    ))
+                })
+        })
+        .collect::<Result<_, _>>()
+    })?;
+
     Ok(Transaction {
         txid: txid_str.to_ascii_lowercase(),
         status: wallet_tx_info.status,
@@ -775,6 +830,7 @@ pub(crate) async fn call(
         generated: wallet_tx_info.generated,
         spends,
         outputs,
+        accounts,
     })
 }
 
