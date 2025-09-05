@@ -70,18 +70,6 @@ Changes to response:
   - `memoStr` field on outputs is no longer only omitted if `memo` does not
     contain valid UTF-8.
 
-### `z_sendmany`
-
-Changes to parameters:
-- `fee` must be `null` if set; ZIP 317 fees are always used.
-- If the `minconf` field is omitted, the default ZIP 315 confirmation policy
-  (3 confirmations for trusted notes, 10 confirmations for untrusted notes)
-  is used.
-
-Changes to response:
-- New `txids` array field in response.
-- `txid` field is omitted if `txids` has length greater than 1.
-
 ### `z_listunspent`
 
 Changes to response:
@@ -102,6 +90,18 @@ Changes to response:
     qualifies as change involves a bunch of annoying subtleties and the
     meaning of this field has varied between Sapling and Orchard.
   - A `walletInternal` field has been added.
+
+### `z_sendmany`
+
+Changes to parameters:
+- `fee` must be `null` if set; ZIP 317 fees are always used.
+- If the `minconf` field is omitted, the default ZIP 315 confirmation policy
+  (3 confirmations for trusted notes, 10 confirmations for untrusted notes)
+  is used.
+
+Changes to response:
+- New `txids` array field in response.
+- `txid` field is omitted if `txids` has length greater than 1.
 
 ## Omitted RPC methods
 

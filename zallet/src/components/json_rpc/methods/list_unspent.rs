@@ -96,7 +96,7 @@ pub(super) const PARAM_MINCONF_DESC: &str =
     "Only include outputs of transactions confirmed at least this many times.";
 pub(super) const PARAM_MAXCONF_DESC: &str =
     "Only include outputs of transactions confirmed at most this many times.";
-pub(super) const PARAM_INCLUDE_WATCH_ONLY_DESC: &str =
+pub(super) const PARAM_INCLUDE_WATCHONLY_DESC: &str =
     "Also include outputs received at watch-only addresses.";
 pub(super) const PARAM_ADDRESSES_DESC: &str =
     "If non-empty, only outputs received by the provided addresses will be returned.";
@@ -110,7 +110,7 @@ pub(crate) fn call(
     maxconf: Option<u32>,
     _include_watch_only: Option<bool>,
     addresses: Option<Vec<String>>,
-    as_of_height: Option<u32>,
+    as_of_height: Option<i64>,
 ) -> Response {
     let minconf = minconf.unwrap_or(1);
     //let include_watch_only = include_watch_only.unwrap_or(false);
@@ -136,14 +136,44 @@ pub(crate) fn call(
                     |e| {
                         Err(RpcError::owned(
                             LegacyCode::Database.into(),
-                            "WalletDb::block_max_scanned failed",
+                            "WalletDb::get_target_and_anchor_heights failed",
                             Some(format!("{e}")),
                         ))
                     },
                     |h_opt| Ok(h_opt.map(|(h, _)| h)),
                 )
         },
-        |h| Ok(Some(TargetHeight::from(BlockHeight::from(h + 1)))),
+        |h| {
+            if h == -1 {
+                wallet.chain_height().map_or_else(
+                    |e| {
+                        Err(RpcError::owned(
+                            LegacyCode::Database.into(),
+                            "WalletDb::chain_height failed",
+                            Some(format!("{e}")),
+                        ))
+                    },
+                    |h_opt| Ok(h_opt.map(|h| TargetHeight::from(h + 1))),
+                )
+            } else if h > 0 {
+                u32::try_from(h).map_or_else(
+                    |_| {
+                        Err(RpcError::owned::<String>(
+                            LegacyCode::InvalidParameter.into(),
+                            "`as_of_height` parameter out of range",
+                            None,
+                        ))
+                    },
+                    |h| Ok(Some(TargetHeight::from(BlockHeight::from(h + 1)))),
+                )
+            } else {
+                Err(RpcError::owned::<String>(
+                    LegacyCode::InvalidParameter.into(),
+                    "Negative `as_of_height` values other than -1 are not supported",
+                    None,
+                ))
+            }
+        },
     )? {
         Some(h) => h,
         None => {

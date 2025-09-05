@@ -257,7 +257,7 @@ pub(crate) trait Rpc {
     /// # Arguments
     /// - `minconf`: Select outputs with at least this many confirmations (default = 1)
     /// - `maxconf`: Select outputs with at most this many confirmations (default = unlimited).
-    /// - `include_watch_only`: Include notes/utxos for which the wallet does not provide spending
+    /// - `include_watchonly`: Include notes/utxos for which the wallet does not provide spending
     ///   capability (default = false).
     /// - `addresses`: A list of addresses for which to retrieve UTXOs. For shielded addresses that
     ///   correspond to a unified account, unspent notes belonging to that account are returned
@@ -268,17 +268,15 @@ pub(crate) trait Rpc {
     ///   specified by this argument. The default is to use the entire blockchain that the node is
     ///   aware of. -1 can be used as in other RPC calls to indicate the current height (including
     ///   the mempool), but this does not support negative values in general. A “future” height will
-    ///   fall back to the current height. Any explicit value will cause the mempool to be ignored,
-    ///   meaning no unconfirmed tx will be considered.
-    ///   THIS API PARAMETER IS NOT YET SUPPORTED IN ZALLET
+    ///   fall back to the current height.
     #[method(name = "z_listunspent")]
     async fn list_unspent(
         &self,
         minconf: Option<u32>,
         maxconf: Option<u32>,
-        include_watch_only: Option<bool>,
+        include_watchonly: Option<bool>,
         addresses: Option<Vec<String>>,
-        as_of_height: Option<u32>,
+        as_of_height: Option<i64>,
     ) -> list_unspent::Response;
 
     #[method(name = "z_getnotescount")]
@@ -524,15 +522,15 @@ impl RpcServer for RpcImpl {
         &self,
         minconf: Option<u32>,
         maxconf: Option<u32>,
-        include_watch_only: Option<bool>,
+        include_watchonly: Option<bool>,
         addresses: Option<Vec<String>>,
-        as_of_height: Option<u32>,
+        as_of_height: Option<i64>,
     ) -> list_unspent::Response {
         list_unspent::call(
             self.wallet().await?.as_ref(),
             minconf,
             maxconf,
-            include_watch_only,
+            include_watchonly,
             addresses,
             as_of_height,
         )
