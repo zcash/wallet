@@ -14,7 +14,7 @@ use zcash_address::{
     unified::{self, Encoding},
 };
 use zcash_client_backend::data_api::WalletRead;
-use zcash_client_sqlite::error::SqliteClientError;
+use zcash_client_sqlite::{AccountUuid, error::SqliteClientError};
 use zcash_keys::encoding::AddressCodec;
 use zcash_note_encryption::{try_note_decryption, try_output_recovery_with_ovk};
 use zcash_protocol::{
@@ -151,6 +151,14 @@ struct Spend {
     #[serde(skip_serializing_if = "Option::is_none")]
     action_prev: Option<u16>,
 
+    /// The UUID of the Zallet account that received the corresponding output.
+    ///
+    /// Omitted if the output is not for an account in the wallet (which always means that
+    /// `pool` is `"transparent"`; external shielded spends are never included because
+    /// they are unviewable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    account_uuid: Option<String>,
+
     /// The Zcash address involved in the transaction.
     ///
     /// Omitted if this note was received on an account-internal address (e.g. change
@@ -185,6 +193,12 @@ struct Output {
     /// (orchard) the index of the action within the orchard bundle.
     #[serde(skip_serializing_if = "Option::is_none")]
     action: Option<u16>,
+
+    /// The UUID of the Zallet account that received the output.
+    ///
+    /// Omitted if the output is not for an account in the wallet (`outgoing = true`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    account_uuid: Option<String>,
 
     /// The Zcash address that received the output.
     ///
@@ -259,12 +273,17 @@ pub(crate) async fn call(
 
     let mut transparent_input_values = BTreeMap::new();
 
+    // Collect account IDs for transparent coin relevance detection.
+    let account_ids = wallet
+        .get_account_ids()
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+
     // Collect viewing keys for recovering output information.
     // - OVKs are used cross-protocol and thus are collected as byte arrays.
     let mut sapling_ivks = vec![];
     let mut orchard_ivks = vec![];
     let mut ovks = vec![];
-    for (_, ufvk) in wallet
+    for (account_id, ufvk) in wallet
         .get_unified_full_viewing_keys()
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
     {
@@ -276,6 +295,7 @@ pub(crate) async fn call(
         for scope in [zip32::Scope::External, zip32::Scope::Internal] {
             if let Some(dfvk) = ufvk.sapling() {
                 sapling_ivks.push((
+                    account_id,
                     sapling::keys::PreparedIncomingViewingKey::new(&dfvk.to_ivk(scope)),
                     scope,
                 ));
@@ -283,6 +303,7 @@ pub(crate) async fn call(
             }
             if let Some(fvk) = ufvk.orchard() {
                 orchard_ivks.push((
+                    account_id,
                     orchard::keys::PreparedIncomingViewingKey::new(&fvk.to_ivk(scope)),
                     scope,
                 ));
@@ -292,7 +313,7 @@ pub(crate) async fn call(
     }
 
     // TODO: Add `WalletRead::get_note_with_nullifier`
-    type OutputInfo = (TxId, u16, Option<String>, Zatoshis);
+    type OutputInfo = (TxId, u16, AccountUuid, Option<String>, Zatoshis);
     fn output_with_nullifier(
         wallet: &DbConnection,
         pool: ShieldedProtocol,
@@ -307,9 +328,10 @@ pub(crate) async fn call(
             .with_raw(|conn| {
                 conn.query_row(
                     &format!(
-                        "SELECT txid, {output_prefix}_index, address, value
-                        FROM {pool_prefix}_received_notes
+                        "SELECT txid, {output_prefix}_index, accounts.uuid, address, value
+                        FROM {pool_prefix}_received_notes rn
                         JOIN transactions ON tx = id_tx
+                        JOIN accounts ON accounts.id = rn.account_id
                         LEFT OUTER JOIN addresses ON address_id = addresses.id
                         WHERE nf = :nf"
                     ),
@@ -320,6 +342,7 @@ pub(crate) async fn call(
                         Ok((
                             TxId::from_bytes(row.get("txid")?),
                             row.get(format!("{output_prefix}_index").as_str())?,
+                            AccountUuid::from_uuid(row.get("uuid")?),
                             row.get("address")?,
                             Zatoshis::const_from_u64(row.get("value")?),
                         ))
@@ -377,24 +400,36 @@ pub(crate) async fn call(
             let txid_prev = input.prevout().txid().to_string();
 
             // TODO: Migrate to a hopefully much nicer Rust API once we migrate to the new Zaino ChainIndex trait.
-            let (address, value) = match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await
-            {
-                Ok(GetRawTransaction::Object(tx)) => {
-                    let output = tx
-                        .outputs()
-                        .get(usize::from(idx))
-                        .expect("Zaino should have rejected this earlier");
-                    (
-                        transparent::address::Script::from(output.script_pub_key().hex())
-                            .address()
-                            .map(|addr| addr.encode(wallet.params())),
-                        Zatoshis::from_nonnegative_i64(output.value_zat())
-                            .expect("Zaino should have rejected this earlier"),
-                    )
-                }
-                Ok(_) => unreachable!(),
-                Err(_) => todo!(),
-            };
+            let (account_uuid, address, value) =
+                match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await {
+                    Ok(GetRawTransaction::Object(tx)) => {
+                        let output = tx
+                            .outputs()
+                            .get(usize::from(idx))
+                            .expect("Zaino should have rejected this earlier");
+                        let address =
+                            transparent::address::Script::from(output.script_pub_key().hex())
+                                .address();
+
+                        let account_id = address.as_ref().and_then(|address| {
+                            account_ids.iter().find(|account| {
+                                wallet
+                                    .get_transparent_address_metadata(**account, address)
+                                    .transpose()
+                                    .is_some()
+                            })
+                        });
+
+                        (
+                            account_id.map(|account| account.expose_uuid().to_string()),
+                            address.map(|addr| addr.encode(wallet.params())),
+                            Zatoshis::from_nonnegative_i64(output.value_zat())
+                                .expect("Zaino should have rejected this earlier"),
+                        )
+                    }
+                    Ok(_) => unreachable!(),
+                    Err(_) => todo!(),
+                };
 
             transparent_input_values.insert(input.prevout(), value);
 
@@ -407,6 +442,7 @@ pub(crate) async fn call(
                 t_out_prev: Some(input.prevout().n()),
                 output_prev: None,
                 action_prev: None,
+                account_uuid,
                 address,
                 value: value_from_zatoshis(value),
                 value_zat: value.into_u64(),
@@ -415,34 +451,37 @@ pub(crate) async fn call(
 
         // Transparent outputs
         for (output, idx) in bundle.vout.iter().zip(0..) {
-            let (address, outgoing, wallet_internal) = match output.recipient_address() {
-                None => (None, true, false),
-                Some(address) => {
-                    let wallet_scope =
-                        wallet
-                            .get_account_ids()
-                            .unwrap()
-                            .into_iter()
+            let (account_uuid, address, outgoing, wallet_internal) =
+                match output.recipient_address() {
+                    None => (None, None, true, false),
+                    Some(address) => {
+                        let (account_uuid, wallet_scope) = account_ids
+                            .iter()
                             .find_map(|account| {
-                                match wallet.get_transparent_address_metadata(account, &address) {
-                                    Ok(Some(metadata)) => Some(metadata.scope()),
+                                match wallet.get_transparent_address_metadata(*account, &address) {
+                                    Ok(Some(metadata)) => {
+                                        Some((account.expose_uuid().to_string(), metadata.scope()))
+                                    }
                                     _ => None,
                                 }
-                            });
+                            })
+                            .unzip();
 
-                    (
-                        Some(address.encode(wallet.params())),
-                        wallet_scope.is_none(),
-                        matches!(wallet_scope, Some(TransparentKeyScope::INTERNAL)),
-                    )
-                }
-            };
+                        (
+                            account_uuid,
+                            Some(address.encode(wallet.params())),
+                            wallet_scope.is_none(),
+                            matches!(wallet_scope, Some(TransparentKeyScope::INTERNAL)),
+                        )
+                    }
+                };
 
             outputs.push(Output {
                 pool: POOL_TRANSPARENT,
                 t_out: Some(idx),
                 output: None,
                 action: None,
+                account_uuid,
                 address,
                 outgoing,
                 wallet_internal,
@@ -455,27 +494,39 @@ pub(crate) async fn call(
     }
 
     if let Some(bundle) = tx.sapling_bundle() {
-        let incoming: BTreeMap<u16, (sapling::Note, Option<sapling::PaymentAddress>, [u8; 512])> =
-            bundle
-                .shielded_outputs()
-                .iter()
-                .zip(0..)
-                .filter_map(|(output, idx)| {
-                    sapling_ivks.iter().find_map(|(ivk, scope)| {
-                        sapling::note_encryption::try_sapling_note_decryption(
-                            ivk,
-                            output,
-                            zip212_enforcement,
-                        )
-                        .map(|(n, a, m)| {
+        let incoming: BTreeMap<
+            u16,
+            (
+                sapling::Note,
+                AccountUuid,
+                Option<sapling::PaymentAddress>,
+                [u8; 512],
+            ),
+        > = bundle
+            .shielded_outputs()
+            .iter()
+            .zip(0..)
+            .filter_map(|(output, idx)| {
+                sapling_ivks.iter().find_map(|(account_id, ivk, scope)| {
+                    sapling::note_encryption::try_sapling_note_decryption(
+                        ivk,
+                        output,
+                        zip212_enforcement,
+                    )
+                    .map(|(n, a, m)| {
+                        (
+                            idx,
                             (
-                                idx,
-                                (n, matches!(scope, zip32::Scope::External).then_some(a), m),
-                            )
-                        })
+                                n,
+                                *account_id,
+                                matches!(scope, zip32::Scope::External).then_some(a),
+                                m,
+                            ),
+                        )
                     })
                 })
-                .collect();
+            })
+            .collect();
 
         let outgoing: BTreeMap<u16, (sapling::Note, Option<sapling::PaymentAddress>, [u8; 512])> =
             bundle
@@ -504,7 +555,7 @@ pub(crate) async fn call(
             let spent_note =
                 output_with_nullifier(wallet, ShieldedProtocol::Sapling, spend.nullifier().0)?;
 
-            if let Some((txid_prev, output_prev, address, value)) = spent_note {
+            if let Some((txid_prev, output_prev, account_id, address, value)) = spent_note {
                 spends.push(Spend {
                     pool: POOL_SAPLING,
                     t_in: None,
@@ -514,6 +565,7 @@ pub(crate) async fn call(
                     t_out_prev: None,
                     output_prev: Some(output_prev),
                     action_prev: None,
+                    account_uuid: Some(account_id.expose_uuid().to_string()),
                     address,
                     value: value_from_zatoshis(value),
                     value_zat: value.into_u64(),
@@ -523,10 +575,16 @@ pub(crate) async fn call(
 
         // Sapling outputs
         for (_, idx) in bundle.shielded_outputs().iter().zip(0..) {
-            if let Some(((note, addr, memo), is_outgoing)) = incoming
+            if let Some((note, account_uuid, addr, memo)) = incoming
                 .get(&idx)
-                .map(|n| (n, false))
-                .or_else(|| outgoing.get(&idx).map(|n| (n, true)))
+                .map(|(n, account_id, addr, memo)| {
+                    (n, Some(account_id.expose_uuid().to_string()), addr, memo)
+                })
+                .or_else(|| {
+                    outgoing
+                        .get(&idx)
+                        .map(|(n, addr, memo)| (n, None, addr, memo))
+                })
             {
                 let address =
                     sent_to_address(wallet, &txid, ShieldedProtocol::Sapling, idx, || {
@@ -538,6 +596,7 @@ pub(crate) async fn call(
                             .encode()
                         })
                     })?;
+                let outgoing = account_uuid.is_none();
                 let wallet_internal = address.is_none();
 
                 let value = Zatoshis::const_from_u64(note.value().inner());
@@ -553,8 +612,9 @@ pub(crate) async fn call(
                     t_out: None,
                     output: Some(idx),
                     action: None,
+                    account_uuid,
                     address,
-                    outgoing: is_outgoing,
+                    outgoing,
                     wallet_internal,
                     value: value_from_zatoshis(value),
                     value_zat: value.into_u64(),
@@ -566,17 +626,30 @@ pub(crate) async fn call(
     }
 
     if let Some(bundle) = tx.orchard_bundle() {
-        let incoming: BTreeMap<u16, (orchard::Note, Option<orchard::Address>, [u8; 512])> = bundle
+        let incoming: BTreeMap<
+            u16,
+            (
+                orchard::Note,
+                AccountUuid,
+                Option<orchard::Address>,
+                [u8; 512],
+            ),
+        > = bundle
             .actions()
             .iter()
             .zip(0..)
             .filter_map(|(action, idx)| {
                 let domain = OrchardDomain::for_action(action);
-                orchard_ivks.iter().find_map(|(ivk, scope)| {
+                orchard_ivks.iter().find_map(|(account_id, ivk, scope)| {
                     try_note_decryption(&domain, ivk, action).map(|(n, a, m)| {
                         (
                             idx,
-                            (n, matches!(scope, zip32::Scope::External).then_some(a), m),
+                            (
+                                n,
+                                *account_id,
+                                matches!(scope, zip32::Scope::External).then_some(a),
+                                m,
+                            ),
                         )
                     })
                 })
@@ -614,7 +687,7 @@ pub(crate) async fn call(
                 action.nullifier().to_bytes(),
             )?;
 
-            if let Some((txid_prev, action_prev, address, value)) = spent_note {
+            if let Some((txid_prev, action_prev, account_id, address, value)) = spent_note {
                 spends.push(Spend {
                     pool: POOL_ORCHARD,
                     t_in: None,
@@ -624,16 +697,23 @@ pub(crate) async fn call(
                     t_out_prev: None,
                     output_prev: None,
                     action_prev: Some(action_prev),
+                    account_uuid: Some(account_id.expose_uuid().to_string()),
                     address,
                     value: value_from_zatoshis(value),
                     value_zat: value.into_u64(),
                 });
             }
 
-            if let Some(((note, addr, memo), is_outgoing)) = incoming
+            if let Some((note, account_uuid, addr, memo)) = incoming
                 .get(&idx)
-                .map(|n| (n, false))
-                .or_else(|| outgoing.get(&idx).map(|n| (n, true)))
+                .map(|(n, account_id, addr, memo)| {
+                    (n, Some(account_id.expose_uuid().to_string()), addr, memo)
+                })
+                .or_else(|| {
+                    outgoing
+                        .get(&idx)
+                        .map(|(n, addr, memo)| (n, None, addr, memo))
+                })
             {
                 let address =
                     sent_to_address(wallet, &txid, ShieldedProtocol::Orchard, idx, || {
@@ -648,6 +728,7 @@ pub(crate) async fn call(
                             .encode()
                         })
                     })?;
+                let outgoing = account_uuid.is_none();
                 let wallet_internal = address.is_none();
 
                 let value = Zatoshis::const_from_u64(note.value().inner());
@@ -663,8 +744,9 @@ pub(crate) async fn call(
                     t_out: None,
                     output: None,
                     action: Some(idx),
+                    account_uuid,
                     address,
-                    outgoing: is_outgoing,
+                    outgoing,
                     wallet_internal,
                     value: value_from_zatoshis(value),
                     value_zat: value.into_u64(),
