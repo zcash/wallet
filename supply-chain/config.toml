@@ -552,7 +552,7 @@ version = "0.7.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.equihash]]
-version = "0.2.2@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.2.2@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.eyre]]
@@ -560,7 +560,7 @@ version = "0.6.12"
 criteria = "safe-to-deploy"
 
 [[exemptions.f4jumble]]
-version = "0.1.1@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.1.1@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.fallible-iterator]]
@@ -1784,43 +1784,43 @@ version = "0.1.2@git:fc4a51118328045e7a337a6004698779ec872654"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_address]]
-version = "0.9.0@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.9.0@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_client_backend]]
-version = "0.19.1@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.19.1@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_client_sqlite]]
-version = "0.17.2@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.17.3@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_encoding]]
-version = "0.3.0@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.3.0@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_history]]
-version = "0.4.0@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.4.0@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_keys]]
-version = "0.10.1@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.10.1@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_primitives]]
-version = "0.24.0@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.24.0@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_proofs]]
-version = "0.24.0@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.24.0@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_protocol]]
-version = "0.6.1@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.6.1@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_transparent]]
-version = "0.4.0@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.4.0@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-chain]]
@@ -1868,5 +1868,5 @@ version = "0.8.24"
 criteria = "safe-to-deploy"
 
 [[exemptions.zip321]]
-version = "0.5.0@git:796abb548fc8366738f16a5252fd026d5bd92652"
+version = "0.5.0@git:7cb49e1b897f30adb7a672f37eaf170cab5c300d"
 criteria = "safe-to-deploy"

@@ -186,25 +186,30 @@ struct Output {
     #[serde(skip_serializing_if = "Option::is_none")]
     action: Option<u16>,
 
-    /// The Zcash address involved in the transaction.
+    /// The Zcash address that received the output.
     ///
-    /// Omitted if this output was received on an account-internal address (e.g. change
-    /// outputs), or is a transparent output to a script that is not either P2PKH or P2SH
-    /// (and thus doesn't have an address encoding).
+    /// Omitted if this output was received on an account-internal address (e.g. change outputs),
+    /// or is a transparent output to a script that is not either P2PKH or P2SH (and thus doesn't
+    /// have an address encoding).
     #[serde(skip_serializing_if = "Option::is_none")]
     address: Option<String>,
 
     /// `true` if the output is not for an address in the wallet.
     outgoing: bool,
 
-    /// `true` if this is a change output.
+    /// `true` if the output was received by the account's internal viewing key.
+    ///
+    /// The `address` field is guaranteed be absent when this field is set to `true`, in which case
+    /// it indicates that this may be a change output, an output of a wallet-internal shielding
+    /// transaction, an output of a wallet-internal cross-account transfer, or otherwise is the
+    /// result of some wallet-internal operation.
     #[serde(rename = "walletInternal")]
     wallet_internal: bool,
 
-    /// The amount in ZEC.
+    /// The value of the output in ZEC.
     value: JsonZec,
 
-    /// The amount in zatoshis.
+    /// The value of the output in zatoshis.
     #[serde(rename = "valueZat")]
     value_zat: u64,
 

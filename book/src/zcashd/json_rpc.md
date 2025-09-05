@@ -79,6 +79,27 @@ Changes to response:
   - `memoStr` field on outputs is no longer only omitted if `memo` does not
     contain valid UTF-8.
 
+### `z_listunspent`
+
+Changes to response:
+- For each output in the response array:
+  - The `amount` field has been renamed to `value` for consistency with
+    `z_viewtransaction`. The `amount` field may be reintroduced under a deprecation
+    flag in the future if there is user demand.
+  - A `valueZat` field has been added for consistency with `z_viewtransaction`
+  - An `account_uuid` field identifying the account that received the output
+    has been added.
+  - The `account` field has been removed and there is no plan to reintroduce it;
+    use the `account_uuid` field instead.
+  - An `is_watch_only` field has been added.
+  - The `spendable` field has been removed; use `is_watch_only` instead. The
+    `spendable` field may be reintroduced under a deprecation flag in the
+    future if there is user demand.
+  - The `change` field has been removed, as determining whether an output
+    qualifies as change involves a bunch of annoying subtleties and the
+    meaning of this field has varied between Sapling and Orchard.
+  - A `walletInternal` field has been added.
+
 ### `z_sendmany`
 
 Changes to parameters:
