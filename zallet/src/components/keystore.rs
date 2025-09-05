@@ -514,8 +514,12 @@ impl KeyStore {
 
         // Take ownership of the memory of the mnemonic to ensure it will be correctly zeroized on drop
         let mnemonic = SecretString::new(mnemonic.into_phrase());
-        let encrypted_mnemonic = encrypt_string(&recipients, mnemonic.expose_secret())
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+        let encrypted_mnemonic = encrypt_string(
+            &recipients,
+            mnemonic.expose_secret(),
+            age::armor::Format::Binary,
+        )
+        .map_err(|e| ErrorKind::Generic.context(e))?;
 
         self.with_db_mut(|conn, _| {
             conn.execute(
@@ -668,6 +672,30 @@ impl KeyStore {
         Ok(seed)
     }
 
+    /// Exports the mnemonic phrase corresponding to the given seed fingerprint.
+    pub(crate) async fn export_mnemonic(
+        &self,
+        seed_fp: &SeedFingerprint,
+        armor: bool,
+    ) -> Result<Vec<u8>, Error> {
+        let recipients = self.recipients().await?;
+
+        let mnemonic = self.decrypt_mnemonic(seed_fp).await?;
+
+        let encrypted_mnemonic = encrypt_string(
+            &recipients,
+            mnemonic.expose_secret(),
+            if armor {
+                age::armor::Format::AsciiArmor
+            } else {
+                age::armor::Format::Binary
+            },
+        )
+        .map_err(|e| ErrorKind::Generic.context(e))?;
+
+        Ok(encrypted_mnemonic)
+    }
+
     #[cfg(feature = "zcashd-import")]
     pub(crate) async fn decrypt_standalone_transparent_key(
         &self,
@@ -708,13 +736,17 @@ impl KeyStore {
 fn encrypt_string(
     recipients: &[Box<dyn age::Recipient + Send>],
     plaintext: &str,
+    format: age::armor::Format,
 ) -> Result<Vec<u8>, age::EncryptError> {
     let encryptor = age::Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref() as _))?;
 
     let mut ciphertext = Vec::with_capacity(plaintext.len());
-    let mut writer = encryptor.wrap_output(&mut ciphertext)?;
+    let mut writer = encryptor.wrap_output(age::armor::ArmoredWriter::wrap_output(
+        &mut ciphertext,
+        format,
+    )?)?;
     writer.write_all(plaintext.as_bytes())?;
-    writer.finish()?;
+    writer.finish()?.finish()?;
 
     Ok(ciphertext)
 }

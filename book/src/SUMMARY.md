@@ -18,6 +18,7 @@
   - [init-wallet-encryption](cli/init-wallet-encryption.md)
   - [generate-mnemonic](cli/generate-mnemonic.md)
   - [import-mnemonic](cli/import-mnemonic.md)
+  - [export-mnemonic](cli/export-mnemonic.md)
   - [rpc](cli/rpc.md)
   - [repair](cli/repair/README.md)
     - [truncate-wallet](cli/repair/truncate-wallet.md)

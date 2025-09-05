@@ -173,6 +173,7 @@ quote = "1"
 rust-embed.workspace = true
 shadow-rs = { workspace = true, default-features = true }
 syn = "2"
+uuid.workspace = true
 
 [dev-dependencies]
 abscissa_core = { workspace = true, features = ["testing"] }
