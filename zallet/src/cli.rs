@@ -220,6 +220,8 @@ pub(crate) struct RpcCliCmd {
     pub(crate) timeout: Option<u64>,
 
     /// The JSON-RPC command to send to Zallet.
+    ///
+    /// Use `zallet rpc help` to get a list of RPC endpoints.
     pub(crate) command: String,
 
     /// Any parameters for the command.
