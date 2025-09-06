@@ -467,6 +467,10 @@ pub(crate) async fn call(
             });
         }
 
+        let account_ids = wallet.get_account_ids().map_err(|e| {
+            LegacyCode::Database
+                .with_message(format!("Failed to retrieve transparent account IDs: {e}"))
+        })?;
         // Transparent outputs
         for (output, idx) in bundle.vout.iter().zip(0..) {
             let (account_uuid, address, outgoing, wallet_internal) =
@@ -489,7 +493,10 @@ pub(crate) async fn call(
                             account_uuid,
                             Some(address.encode(wallet.params())),
                             wallet_scope.is_none(),
-                            matches!(wallet_scope, Some(TransparentKeyScope::INTERNAL)),
+                            // The outer `Some` indicates that we have address metadata; the inner
+                            // `Option` is `None` for addresses associated with imported transparent
+                            // spending keys.
+                            wallet_scope == Some(Some(TransparentKeyScope::INTERNAL)),
                         )
                     }
                 };
