@@ -93,9 +93,12 @@ fn setup_new_wallet() {
             .arg("--datadir")
             .arg(datadir.path())
             .arg("init-wallet-encryption")
-            .capture_stdout()
+            .capture_stderr()
             .run();
-        cmd.stdout().expect_regex(".*Creating empty database.*");
+        let stderr = cmd.stderr();
+        stderr.expect_regex(".*Finished.*");
+        stderr.expect_regex(".*Running.*");
+        stderr.expect_regex(".*Creating empty database.*");
         cmd.wait().unwrap().expect_code(0);
     }
 
@@ -105,10 +108,12 @@ fn setup_new_wallet() {
             .arg("--datadir")
             .arg(datadir.path())
             .arg("generate-mnemonic")
-            .capture_stdout()
+            .capture_stderr()
             .run();
-        cmd.stdout()
-            .expect_regex(".*Applying latest database migrations.*");
+        let stderr = cmd.stderr();
+        stderr.expect_regex(".*Finished.*");
+        stderr.expect_regex(".*Running.*");
+        stderr.expect_regex(".*Applying latest database migrations.*");
         cmd.wait().unwrap().expect_code(0);
     }
 

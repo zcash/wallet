@@ -21,6 +21,7 @@ use crate::{
 };
 
 mod example_config;
+mod export_mnemonic;
 mod generate_mnemonic;
 mod import_mnemonic;
 mod init_wallet_encryption;
