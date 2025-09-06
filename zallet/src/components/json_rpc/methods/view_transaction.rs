@@ -423,7 +423,7 @@ pub(crate) async fn call(
                     Ok(GetRawTransaction::Object(tx)) => {
                         let output = tx
                             .outputs()
-                            .get(usize::from(idx))
+                            .get(usize::try_from(input.prevout().n()).expect("should fit"))
                             .expect("Zaino should have rejected this earlier");
                         let address =
                             transparent::address::Script::from(output.script_pub_key().hex())
@@ -783,7 +783,7 @@ pub(crate) async fn call(
         .fee_paid(|prevout| Ok::<_, BalanceError>(transparent_input_values.get(prevout).copied()))
         // This should never occur, as a transaction that violated balance would be
         // rejected by the backing full node.
-        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+        .map_err(|e| LegacyCode::Database.with_message(format!("Failed to compute fee: {e}")))?;
 
     let accounts = wallet.with_raw(|conn| {
         let mut stmt = conn
