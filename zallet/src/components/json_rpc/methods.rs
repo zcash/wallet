@@ -263,7 +263,13 @@ pub(crate) trait Rpc {
         blockhash: Option<String>,
     ) -> get_raw_transaction::Response;
 
-    /// Returns detailed shielded information about in-wallet transaction `txid`.
+    /// Returns detailed information about in-wallet transaction `txid`.
+    ///
+    /// This method returns information about spends and outputs within the transaction
+    /// that are visible to the wallet. Importantly, this does not include information
+    /// about spent notes that are not controlled by spending or viewing keys in the
+    /// wallet, and so callers MUST NOT use the `spends` or `outputs` fields to compute
+    /// balances or fees themselves. Use the provided `accounts` and `fee` fields instead.
     #[method(name = "z_viewtransaction")]
     async fn view_transaction(&self, txid: &str) -> view_transaction::Response;
 

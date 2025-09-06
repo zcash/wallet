@@ -66,6 +66,9 @@ Changes to response:
     value from any account in the wallet, but can also be omitted if the
     transparent inputs for a transaction cannot be found.
   - `generated`
+- New `account_uuid` field on inputs and outputs (if relevant).
+- New `accounts` top-level field, containing a map from UUIDs of involved
+  accounts to the effect the transaction has on them.
 - Information about all transparent inputs and outputs (which are always visible
   to the wallet) are now included. This causes the following semantic changes:
   - `pool` field on both inputs and outputs can be `"transparent"`.
