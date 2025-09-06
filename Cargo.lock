@@ -6398,7 +6398,7 @@ dependencies = [
 [[package]]
 name = "zaino-fetch"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=fc4a51118328045e7a337a6004698779ec872654#fc4a51118328045e7a337a6004698779ec872654"
+source = "git+https://github.com/Electric-Coin-Company/zaino.git?rev=1004733f3303b1c48b6df6db610c54401554683c#1004733f3303b1c48b6df6db610c54401554683c"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -6427,7 +6427,7 @@ dependencies = [
 [[package]]
 name = "zaino-proto"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=fc4a51118328045e7a337a6004698779ec872654#fc4a51118328045e7a337a6004698779ec872654"
+source = "git+https://github.com/Electric-Coin-Company/zaino.git?rev=1004733f3303b1c48b6df6db610c54401554683c#1004733f3303b1c48b6df6db610c54401554683c"
 dependencies = [
  "prost",
  "tonic 0.12.3",
@@ -6438,7 +6438,7 @@ dependencies = [
 [[package]]
 name = "zaino-state"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=fc4a51118328045e7a337a6004698779ec872654#fc4a51118328045e7a337a6004698779ec872654"
+source = "git+https://github.com/Electric-Coin-Company/zaino.git?rev=1004733f3303b1c48b6df6db610c54401554683c#1004733f3303b1c48b6df6db610c54401554683c"
 dependencies = [
  "arc-swap",
  "async-trait",
