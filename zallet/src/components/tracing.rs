@@ -1,3 +1,5 @@
+use std::io;
+
 use tracing::level_filters::LevelFilter;
 use tracing_log::LogTracer;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt};
@@ -22,6 +24,7 @@ impl Tracing {
 
         // Construct a tracing subscriber with the supplied filter and enable reloading.
         let fmt_layer = tracing_subscriber::fmt::layer()
+            .with_writer(io::stderr)
             .with_ansi(match color_choice {
                 ColorChoice::Always => true,
                 ColorChoice::AlwaysAnsi => true,
