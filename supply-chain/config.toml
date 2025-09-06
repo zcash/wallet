@@ -1772,15 +1772,15 @@ version = "2.5.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-fetch]]
-version = "0.1.2@git:fc4a51118328045e7a337a6004698779ec872654"
+version = "0.1.2@git:1004733f3303b1c48b6df6db610c54401554683c"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-proto]]
-version = "0.1.2@git:fc4a51118328045e7a337a6004698779ec872654"
+version = "0.1.2@git:1004733f3303b1c48b6df6db610c54401554683c"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-state]]
-version = "0.1.2@git:fc4a51118328045e7a337a6004698779ec872654"
+version = "0.1.2@git:1004733f3303b1c48b6df6db610c54401554683c"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_address]]
