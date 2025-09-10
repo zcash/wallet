@@ -479,6 +479,7 @@ pub(crate) async fn call(
     let verbose = verbose.is_some_and(|v| v != 0);
 
     // TODO: We can't support this via the current Zaino API; wait for `ChainIndex`.
+    //       https://github.com/zcash/wallet/issues/237
     if blockhash.is_some() {
         return Err(
             LegacyCode::InvalidParameter.with_static("blockhash argument must be unset (for now).")
@@ -486,9 +487,10 @@ pub(crate) async fn call(
     }
 
     let tx = match chain.get_raw_transaction(txid_str.into(), Some(1)).await {
-        // TODO: Zaino should have a Rust API for fetching tx details,
-        // instead of requiring us to specify a verbosity and then deal
-        // with an enum variant that should never occur.
+        // TODO: Zaino should have a Rust API for fetching tx details, instead of
+        //       requiring us to specify a verbosity and then deal with an enum variant
+        //       that should never occur.
+        //       https://github.com/zcash/wallet/issues/237
         Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => unreachable!(),
         Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => Ok(tx),
         // TODO: Zaino is not correctly parsing the error response, so we
@@ -505,13 +507,15 @@ pub(crate) async fn call(
     }?;
 
     // TODO: Once we migrate to `ChainIndex`, fetch these via the snapshot.
+    //       https://github.com/zcash/wallet/issues/237
     // TODO: Zebra implements its Rust `getrawtransaction` type incorrectly and treats
-    // `height` as a `u32`, when `-1` is a valid response (for "not in main chain"). This
-    // might be fine for server usage (if it never returns a `-1`, though that would imply
-    // Zebra stores every block from every chain indefinitely), but is incorrect for
-    // client usage (like in Zaino). For now, cast to `i32` as either Zebra is not
-    // generating `-1`, or it is representing it using two's complement as `u32::MAX`
-    // (which will cast correctly).
+    //       `height` as a `u32`, when `-1` is a valid response (for "not in main chain").
+    //       This might be fine for server usage (if it never returns a `-1`, though that
+    //       would imply Zebra stores every block from every chain indefinitely), but is
+    //       incorrect for client usage (like in Zaino). For now, cast to `i32` as either
+    //       Zebra is not generating `-1`, or it is representing it using two's complement
+    //       as `u32::MAX` (which will cast correctly).
+    //       https://github.com/ZcashFoundation/zebra/issues/9671
     let blockhash = tx.block_hash().map(|hash| hash.to_string());
     let height = tx.height().map(|h| h as i32);
     let confirmations = tx.confirmations();
@@ -659,6 +663,7 @@ impl TransparentInput {
                 vout: Some(tx_in.prevout().n()),
                 script_sig: Some(TransparentScriptSig {
                     // TODO: Implement this
+                    //       https://github.com/zcash/wallet/issues/235
                     asm: "TODO: Implement this".into(),
                     hex: script_hex,
                 }),
@@ -672,10 +677,12 @@ impl TransparentOutput {
     fn encode((tx_out, n): (&TxOut, u16)) -> Self {
         let script_pub_key = TransparentScriptPubKey {
             // TODO: Implement this
+            //       https://github.com/zcash/wallet/issues/235
             asm: "TODO: Implement this".into(),
             hex: hex::encode(&tx_out.script_pubkey().0),
             // TODO: zcashd relied on initialization behaviour for the default value
-            // for null-data or non-standard outputs. Figure out what it is.
+            //       for null-data or non-standard outputs. Figure out what it is.
+            //       https://github.com/zcash/wallet/issues/236
             req_sigs: 0,
             kind: "nonstandard",
             addresses: vec![],
@@ -694,6 +701,7 @@ impl TransparentOutput {
 #[cfg(zallet_unimplemented)]
 impl JoinSplit {
     fn encode(js_desc: &zcash_primitives::transaction::components::sprout::JsDescription) -> Self {
+        // https://github.com/zcash/librustzcash/issues/1943
         todo!("Requires zcash_primitives changes")
     }
 }

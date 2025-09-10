@@ -429,6 +429,7 @@ pub(super) fn get_account_for_address(
     address: &Address,
 ) -> RpcResult<Account> {
     // TODO: Make this more efficient with a `WalletRead` method.
+    //       https://github.com/zcash/librustzcash/issues/1944
     for account_id in wallet
         .get_account_ids()
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?

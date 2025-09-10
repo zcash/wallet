@@ -77,7 +77,8 @@ pub(crate) fn lock_datadir(datadir: &Path) -> Result<fmutex::Guard<'static>, Err
 /// Resolves the requested path relative to the Zallet data directory.
 pub(crate) fn resolve_datadir_path(datadir: &Path, path: &Path) -> PathBuf {
     // TODO: Do we canonicalize here? Where do we enforce any requirements on the
-    // config's relative paths?
+    //       config's relative paths?
+    //       https://github.com/zcash/wallet/issues/249
     datadir.join(path)
 }
 
@@ -85,7 +86,8 @@ impl EntryPoint {
     /// Returns the data directory to use for this Zallet command.
     fn datadir(&self) -> Result<PathBuf, FrameworkError> {
         // TODO: Decide whether to make either the default datadir, or every datadir,
-        // chain-specific.
+        //       chain-specific.
+        //       https://github.com/zcash/wallet/issues/250
         if let Some(datadir) = &self.datadir {
             Ok(datadir.clone())
         } else {
