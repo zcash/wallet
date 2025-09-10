@@ -65,6 +65,10 @@ pub(crate) enum ZalletCmd {
     /// Communicate with a Zallet wallet's JSON-RPC interface.
     #[cfg(feature = "rpc-cli")]
     Rpc(RpcCliCmd),
+
+    /// Commands for repairing broken wallet states.
+    #[command(subcommand)]
+    Repair(RepairCmd),
 }
 
 /// `start` subcommand
@@ -160,4 +164,29 @@ pub(crate) struct RpcCliCmd {
 
     /// Any parameters for the command.
     pub(crate) params: Vec<String>,
+}
+
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command, Runnable))]
+pub(crate) enum RepairCmd {
+    TruncateWallet(TruncateWalletCmd),
+}
+
+/// Truncates the wallet database to at most the specified height.
+///
+/// Upon successful truncation, this method returns the height to which the data store was
+/// actually truncated. `zallet start` will then sync the wallet as if this height was the
+/// last observed chain tip height.
+///
+/// There may be restrictions on heights to which it is possible to truncate.
+/// Specifically, it will only be possible to truncate to heights at which is is possible
+/// to create a witness given the current state of the wallet's note commitment tree.
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct TruncateWalletCmd {
+    /// The maximum height the wallet may treat as a mined block.
+    ///
+    /// Zallet may choose a lower block height to which the data store will be truncated
+    /// if it is not possible to truncate exactly to the specified height.
+    pub(crate) max_height: u32,
 }
