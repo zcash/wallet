@@ -13,3 +13,4 @@ The following sections provide in-depth information on the different commands av
 - [`zallet generate-mnemonic`](generate-mnemonic.md)
 - [`zallet import-mnemonic`](import-mnemonic.md)
 - [`zallet rpc`](rpc.md)
+- [`zallet repair` subcommands](repair/README.md)

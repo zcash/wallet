@@ -18,5 +18,7 @@
   - [generate-mnemonic](cli/generate-mnemonic.md)
   - [import-mnemonic](cli/import-mnemonic.md)
   - [rpc](cli/rpc.md)
+  - [repair](cli/repair/README.md)
+    - [truncate-wallet](cli/repair/truncate-wallet.md)
 - [Migrating from `zcashd`](zcashd/README.md)
   - [JSON-RPC altered semantics](zcashd/json_rpc.md)
