@@ -21,7 +21,7 @@ use zcash_protocol::{
     ShieldedProtocol, TxId,
     consensus::{BlockHeight, Parameters},
     memo::Memo,
-    value::{BalanceError, ZatBalance, Zatoshis},
+    value::{BalanceError, Zatoshis},
 };
 use zebra_rpc::methods::GetRawTransaction;
 
@@ -29,8 +29,14 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{JsonZec, JsonZecBalance, parse_txid, value_from_zat_balance, value_from_zatoshis},
+        utils::{JsonZec, parse_txid, value_from_zatoshis},
     },
+};
+
+#[cfg(zallet_build = "wallet")]
+use {
+    crate::components::json_rpc::utils::{JsonZecBalance, value_from_zat_balance},
+    zcash_protocol::value::ZatBalance,
 };
 
 const POOL_TRANSPARENT: &str = "transparent";
@@ -109,6 +115,7 @@ pub(crate) struct Transaction {
     outputs: Vec<Output>,
 
     /// A map from an involved account's UUID to the effects of this transaction on it.
+    #[cfg(zallet_build = "wallet")]
     accounts: BTreeMap<String, AccountEffect>,
 }
 
@@ -245,6 +252,7 @@ struct Output {
 }
 
 /// The effect of a transaction on an account's balance.
+#[cfg(zallet_build = "wallet")]
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 struct AccountEffect {
     /// The net change of the account's balance, in ZEC.
@@ -785,6 +793,7 @@ pub(crate) async fn call(
         // rejected by the backing full node.
         .map_err(|e| LegacyCode::Database.with_message(format!("Failed to compute fee: {e}")))?;
 
+    #[cfg(zallet_build = "wallet")]
     let accounts = wallet.with_raw(|conn| {
         let mut stmt = conn
             .prepare(
@@ -835,6 +844,7 @@ pub(crate) async fn call(
         generated: wallet_tx_info.generated,
         spends,
         outputs,
+        #[cfg(zallet_build = "wallet")]
         accounts,
     })
 }

@@ -3,10 +3,10 @@ use rusqlite::Connection;
 use zcash_client_sqlite::{WalletDb, util::SystemClock, wallet::init::WalletMigrator};
 use zcash_protocol::consensus::{self, Parameters};
 
-use crate::{
-    components::{database, keystore},
-    network::Network,
-};
+use crate::{components::database, network::Network};
+
+#[cfg(zallet_build = "wallet")]
+use crate::components::keystore;
 
 #[test]
 fn verify_schema() {
@@ -51,8 +51,11 @@ fn verify_schema() {
         &[
             database::ext::TABLE_VERSION_METADATA,
             database::ext::TABLE_WALLET_METADATA,
+            #[cfg(zallet_build = "wallet")]
             keystore::db::TABLE_AGE_RECIPIENTS,
+            #[cfg(zallet_build = "wallet")]
             keystore::db::TABLE_LEGACY_SEEDS,
+            #[cfg(zallet_build = "wallet")]
             keystore::db::TABLE_MNEMONICS,
         ],
     );

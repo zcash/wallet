@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt;
 
 use jsonrpsee::{
@@ -8,22 +7,30 @@ use jsonrpsee::{
 use rust_decimal::Decimal;
 use schemars::{JsonSchema, json_schema};
 use serde::Serialize;
-use zcash_client_backend::data_api::{Account, WalletRead};
 use zcash_client_sqlite::AccountUuid;
 use zcash_protocol::{
     TxId,
-    value::{BalanceError, COIN, ZatBalance, Zatoshis},
+    value::{COIN, ZatBalance, Zatoshis},
 };
-use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
-
-use crate::components::{database::DbConnection, keystore::KeyStore};
+use zip32::DiversifierIndex;
 
 use super::server::LegacyCode;
 
+#[cfg(zallet_build = "wallet")]
+use {
+    crate::components::{database::DbConnection, keystore::KeyStore},
+    std::collections::HashSet,
+    zcash_client_backend::data_api::{Account, WalletRead},
+    zcash_protocol::value::BalanceError,
+    zip32::fingerprint::SeedFingerprint,
+};
+
 /// The account identifier used for HD derivation of transparent and Sapling addresses via
 /// the legacy `getnewaddress` and `z_getnewaddress` code paths.
+#[cfg(zallet_build = "wallet")]
 const ZCASH_LEGACY_ACCOUNT: u32 = 0x7fff_ffff;
 
+#[cfg(zallet_build = "wallet")]
 pub(super) async fn ensure_wallet_is_unlocked(keystore: &KeyStore) -> RpcResult<()> {
     // TODO: Consider returning some kind of unlock guard to ensure the caller doesn't
     // need to race against the relock timeout.
@@ -45,12 +52,14 @@ pub(crate) fn parse_txid(txid_str: &str) -> RpcResult<TxId> {
 }
 
 /// Parses the `seedfp` parameter present in many wallet RPCs.
+#[cfg(zallet_build = "wallet")]
 pub(super) fn parse_seedfp_parameter(seedfp: &str) -> RpcResult<SeedFingerprint> {
     parse_seedfp(seedfp).map_err(|e| {
         LegacyCode::InvalidParameter.with_message(format!("Invalid seed fingerprint: {e:?}"))
     })
 }
 
+#[cfg(zallet_build = "wallet")]
 pub(crate) fn parse_seedfp(
     seedfp: &str,
 ) -> Result<SeedFingerprint, zip32::fingerprint::ParseError> {
@@ -69,12 +78,14 @@ pub(crate) fn parse_seedfp(
 
 /// Parses the `account` parameter present in many wallet RPCs.
 pub(super) async fn parse_account_parameter(
-    wallet: &DbConnection,
-    keystore: &KeyStore,
+    #[cfg(zallet_build = "wallet")] wallet: &DbConnection,
+    #[cfg(zallet_build = "wallet")] keystore: &KeyStore,
     account: &JsonValue,
 ) -> RpcResult<AccountUuid> {
     match account {
         // This might be a ZIP 32 account index (how zcashd accepted it).
+        // Disallowed for merchant terminals (no need to inherit this cruft).
+        #[cfg(zallet_build = "wallet")]
         JsonValue::Number(n) => {
             let zip32_account_index = n
                 .as_u64()
@@ -147,6 +158,7 @@ pub(super) fn parse_diversifier_index(diversifier_index: u128) -> RpcResult<Dive
 }
 
 /// Equivalent of `AmountFromValue` in `zcashd`, permitting the same input formats.
+#[cfg(zallet_build = "wallet")]
 pub(super) fn zatoshis_from_value(value: &JsonValue) -> RpcResult<Zatoshis> {
     let amount_str = match value {
         JsonValue::String(s) => Ok(s.as_str()),
@@ -241,9 +253,11 @@ impl JsonSchema for JsonZecBalance {
 ///  9223372036854775807  (1<<63)-1  (max int64_t)
 ///  9999999999999999999  (10^19)-1  (would overflow)
 /// ```
+#[cfg(zallet_build = "wallet")]
 const UPPER_BOUND: i64 = 1000000000000000000 - 1;
 
 /// Helper function for [`parse_fixed_point`].
+#[cfg(zallet_build = "wallet")]
 fn process_mantissa_digit(ch: char, mantissa: &mut i64, mantissa_tzeros: &mut i64) -> bool {
     if ch == '0' {
         *mantissa_tzeros += 1;
@@ -263,6 +277,7 @@ fn process_mantissa_digit(ch: char, mantissa: &mut i64, mantissa_tzeros: &mut i6
 /// Equivalent to [`ParseFixedPoint`] in `zcashd`. Bleh.
 ///
 /// [`ParseFixedPoint`]: https://github.com/zcash/zcash/blob/1f1f7a385adc048154e7f25a3a0de76f3658ca09/src/util/strencodings.cpp#L418
+#[cfg(zallet_build = "wallet")]
 fn parse_fixed_point(mut val: &str, decimals: i64) -> Option<i64> {
     let mut mantissa = 0i64;
     let mut exponent = 0i64;
@@ -403,13 +418,19 @@ fn parse_fixed_point(mut val: &str, decimals: i64) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
-    use zcash_protocol::value::{COIN, ZatBalance, Zatoshis};
-    use zip32::fingerprint::SeedFingerprint;
+    use zcash_protocol::value::{COIN, ZatBalance};
 
-    use super::{parse_fixed_point, zatoshis_from_value};
+    use crate::components::json_rpc::utils::value_from_zat_balance;
 
-    use crate::components::json_rpc::utils::{parse_seedfp_parameter, value_from_zat_balance};
+    #[cfg(zallet_build = "wallet")]
+    use {
+        super::{parse_fixed_point, zatoshis_from_value},
+        crate::components::json_rpc::utils::parse_seedfp_parameter,
+        zcash_protocol::value::Zatoshis,
+        zip32::fingerprint::SeedFingerprint,
+    };
 
+    #[cfg(zallet_build = "wallet")]
     #[test]
     fn seed_fingerprint_roundtrip() {
         let seedfp = SeedFingerprint::from_seed(&[0; 32]).unwrap();
@@ -456,6 +477,7 @@ mod tests {
         assert_eq!(format(coin / 100000000), "0.00000001");
     }
 
+    #[cfg(zallet_build = "wallet")]
     #[test]
     fn rpc_parse_monetary_values() {
         let zat = |v| Ok(Zatoshis::const_from_u64(v));
@@ -515,6 +537,7 @@ mod tests {
         assert!(zatoshis_from_value(&"93e+9".into()).is_err()); //overflow error
     }
 
+    #[cfg(zallet_build = "wallet")]
     #[test]
     fn test_parse_fixed_point() {
         assert_eq!(parse_fixed_point("0", 8), Some(0));

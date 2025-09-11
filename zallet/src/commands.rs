@@ -21,12 +21,17 @@ use crate::{
 };
 
 mod example_config;
-mod generate_mnemonic;
-mod import_mnemonic;
-mod init_wallet_encryption;
-mod migrate_zcash_conf;
 mod repair;
 mod start;
+
+#[cfg(zallet_build = "wallet")]
+mod generate_mnemonic;
+#[cfg(zallet_build = "wallet")]
+mod import_mnemonic;
+#[cfg(zallet_build = "wallet")]
+mod init_wallet_encryption;
+#[cfg(zallet_build = "wallet")]
+mod migrate_zcash_conf;
 
 #[cfg(feature = "rpc-cli")]
 pub(crate) mod rpc_cli;

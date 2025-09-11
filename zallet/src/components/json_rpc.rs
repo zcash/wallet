@@ -14,10 +14,15 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-use super::{TaskHandle, chain_view::ChainView, database::Database, keystore::KeyStore};
+use super::{TaskHandle, chain_view::ChainView, database::Database};
 
+#[cfg(zallet_build = "wallet")]
+use super::keystore::KeyStore;
+
+#[cfg(zallet_build = "wallet")]
 mod asyncop;
 pub(crate) mod methods;
+#[cfg(zallet_build = "wallet")]
 mod payments;
 pub(crate) mod server;
 pub(crate) mod utils;
@@ -29,7 +34,7 @@ impl JsonRpc {
     pub(crate) async fn spawn(
         config: &ZalletConfig,
         db: Database,
-        keystore: KeyStore,
+        #[cfg(zallet_build = "wallet")] keystore: KeyStore,
         chain_view: ChainView,
     ) -> Result<TaskHandle, Error> {
         let rpc = config.rpc.clone();
@@ -42,7 +47,14 @@ impl JsonRpc {
             }
             info!("Spawning RPC server");
             info!("Trying to open RPC endpoint at {}...", rpc.bind[0]);
-            server::spawn(rpc, db, keystore, chain_view).await
+            server::spawn(
+                rpc,
+                db,
+                #[cfg(zallet_build = "wallet")]
+                keystore,
+                chain_view,
+            )
+            .await
         } else {
             warn!("Configure `rpc.bind` to start the RPC server");
             // Emulate a normally-operating ongoing task to simplify subsequent logic.

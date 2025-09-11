@@ -14,6 +14,7 @@ use crate::{
     fl,
 };
 
+#[cfg(zallet_build = "wallet")]
 use super::keystore;
 
 mod connection;
@@ -31,9 +32,12 @@ pub(crate) type DbHandle = deadpool::managed::Object<connection::WalletManager>;
 fn all_external_migrations(
     network_type: NetworkType,
 ) -> Vec<Box<dyn RusqliteMigration<Error = WalletMigrationError>>> {
-    ext::migrations::all(network_type)
-        .chain(keystore::db::migrations::all())
-        .collect()
+    let migrations = ext::migrations::all(network_type);
+
+    #[cfg(zallet_build = "wallet")]
+    let migrations = migrations.chain(keystore::db::migrations::all());
+
+    migrations.collect()
 }
 
 #[derive(Clone)]

@@ -6,14 +6,14 @@ use tokio::{pin, select};
 use crate::{
     cli::StartCmd,
     commands::AsyncRunnable,
-    components::{
-        chain_view::ChainView, database::Database, json_rpc::JsonRpc, keystore::KeyStore,
-        sync::WalletSync,
-    },
+    components::{chain_view::ChainView, database::Database, json_rpc::JsonRpc, sync::WalletSync},
     config::ZalletConfig,
     error::Error,
     prelude::*,
 };
+
+#[cfg(zallet_build = "wallet")]
+use crate::components::keystore::KeyStore;
 
 impl AsyncRunnable for StartCmd {
     async fn run(&self) -> Result<(), Error> {
@@ -33,23 +33,32 @@ impl AsyncRunnable for StartCmd {
             warn_unused("builder.tx_expiry_delta");
         }
         // TODO: https://github.com/zcash/wallet/issues/138
+        #[cfg(zallet_build = "wallet")]
         if config.features.legacy_pool_seed_fingerprint.is_some() {
             warn_unused("features.legacy_pool_seed_fingerprint");
         }
         // TODO: https://github.com/zcash/wallet/issues/201
+        #[cfg(zallet_build = "wallet")]
         if config.keystore.require_backup.is_some() {
             warn_unused("keystore.require_backup");
         }
 
         let db = Database::open(&config).await?;
+        #[cfg(zallet_build = "wallet")]
         let keystore = KeyStore::new(&config, db.clone())?;
 
         // Start monitoring the chain.
         let (chain_view, chain_indexer_task_handle) = ChainView::new(&config).await?;
 
         // Launch RPC server.
-        let rpc_task_handle =
-            JsonRpc::spawn(&config, db.clone(), keystore, chain_view.clone()).await?;
+        let rpc_task_handle = JsonRpc::spawn(
+            &config,
+            db.clone(),
+            #[cfg(zallet_build = "wallet")]
+            keystore,
+            chain_view.clone(),
+        )
+        .await?;
 
         // Start the wallet sync process.
         let (

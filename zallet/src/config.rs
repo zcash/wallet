@@ -3,19 +3,23 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::net::SocketAddr;
-use std::num::{NonZeroU16, NonZeroU32};
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
 use serde::{Deserialize, Serialize};
 use zcash_client_backend::data_api::wallet::ConfirmationsPolicy;
-use zcash_client_backend::fees::SplitPolicy;
-use zcash_protocol::{consensus::NetworkType, value::Zatoshis};
-use zip32::fingerprint::SeedFingerprint;
+use zcash_protocol::consensus::NetworkType;
 
 use crate::commands::{lock_datadir, resolve_datadir_path};
 use crate::network::{Network, RegTestNuParam};
+
+#[cfg(zallet_build = "wallet")]
+use {
+    std::num::NonZeroU16, zcash_client_backend::fees::SplitPolicy, zcash_protocol::value::Zatoshis,
+    zip32::fingerprint::SeedFingerprint,
+};
 
 /// Zallet Configuration
 ///
@@ -54,9 +58,11 @@ pub struct ZalletConfig {
     pub indexer: IndexerSection,
 
     /// Settings for the key store.
+    #[cfg(zallet_build = "wallet")]
     pub keystore: KeyStoreSection,
 
     /// Settings for how Zallet manages notes.
+    #[cfg(zallet_build = "wallet")]
     pub note_management: NoteManagementSection,
 
     /// Settings for the JSON-RPC interface.
@@ -79,6 +85,7 @@ impl ZalletConfig {
     }
 
     /// Returns the path to the encryption identity.
+    #[cfg(zallet_build = "wallet")]
     pub(crate) fn encryption_identity(&self) -> PathBuf {
         resolve_datadir_path(self.datadir(), self.keystore.encryption_identity())
     }
@@ -373,6 +380,7 @@ pub struct FeaturesSection {
     /// every `zcashd` wallet in production in 2025 had a single mnemonic seed phrase in
     /// its wallet, we use its ZIP 32 seed fingerprint as the `zcashd` wallet identifier
     /// in this setting.
+    #[cfg(zallet_build = "wallet")]
     #[serde(default, with = "seedfp")]
     #[documented_fields(trim = false)]
     pub legacy_pool_seed_fingerprint: Option<SeedFingerprint>,
@@ -384,6 +392,7 @@ pub struct FeaturesSection {
     pub experimental: ExperimentalFeaturesSection,
 }
 
+#[cfg(zallet_build = "wallet")]
 mod seedfp {
     use serde::{Deserialize, Deserializer, Serializer, de::Error};
     use zip32::fingerprint::SeedFingerprint;
@@ -411,6 +420,7 @@ impl Default for FeaturesSection {
     fn default() -> Self {
         Self {
             as_of_version: crate::build::PKG_VERSION.into(),
+            #[cfg(zallet_build = "wallet")]
             legacy_pool_seed_fingerprint: None,
             deprecated: Default::default(),
             experimental: Default::default(),
@@ -485,6 +495,7 @@ impl IndexerSection {
 }
 
 /// Settings for the key store.
+#[cfg(zallet_build = "wallet")]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct KeyStoreSection {
@@ -502,6 +513,7 @@ pub struct KeyStoreSection {
     pub require_backup: Option<bool>,
 }
 
+#[cfg(zallet_build = "wallet")]
 impl KeyStoreSection {
     /// Path to the age identity file that encrypts key material.
     ///
@@ -528,6 +540,7 @@ impl KeyStoreSection {
 /// Note management configuration section.
 ///
 /// TODO: Decide whether this should be part of `[builder]`.
+#[cfg(zallet_build = "wallet")]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct NoteManagementSection {
@@ -542,6 +555,7 @@ pub struct NoteManagementSection {
     pub target_note_count: Option<NonZeroU16>,
 }
 
+#[cfg(zallet_build = "wallet")]
 impl NoteManagementSection {
     /// The minimum value that Zallet should target for each shielded note in the wallet.
     ///
@@ -639,12 +653,16 @@ impl ZalletConfig {
             indexer("validator_user", &conf.indexer.validator_user),
             indexer("validator_password", &conf.indexer.validator_password),
             indexer("db_path", conf.indexer.db_path()),
+            #[cfg(zallet_build = "wallet")]
             keystore("encryption_identity", conf.keystore.encryption_identity()),
+            #[cfg(zallet_build = "wallet")]
             keystore("require_backup", conf.keystore.require_backup()),
+            #[cfg(zallet_build = "wallet")]
             note_management(
                 "min_note_value",
                 conf.note_management.min_note_value().into_u64(),
             ),
+            #[cfg(zallet_build = "wallet")]
             note_management(
                 "target_note_count",
                 conf.note_management.target_note_count(),
@@ -665,7 +683,9 @@ impl ZalletConfig {
         const FEATURES_DEPRECATED: &str = "features.deprecated";
         const FEATURES_EXPERIMENTAL: &str = "features.experimental";
         const INDEXER: &str = "indexer";
+        #[cfg(zallet_build = "wallet")]
         const KEYSTORE: &str = "keystore";
+        #[cfg(zallet_build = "wallet")]
         const NOTE_MANAGEMENT: &str = "note_management";
         const RPC: &str = "rpc";
         fn builder<T: Serialize>(
@@ -710,12 +730,14 @@ impl ZalletConfig {
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(INDEXER, f, d)
         }
+        #[cfg(zallet_build = "wallet")]
         fn keystore<T: Serialize>(
             f: &'static str,
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(KEYSTORE, f, d)
         }
+        #[cfg(zallet_build = "wallet")]
         fn note_management<T: Serialize>(
             f: &'static str,
             d: T,
@@ -860,7 +882,9 @@ impl ZalletConfig {
                 EXTERNAL => write_section::<ExternalSection>(&mut config, field_name, &sec_def),
                 FEATURES => write_section::<FeaturesSection>(&mut config, field_name, &sec_def),
                 INDEXER => write_section::<IndexerSection>(&mut config, field_name, &sec_def),
+                #[cfg(zallet_build = "wallet")]
                 KEYSTORE => write_section::<KeyStoreSection>(&mut config, field_name, &sec_def),
+                #[cfg(zallet_build = "wallet")]
                 NOTE_MANAGEMENT => {
                     write_section::<NoteManagementSection>(&mut config, field_name, &sec_def)
                 }
