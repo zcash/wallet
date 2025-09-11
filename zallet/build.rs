@@ -9,7 +9,6 @@ use clap_complete::{Shell, generate_to};
 use clap_mangen::Man;
 use flate2::{Compression, write::GzEncoder};
 use i18n_embed::unic_langid::LanguageIdentifier;
-use quote::ToTokens;
 use shadow_rs::ShadowBuilder;
 
 const JSON_RPC_METHODS_RS: &str = "src/components/json_rpc/methods.rs";
@@ -42,6 +41,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     // within the buildscript.
     println!("cargo:rustc-cfg=outside_buildscript");
 
+    // If `zallet_build` is not set to a known value, use the default "wallet" build.
+    #[cfg(not(any(zallet_build = "merchant_terminal", zallet_build = "wallet")))]
+    println!("cargo:rustc-cfg=zallet_build=\"wallet\"");
+
     let out_dir = match env::var_os("OUT_DIR") {
         None => return Ok(()),
         Some(out_dir) => PathBuf::from(out_dir),
@@ -59,6 +62,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Collect build-time information.
     ShadowBuilder::builder().build()?;
 
+    // TODO: Improve the build script so this works with non-wallet Zallet builds.
+    #[cfg(not(zallet_build = "merchant_terminal"))]
     generate_rpc_openrpc(&out_dir)?;
 
     // Generate the completions in English, because these aren't easily localizable.
@@ -156,7 +161,10 @@ impl Cli {
     }
 }
 
+#[cfg(not(zallet_build = "merchant_terminal"))]
 fn generate_rpc_openrpc(out_dir: &Path) -> Result<(), Box<dyn Error>> {
+    use quote::ToTokens;
+
     // Parse the source file containing the `Rpc` trait.
     let methods_rs = fs::read_to_string(JSON_RPC_METHODS_RS)?;
     let methods_ast = syn::parse_file(&methods_rs)?;
@@ -169,13 +177,21 @@ fn generate_rpc_openrpc(out_dir: &Path) -> Result<(), Box<dyn Error>> {
             _ => None,
         })
         .expect("present");
+    let wallet_rpc_trait = methods_ast
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Trait(item_trait) if item_trait.ident == "WalletRpc" => Some(item_trait),
+            _ => None,
+        })
+        .expect("present");
 
     let mut contents = "#[allow(unused_qualifications)]
 pub(super) static METHODS: ::phf::Map<&str, RpcMethod> = ::phf::phf_map! {
 "
     .to_string();
 
-    for item in &rpc_trait.items {
+    for item in rpc_trait.items.iter().chain(&wallet_rpc_trait.items) {
         if let syn::TraitItem::Fn(method) = item {
             // Find methods via their `#[method(name = "command")]` attribute.
             let mut command = None;

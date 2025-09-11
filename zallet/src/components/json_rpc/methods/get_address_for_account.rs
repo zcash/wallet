@@ -18,8 +18,10 @@ use crate::components::{
         server::LegacyCode,
         utils::{parse_account_parameter, parse_diversifier_index},
     },
-    keystore::KeyStore,
 };
+
+#[cfg(zallet_build = "wallet")]
+use crate::components::keystore::KeyStore;
 
 /// Response to a `z_getaddressforaccount` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -53,12 +55,19 @@ pub(super) const PARAM_DIVERSIFIER_INDEX_DESC: &str = "A specific diversifier in
 
 pub(crate) async fn call(
     wallet: &mut DbConnection,
-    keystore: KeyStore,
+    #[cfg(zallet_build = "wallet")] keystore: KeyStore,
     account: JsonValue,
     receiver_types: Option<Vec<String>>,
     diversifier_index: Option<u128>,
 ) -> Response {
-    let account_id = parse_account_parameter(wallet, &keystore, &account).await?;
+    let account_id = parse_account_parameter(
+        #[cfg(zallet_build = "wallet")]
+        wallet,
+        #[cfg(zallet_build = "wallet")]
+        &keystore,
+        &account,
+    )
+    .await?;
 
     let (receiver_types, request) = match receiver_types {
         Some(receiver_types) if !receiver_types.is_empty() => {

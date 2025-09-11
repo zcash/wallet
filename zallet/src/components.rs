@@ -10,9 +10,11 @@ use crate::error::Error;
 pub(crate) mod chain_view;
 pub(crate) mod database;
 pub(crate) mod json_rpc;
-pub(crate) mod keystore;
 pub(crate) mod sync;
 pub(crate) mod tracing;
+
+#[cfg(zallet_build = "wallet")]
+pub(crate) mod keystore;
 
 /// A handle to a background task spawned by a component.
 ///

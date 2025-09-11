@@ -13,12 +13,12 @@
     unused_qualifications
 )]
 
-use std::io::Write;
-
-use abscissa_core::{fs::File, testing::prelude::*};
-use age::secrecy::ExposeSecret;
+use abscissa_core::testing::prelude::*;
 use once_cell::sync::Lazy;
 use tempfile::tempdir;
+
+#[cfg(zallet_build = "wallet")]
+use {abscissa_core::fs::File, age::secrecy::ExposeSecret, std::io::Write};
 
 /// Executes your application binary via `cargo run`.
 ///
@@ -49,6 +49,7 @@ fn version_no_args() {
     cmd.stdout().expect_regex(r"\A\w+ [\d\.\-]+\z");
 }
 
+#[cfg(zallet_build = "wallet")]
 #[test]
 fn setup_new_wallet() {
     let datadir = tempdir().unwrap();

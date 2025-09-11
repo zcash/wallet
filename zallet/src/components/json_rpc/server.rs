@@ -7,12 +7,18 @@ use jsonrpsee::{
 use tokio::task::JoinHandle;
 
 use crate::{
-    components::{chain_view::ChainView, database::Database, keystore::KeyStore},
+    components::{chain_view::ChainView, database::Database},
     config::RpcSection,
     error::{Error, ErrorKind},
 };
 
 use super::methods::{RpcImpl, RpcServer as _};
+
+#[cfg(zallet_build = "wallet")]
+use {
+    super::methods::{WalletRpcImpl, WalletRpcServer},
+    crate::components::keystore::KeyStore,
+};
 
 mod error;
 pub(crate) use error::LegacyCode;
@@ -25,7 +31,7 @@ type ServerTask = JoinHandle<Result<(), Error>>;
 pub(crate) async fn spawn(
     config: RpcSection,
     wallet: Database,
-    keystore: KeyStore,
+    #[cfg(zallet_build = "wallet")] keystore: KeyStore,
     chain_view: ChainView,
 ) -> Result<ServerTask, Error> {
     // Caller should make sure `bind` only contains a single address (for now).
@@ -33,7 +39,14 @@ pub(crate) async fn spawn(
     let listen_addr = config.bind[0];
 
     // Initialize the RPC methods.
-    let rpc_impl = RpcImpl::new(wallet, keystore, chain_view);
+    #[cfg(zallet_build = "wallet")]
+    let wallet_rpc_impl = WalletRpcImpl::new(wallet.clone(), keystore.clone(), chain_view.clone());
+    let rpc_impl = RpcImpl::new(
+        wallet,
+        #[cfg(zallet_build = "wallet")]
+        keystore,
+        chain_view,
+    );
 
     let http_middleware_layer = http_request_compatibility::HttpRequestMiddlewareLayer::new();
 
@@ -57,7 +70,12 @@ pub(crate) async fn spawn(
         .map_err(|e| ErrorKind::Init.context(e))?;
     info!("Opened RPC endpoint at {}", addr);
 
-    let rpc_module = rpc_impl.into_rpc();
+    #[allow(unused_mut)]
+    let mut rpc_module = rpc_impl.into_rpc();
+    #[cfg(zallet_build = "wallet")]
+    rpc_module
+        .merge(wallet_rpc_impl.into_rpc())
+        .map_err(|e| ErrorKind::Init.context(e))?;
 
     let server_task = crate::spawn!("JSON-RPC server", async move {
         server_instance.start(rpc_module).stopped().await;

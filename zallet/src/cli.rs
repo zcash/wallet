@@ -51,15 +51,19 @@ pub(crate) enum ZalletCmd {
     ExampleConfig(ExampleConfigCmd),
 
     /// Generate a `zallet.toml` config from an existing `zcash.conf` file.
+    #[cfg(zallet_build = "wallet")]
     MigrateZcashConf(MigrateZcashConfCmd),
 
     /// Initialize wallet encryption.
+    #[cfg(zallet_build = "wallet")]
     InitWalletEncryption(InitWalletEncryptionCmd),
 
     /// Generate a BIP 39 mnemonic phrase and store it in the wallet.
+    #[cfg(zallet_build = "wallet")]
     GenerateMnemonic(GenerateMnemonicCmd),
 
     /// Import a BIP 39 mnemonic phrase into the wallet.
+    #[cfg(zallet_build = "wallet")]
     ImportMnemonic(ImportMnemonicCmd),
 
     /// Communicate with a Zallet wallet's JSON-RPC interface.
@@ -97,6 +101,7 @@ pub(crate) struct ExampleConfigCmd {
 }
 
 /// `migrate-zcash-conf` subcommand
+#[cfg(zallet_build = "wallet")]
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct MigrateZcashConfCmd {
@@ -131,16 +136,19 @@ pub(crate) struct MigrateZcashConfCmd {
 }
 
 /// `init-wallet-encryption` subcommand
+#[cfg(zallet_build = "wallet")]
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct InitWalletEncryptionCmd {}
 
 /// `generate-mnemonic` subcommand
+#[cfg(zallet_build = "wallet")]
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct GenerateMnemonicCmd {}
 
 /// `import-mnemonic` subcommand
+#[cfg(zallet_build = "wallet")]
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct ImportMnemonicCmd {}

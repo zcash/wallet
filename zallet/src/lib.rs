@@ -13,6 +13,9 @@
     unused_qualifications
 )]
 
+#[cfg(all(zallet_build = "wallet", zallet_build = "merchant_terminal"))]
+compile_error!("zallet_build must only be set to a single value");
+
 pub mod application;
 mod cli;
 mod commands;

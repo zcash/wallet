@@ -62,6 +62,11 @@ jobs:
             os: ubuntu-latest
             rustflags: '--cfg zcash_unstable="nu7"'
 
+          - target: Linux
+            state: merchant_terminal
+            os: ubuntu-latest
+            rustflags: '--cfg zallet_build="merchant_terminal"'
+
         exclude:
           - target: macOS
             state: NU7
