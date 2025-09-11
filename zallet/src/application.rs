@@ -1,6 +1,7 @@
 //! Zallet Abscissa Application
 
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use abscissa_core::{
     Application, Component, FrameworkError, StandardPaths,
@@ -15,6 +16,9 @@ use crate::{cli::EntryPoint, components::tracing::Tracing, config::ZalletConfig,
 
 /// Application state
 pub static APP: AppCell<ZalletApp> = AppCell::new();
+
+/// When Zallet is shutting down, wait at most this long for Tokio tasks to finish.
+const TOKIO_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Zallet Application
 #[derive(Debug)]
@@ -69,17 +73,20 @@ impl Application for ZalletApp {
             Tracing::new(self.term_colors(command))
                 .expect("tracing subsystem failed to initialize"),
         ));
-        components.push(Box::new(TokioComponent::from(
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .thread_name_fn(|| {
-                    static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
-                    let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
-                    format!("tokio-worker-{id}")
-                })
-                .build()
-                .expect("failed to build Tokio runtime"),
-        )));
+        components.push(Box::new(
+            TokioComponent::from(
+                tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .thread_name_fn(|| {
+                        static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+                        let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+                        format!("tokio-worker-{id}")
+                    })
+                    .build()
+                    .expect("failed to build Tokio runtime"),
+            )
+            .with_shutdown_timeout(TOKIO_SHUTDOWN_TIMEOUT),
+        ));
         self.state.components_mut().register(components)
     }
 
