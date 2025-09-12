@@ -161,10 +161,6 @@ pub(crate) async fn call(
             get_account_for_address(wallet.as_ref(), &address)
         }
     }?;
-    let derivation = account.source().key_derivation().ok_or_else(|| {
-        LegacyCode::InvalidAddressOrKey
-            .with_static("Invalid from address, no payment source found for address.")
-    })?;
 
     let privacy_policy = match privacy_policy.as_deref() {
         Some("LegacyCompat") => Err(LegacyCode::InvalidParameter
@@ -191,24 +187,6 @@ pub(crate) async fn call(
         }
     };
 
-    // Fetch spending key last, to avoid a keystore decryption if unnecessary.
-    let seed = keystore
-        .decrypt_seed(derivation.seed_fingerprint())
-        .await
-        .map_err(|e| match e.kind() {
-            // TODO: Improve internal error types.
-            crate::error::ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
-                LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
-            }
-            _ => LegacyCode::Database.with_message(e.to_string()),
-        })?;
-    let usk = UnifiedSpendingKey::from_seed(
-        wallet.params(),
-        seed.expose_secret(),
-        derivation.account_index(),
-    )
-    .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
-
     Ok((
         Some(ContextInfo::new(
             "z_sendmany",
@@ -220,12 +198,12 @@ pub(crate) async fn call(
         )),
         run(
             wallet,
+            keystore,
             chain,
-            account.id(),
+            account,
             request,
             confirmations_policy,
             privacy_policy,
-            usk,
         ),
     ))
 }
@@ -239,15 +217,14 @@ pub(crate) async fn call(
 /// 2. #1360 Note selection is not optimal.
 /// 3. #1277 Spendable notes are not locked, so an operation running in parallel
 ///    could also try to use them.
-async fn run(
+async fn run<A: Account<AccountId = AccountUuid>>(
     mut wallet: DbHandle,
+    keystore: KeyStore,
     chain: FetchServiceSubscriber,
-    spend_from_account: AccountUuid,
+    spend_from_account: A,
     request: TransactionRequest,
     confirmations_policy: ConfirmationsPolicy,
     privacy_policy: PrivacyPolicy,
-    // TODO: Support legacy transparent pool of funds. https://github.com/zcash/wallet/issues/138
-    usk: UnifiedSpendingKey,
 ) -> RpcResult<SendResult> {
     let params = *wallet.params();
 
@@ -329,7 +306,7 @@ async fn run(
     let proposal = propose_transfer::<_, _, _, _, Infallible>(
         wallet.as_mut(),
         &params,
-        spend_from_account,
+        spend_from_account.id(),
         &input_selector,
         &change_strategy,
         request,
@@ -385,14 +362,57 @@ async fn run(
 
     let prover = LocalTxProver::bundled();
 
+    let derivation = spend_from_account
+        .source()
+        .key_derivation()
+        .ok_or_else(|| {
+            LegacyCode::InvalidAddressOrKey
+                .with_static("Invalid from address, no payment source found for address.")
+        })?;
+    // Fetch spending key last, to avoid a keystore decryption if unnecessary.
+    let seed = keystore
+        .decrypt_seed(derivation.seed_fingerprint())
+        .await
+        .map_err(|e| match e.kind() {
+            // TODO: Improve internal error types.
+            crate::error::ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
+                LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
+            }
+            _ => LegacyCode::Database.with_message(e.to_string()),
+        })?;
+    let usk = UnifiedSpendingKey::from_seed(
+        wallet.params(),
+        seed.expose_secret(),
+        derivation.account_index(),
+    )
+    .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
+
+    let mut standalone_keys = HashMap::new();
+    for step in proposal.steps() {
+        for input in step.transparent_inputs() {
+            if let Some(address) = input.txout().script_pubkey().address() {
+                let secret_key = keystore
+                    .decrypt_standalone_transparent_key(&address)
+                    .await
+                    .map_err(|e| match e.kind() {
+                        // TODO: Improve internal error types.
+                        crate::error::ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
+                            LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
+                        }
+                        _ => LegacyCode::Database.with_message(e.to_string()),
+                    })?;
+                standalone_keys.insert(address, secret_key);
+            }
+        }
+    }
+
     let (wallet, txids) = crate::spawn_blocking!("z_sendmany prover", move || {
         create_proposed_transactions::<_, _, Infallible, _, Infallible, _>(
             wallet.as_mut(),
             &params,
             &prover,
             &prover,
-            // TODO: Look up spending keys for imported transparent addresses used in the proposal.
-            &SpendingKeys::new(usk, HashMap::new()),
+            &SpendingKeys::new(usk, standalone_keys),
             OvkPolicy::Sender,
             &proposal,
         )

@@ -124,6 +124,8 @@ use tokio::{
     task::JoinHandle,
     time,
 };
+use transparent::address::TransparentAddress;
+use zcash_keys::address::Address;
 use zip32::fingerprint::SeedFingerprint;
 
 use crate::network::Network;
@@ -658,6 +660,41 @@ impl KeyStore {
 
         Ok(seed)
     }
+
+    pub(crate) async fn decrypt_standalone_transparent_key(
+        &self,
+        address: &TransparentAddress,
+    ) -> Result<secp256k1::SecretKey, Error> {
+        // Acquire a read lock on the identities for decryption.
+        let identities = self.identities.read().await;
+        if identities.is_empty() {
+            return Err(ErrorKind::Generic.context("Wallet is locked").into());
+        }
+
+        let encrypted_key_bytes = self
+            .with_db(|conn, network| {
+                let addr_str = Address::Transparent(*address).encode(network);
+                let encrypted_key_bytes = conn
+                    .query_row(
+                        "SELECT encrypted_key_bytes
+                         FROM ext_zallet_keystore_standalone_transparent_keys ztk
+                         JOIN addresses a ON ztk.pubkey = a.imported_transparent_receiver_pubkey
+                         WHERE a.cached_transparent_receiver_address = :address",
+                        named_params! {
+                            ":address": addr_str,
+                        },
+                        |row| row.get::<_, Vec<u8>>("encrypted_key_bytes"),
+                    )
+                    .map_err(|e| ErrorKind::Generic.context(e))?;
+                Ok(encrypted_key_bytes)
+            })
+            .await?;
+
+        let secret_key =
+            decrypt_standalone_transparent_privkey(&identities, &encrypted_key_bytes[..])?;
+
+        Ok(secret_key)
+    }
 }
 
 fn encrypt_string(
@@ -734,4 +771,32 @@ fn decrypt_string(
     res?;
 
     Ok(mnemonic)
+}
+
+fn decrypt_standalone_transparent_privkey(
+    identities: &[Box<dyn age::Identity + Send + Sync>],
+    ciphertext: &[u8],
+) -> Result<secp256k1::SecretKey, Error> {
+    let decryptor = age::Decryptor::new(ciphertext).map_err(|e| ErrorKind::Generic.context(e))?;
+
+    // The plaintext is always shorter than the ciphertext. Over-allocating the initial
+    // string ensures that no internal re-allocations occur that might leave plaintext
+    // bytes strewn around the heap.
+    let mut buf = Vec::with_capacity(ciphertext.len());
+    let res = decryptor
+        .decrypt(identities.iter().map(|i| i.as_ref() as _))
+        .map_err(|e| ErrorKind::Generic.context(e))?
+        .read(&mut buf);
+
+    // We intentionally do not use `?` on the decryption expression because doing so in
+    // the case of a partial failure could result in part of the secret data being read
+    // into `buf`, which would not then be properly zeroized. Instead, we take ownership
+    // of the buffer in construction of a `SecretVec` to ensure that the memory is
+    // zeroed out when we raise the error on the following line.
+    let buf_secret = SecretVec::new(buf);
+    res.map_err(|e| ErrorKind::Generic.context(e))?;
+    let secret_key = secp256k1::SecretKey::from_slice(buf_secret.expose_secret())
+        .map_err(|e| ErrorKind::Generic.context(e))?;
+
+    Ok(secret_key)
 }
