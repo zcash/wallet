@@ -464,9 +464,9 @@ dependencies = [
 
 [[package]]
 name = "bc-components"
-version = "0.21.2"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ec457b709c34405b86c5f63f5d1bb706715383f6e1082de2a1e02f88b27fd40"
+checksum = "6077faa2e784ba4d60340f87d210c9c88bffd61384e33fb212895f0a912eb775"
 dependencies = [
  "anyhow",
  "bc-crypto",
@@ -513,9 +513,9 @@ dependencies = [
 
 [[package]]
 name = "bc-envelope"
-version = "0.28.1"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75ff0ae3d610f7016ca7d6702f06c0dbfb63780ecb59b81497cfc7f4b134327b"
+checksum = "8a405ac045fd75c54b31fca2df85c38b73b0824bce893faa77154dbefb47dbad"
 dependencies = [
  "anyhow",
  "bc-components",
@@ -559,9 +559,9 @@ dependencies = [
 
 [[package]]
 name = "bc-tags"
-version = "0.2.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbfd44331570ae0d61d92f7d62408b215f6833da9c8d464eb09706a079363ce4"
+checksum = "f849b1705d71e8e1f744f47e66fdff09191b0c4bc06df5477855f155294407b5"
 dependencies = [
  "dcbor",
  "paste",
@@ -569,9 +569,9 @@ dependencies = [
 
 [[package]]
 name = "bc-ur"
-version = "0.9.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c65e33cfacc82d2e6ef819ac08e73a429de526a4b019135fddbd2e14477ec2b2"
+checksum = "c66cbdfcce5175fc68c809990927653535d9b7c28efc9bc301583867a2c2ffde"
 dependencies = [
  "dcbor",
  "thiserror 1.0.69",
@@ -1288,9 +1288,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.14"
+version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06ba6d68e24814cb8de6bb986db8222d3a027d15872cabc0d18817bc3c0e4471"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1446,9 +1446,9 @@ dependencies = [
 
 [[package]]
 name = "dcbor"
-version = "0.19.1"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "402f083d3c2daef249d4c06ef827c8b743ab88536f73dae52201f4de5abb0354"
+checksum = "c9ee71342cca725c77c9fc7cb2e043ab41b130f36d53826b31cc6053a2899bf1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3168,9 +3168,9 @@ dependencies = [
 
 [[package]]
 name = "known-values"
-version = "0.4.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7c3c5085ed0cb90e914af0906adca5fd87dd4af28ab6dc254edca97eee23a73"
+checksum = "80d0b88b8b600c157b67d764cc28b56d90dc47b1a18ea8844d99e9773b107cba"
 dependencies = [
  "bc-components",
  "dcbor",
@@ -3394,11 +3394,11 @@ dependencies = [
 
 [[package]]
 name = "matchers"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
+checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
 dependencies = [
- "regex-automata 0.1.10",
+ "regex-automata",
 ]
 
 [[package]]
@@ -3560,12 +3560,11 @@ checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
 
 [[package]]
 name = "nu-ansi-term"
-version = "0.46.0"
+version = "0.50.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77a8165726e8236064dbb45459242600304b42a5ea24ee2948e18e023bf7ba84"
+checksum = "d4a28e057d01f97e61255210fcff094d74ed0466038633e95017f5beb68e4399"
 dependencies = [
- "overload",
- "winapi",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3815,12 +3814,6 @@ dependencies = [
  "libc",
  "windows-sys 0.59.0",
 ]
-
-[[package]]
-name = "overload"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
 name = "owo-colors"
@@ -4671,17 +4664,8 @@ checksum = "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-automata 0.4.9",
- "regex-syntax 0.8.5",
-]
-
-[[package]]
-name = "regex-automata"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
-dependencies = [
- "regex-syntax 0.6.29",
+ "regex-automata",
+ "regex-syntax",
 ]
 
 [[package]]
@@ -4692,14 +4676,8 @@ checksum = "809e8dc61f6de73b46c85f4c96486310fe304c434cfa43669d7b40f711150908"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-syntax 0.8.5",
+ "regex-syntax",
 ]
-
-[[package]]
-name = "regex-syntax"
-version = "0.6.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
 
 [[package]]
 name = "regex-syntax"
@@ -6279,14 +6257,14 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.19"
+version = "0.3.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8189decb5ac0fa7bc8b96b7cb9b2701d60d48805aca84a238004d665fcc4008"
+checksum = "2054a14f5307d601f88daf0553e1cbf472acc4f2c51afab632431cdcd72124d5"
 dependencies = [
  "matchers",
  "nu-ansi-term",
  "once_cell",
- "regex",
+ "regex-automata",
  "sharded-slab",
  "smallvec",
  "thread_local",
@@ -8131,7 +8109,7 @@ dependencies = [
 [[package]]
 name = "zewif"
 version = "0.1.0"
-source = "git+https://github.com/BlockchainCommons/zewif.git?rev=8f005a6f5a189815dc08821f99cfe7e8af4e7f62#8f005a6f5a189815dc08821f99cfe7e8af4e7f62"
+source = "git+https://github.com/zcash/zewif.git?rev=f84f80612813ba00a0a8a9a5f060bd217fa981cc#f84f80612813ba00a0a8a9a5f060bd217fa981cc"
 dependencies = [
  "anyhow",
  "bc-components",
@@ -8145,7 +8123,7 @@ dependencies = [
 [[package]]
 name = "zewif-zcashd"
 version = "0.1.0"
-source = "git+https://github.com/BlockchainCommons/zewif-zcashd.git?rev=74cd5bc2a66a8ce63534c2c1c9ff2dedb2f9d9fd#74cd5bc2a66a8ce63534c2c1c9ff2dedb2f9d9fd"
+source = "git+https://github.com/zcash/zewif-zcashd.git?rev=02a98d6236e24819904e084180da9ba0f5c9b5d0#02a98d6236e24819904e084180da9ba0f5c9b5d0"
 dependencies = [
  "anyhow",
  "bitflags 2.9.0",

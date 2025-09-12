@@ -142,8 +142,8 @@ zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "1
 zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "10caf455e3f52744b5392af226a408b05721f70f" }
 zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "10caf455e3f52744b5392af226a408b05721f70f" }
 
-zewif = { git = "https://github.com/BlockchainCommons/zewif.git", rev = "8f005a6f5a189815dc08821f99cfe7e8af4e7f62" }
-zewif-zcashd = { git = "https://github.com/BlockchainCommons/zewif-zcashd.git", rev = "74cd5bc2a66a8ce63534c2c1c9ff2dedb2f9d9fd" }
+zewif = { git = "https://github.com/zcash/zewif.git", rev = "f84f80612813ba00a0a8a9a5f060bd217fa981cc" }
+zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "02a98d6236e24819904e084180da9ba0f5c9b5d0" }
 
 zaino-fetch = { git = "https://github.com/Electric-Coin-Company/zaino.git", rev = "1004733f3303b1c48b6df6db610c54401554683c" }
 zaino-proto = { git = "https://github.com/Electric-Coin-Company/zaino.git", rev = "1004733f3303b1c48b6df6db610c54401554683c" }
