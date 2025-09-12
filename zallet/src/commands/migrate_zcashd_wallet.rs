@@ -38,176 +38,6 @@ use super::migrate_zcash_conf;
 
 pub const ZCASHD_LEGACY_ACCOUNT: AccountId = AccountId::const_from_u32(0x7FFFFFFF);
 
-#[derive(Debug)]
-pub(crate) enum ZewifError {
-    BdbDump,
-    ZcashdDump,
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub(crate) enum MigrateError {
-    Wrapped(Error),
-    Zewif {
-        error_type: ZewifError,
-        wallet_path: PathBuf,
-        error: anyhow::Error,
-    },
-    SeedNotAvailable,
-    MnemonicInvalid(bip0039::Error),
-    KeyError(secp256k1::Error),
-    NetworkMismatch {
-        wallet_network: zewif::Network,
-        db_network: NetworkType,
-    },
-    NetworkNotSupported(NetworkType),
-    Database(SqliteClientError),
-    Tree(ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>),
-    Io(std::io::Error),
-    Fetch(Box<FetchServiceError>),
-    KeyDerivation(DerivationError),
-    HdPath(PathParseError),
-    AccountIdInvalid(u32),
-}
-
-impl From<MigrateError> for Error {
-    fn from(value: MigrateError) -> Self {
-        match value {
-            MigrateError::Wrapped(e) => e,
-            MigrateError::Zewif {
-                error_type,
-                wallet_path,
-                error,
-            } => Error::from(match error_type {
-                ZewifError::BdbDump => ErrorKind::Generic.context(fl!(
-                    "err-migrate-wallet-bdb-parse",
-                    path = wallet_path.to_str(),
-                    err = error.to_string()
-                )),
-                ZewifError::ZcashdDump => ErrorKind::Generic.context(fl!(
-                    "err-migrate-wallet-db-dump",
-                    path = wallet_path.to_str(),
-                    err = error.to_string()
-                )),
-            }),
-            MigrateError::SeedNotAvailable => {
-                Error::from(ErrorKind::Generic.context(fl!("err-migrate-wallet-seed-absent")))
-            }
-            MigrateError::MnemonicInvalid(error) => Error::from(ErrorKind::Generic.context(fl!(
-                "err-migrate-wallet-invalid-mnemonic",
-                err = error.to_string()
-            ))),
-            MigrateError::KeyError(error) => Error::from(ErrorKind::Generic.context(fl!(
-                "err-migrate-wallet-key-decoding",
-                err = error.to_string()
-            ))),
-            MigrateError::NetworkMismatch {
-                wallet_network,
-                db_network,
-            } => Error::from(ErrorKind::Generic.context(fl!(
-                "err-migrate-wallet-network-mismatch",
-                wallet_network = String::from(wallet_network),
-                zallet_network = match db_network {
-                    NetworkType::Main => "main",
-                    NetworkType::Test => "test",
-                    NetworkType::Regtest => "regtest",
-                }
-            ))),
-            MigrateError::NetworkNotSupported(_) => {
-                Error::from(ErrorKind::Generic.context(fl!("err-migrate-wallet-regtest")))
-            }
-            MigrateError::Database(sqlite_client_error) => {
-                Error::from(ErrorKind::Generic.context(fl!(
-                    "err-migrate-wallet-storage",
-                    err = sqlite_client_error.to_string()
-                )))
-            }
-            MigrateError::Tree(e) => Error::from(
-                ErrorKind::Generic
-                    .context(fl!("err-migrate-wallet-data-parse", err = e.to_string())),
-            ),
-            MigrateError::Io(e) => Error::from(
-                ErrorKind::Generic
-                    .context(fl!("err-migrate-wallet-data-parse", err = e.to_string())),
-            ),
-            MigrateError::Fetch(e) => Error::from(
-                ErrorKind::Generic.context(fl!("err-migrate-wallet-tx-fetch", err = e.to_string())),
-            ),
-            MigrateError::KeyDerivation(e) => Error::from(
-                ErrorKind::Generic.context(fl!("err-migrate-wallet-key-data", err = e.to_string())),
-            ),
-            MigrateError::HdPath(err) => Error::from(ErrorKind::Generic.context(fl!(
-                "err-migrate-wallet-data-parse",
-                err = format!("{:?}", err)
-            ))),
-            MigrateError::AccountIdInvalid(id) => Error::from(ErrorKind::Generic.context(fl!(
-                "err-migrate-wallet-invalid-account-id",
-                account_id = id
-            ))),
-        }
-    }
-}
-
-impl From<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>> for MigrateError {
-    fn from(e: ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>) -> Self {
-        Self::Tree(e)
-    }
-}
-
-impl From<SqliteClientError> for MigrateError {
-    fn from(e: SqliteClientError) -> Self {
-        Self::Database(e)
-    }
-}
-
-impl From<bip0039::Error> for MigrateError {
-    fn from(value: bip0039::Error) -> Self {
-        Self::MnemonicInvalid(value)
-    }
-}
-
-impl From<Error> for MigrateError {
-    fn from(value: Error) -> Self {
-        MigrateError::Wrapped(value)
-    }
-}
-
-impl From<abscissa_core::error::Context<ErrorKind>> for MigrateError {
-    fn from(value: abscissa_core::error::Context<ErrorKind>) -> Self {
-        MigrateError::Wrapped(value.into())
-    }
-}
-
-impl From<std::io::Error> for MigrateError {
-    fn from(value: std::io::Error) -> Self {
-        MigrateError::Io(value)
-    }
-}
-
-impl From<FetchServiceError> for MigrateError {
-    fn from(value: FetchServiceError) -> Self {
-        MigrateError::Fetch(Box::new(value))
-    }
-}
-
-impl From<DerivationError> for MigrateError {
-    fn from(value: DerivationError) -> Self {
-        MigrateError::KeyDerivation(value)
-    }
-}
-
-impl From<PathParseError> for MigrateError {
-    fn from(value: PathParseError) -> Self {
-        MigrateError::HdPath(value)
-    }
-}
-
-impl From<secp256k1::Error> for MigrateError {
-    fn from(value: secp256k1::Error) -> Self {
-        MigrateError::KeyError(value)
-    }
-}
-
 impl MigrateZcashdWalletCmd {
     fn dump_wallet(path: &Path, allow_warnings: bool) -> Result<ZcashdWallet, MigrateError> {
         let db_dump = BDBDump::from_file(path).map_err(|e| MigrateError::Zewif {
@@ -675,5 +505,175 @@ impl Runnable for MigrateZcashdWalletCmd {
                 APP.shutdown_with_exitcode(Shutdown::Forced, 1);
             }
         }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum ZewifError {
+    BdbDump,
+    ZcashdDump,
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub(crate) enum MigrateError {
+    Wrapped(Error),
+    Zewif {
+        error_type: ZewifError,
+        wallet_path: PathBuf,
+        error: anyhow::Error,
+    },
+    SeedNotAvailable,
+    MnemonicInvalid(bip0039::Error),
+    KeyError(secp256k1::Error),
+    NetworkMismatch {
+        wallet_network: zewif::Network,
+        db_network: NetworkType,
+    },
+    NetworkNotSupported(NetworkType),
+    Database(SqliteClientError),
+    Tree(ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>),
+    Io(std::io::Error),
+    Fetch(Box<FetchServiceError>),
+    KeyDerivation(DerivationError),
+    HdPath(PathParseError),
+    AccountIdInvalid(u32),
+}
+
+impl From<MigrateError> for Error {
+    fn from(value: MigrateError) -> Self {
+        match value {
+            MigrateError::Wrapped(e) => e,
+            MigrateError::Zewif {
+                error_type,
+                wallet_path,
+                error,
+            } => Error::from(match error_type {
+                ZewifError::BdbDump => ErrorKind::Generic.context(fl!(
+                    "err-migrate-wallet-bdb-parse",
+                    path = wallet_path.to_str(),
+                    err = error.to_string()
+                )),
+                ZewifError::ZcashdDump => ErrorKind::Generic.context(fl!(
+                    "err-migrate-wallet-db-dump",
+                    path = wallet_path.to_str(),
+                    err = error.to_string()
+                )),
+            }),
+            MigrateError::SeedNotAvailable => {
+                Error::from(ErrorKind::Generic.context(fl!("err-migrate-wallet-seed-absent")))
+            }
+            MigrateError::MnemonicInvalid(error) => Error::from(ErrorKind::Generic.context(fl!(
+                "err-migrate-wallet-invalid-mnemonic",
+                err = error.to_string()
+            ))),
+            MigrateError::KeyError(error) => Error::from(ErrorKind::Generic.context(fl!(
+                "err-migrate-wallet-key-decoding",
+                err = error.to_string()
+            ))),
+            MigrateError::NetworkMismatch {
+                wallet_network,
+                db_network,
+            } => Error::from(ErrorKind::Generic.context(fl!(
+                "err-migrate-wallet-network-mismatch",
+                wallet_network = String::from(wallet_network),
+                zallet_network = match db_network {
+                    NetworkType::Main => "main",
+                    NetworkType::Test => "test",
+                    NetworkType::Regtest => "regtest",
+                }
+            ))),
+            MigrateError::NetworkNotSupported(_) => {
+                Error::from(ErrorKind::Generic.context(fl!("err-migrate-wallet-regtest")))
+            }
+            MigrateError::Database(sqlite_client_error) => {
+                Error::from(ErrorKind::Generic.context(fl!(
+                    "err-migrate-wallet-storage",
+                    err = sqlite_client_error.to_string()
+                )))
+            }
+            MigrateError::Tree(e) => Error::from(
+                ErrorKind::Generic
+                    .context(fl!("err-migrate-wallet-data-parse", err = e.to_string())),
+            ),
+            MigrateError::Io(e) => Error::from(
+                ErrorKind::Generic
+                    .context(fl!("err-migrate-wallet-data-parse", err = e.to_string())),
+            ),
+            MigrateError::Fetch(e) => Error::from(
+                ErrorKind::Generic.context(fl!("err-migrate-wallet-tx-fetch", err = e.to_string())),
+            ),
+            MigrateError::KeyDerivation(e) => Error::from(
+                ErrorKind::Generic.context(fl!("err-migrate-wallet-key-data", err = e.to_string())),
+            ),
+            MigrateError::HdPath(err) => Error::from(ErrorKind::Generic.context(fl!(
+                "err-migrate-wallet-data-parse",
+                err = format!("{:?}", err)
+            ))),
+            MigrateError::AccountIdInvalid(id) => Error::from(ErrorKind::Generic.context(fl!(
+                "err-migrate-wallet-invalid-account-id",
+                account_id = id
+            ))),
+        }
+    }
+}
+
+impl From<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>> for MigrateError {
+    fn from(e: ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>) -> Self {
+        Self::Tree(e)
+    }
+}
+
+impl From<SqliteClientError> for MigrateError {
+    fn from(e: SqliteClientError) -> Self {
+        Self::Database(e)
+    }
+}
+
+impl From<bip0039::Error> for MigrateError {
+    fn from(value: bip0039::Error) -> Self {
+        Self::MnemonicInvalid(value)
+    }
+}
+
+impl From<Error> for MigrateError {
+    fn from(value: Error) -> Self {
+        MigrateError::Wrapped(value)
+    }
+}
+
+impl From<abscissa_core::error::Context<ErrorKind>> for MigrateError {
+    fn from(value: abscissa_core::error::Context<ErrorKind>) -> Self {
+        MigrateError::Wrapped(value.into())
+    }
+}
+
+impl From<std::io::Error> for MigrateError {
+    fn from(value: std::io::Error) -> Self {
+        MigrateError::Io(value)
+    }
+}
+
+impl From<FetchServiceError> for MigrateError {
+    fn from(value: FetchServiceError) -> Self {
+        MigrateError::Fetch(Box::new(value))
+    }
+}
+
+impl From<DerivationError> for MigrateError {
+    fn from(value: DerivationError) -> Self {
+        MigrateError::KeyDerivation(value)
+    }
+}
+
+impl From<PathParseError> for MigrateError {
+    fn from(value: PathParseError) -> Self {
+        MigrateError::HdPath(value)
+    }
+}
+
+impl From<secp256k1::Error> for MigrateError {
+    fn from(value: secp256k1::Error) -> Self {
+        MigrateError::KeyError(value)
     }
 }
