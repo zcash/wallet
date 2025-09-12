@@ -13,13 +13,15 @@ use zaino_proto::proto::service::TxFilter;
 use zaino_state::{FetchServiceError, LightWalletIndexer};
 use zcash_client_backend::data_api::{
     Account as _, AccountBirthday, AccountPurpose, WalletRead, WalletWrite as _, Zip32Derivation,
+    wallet::decrypt_and_store_transaction,
 };
 use zcash_client_sqlite::error::SqliteClientError;
 use zcash_keys::keys::{
     DerivationError, UnifiedFullViewingKey,
     zcashd::{PathParseError, ZcashdHdDerivation},
 };
-use zcash_protocol::consensus::{BlockHeight, NetworkType, Parameters};
+use zcash_primitives::transaction::Transaction;
+use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
 use zewif_zcashd::{BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet};
 use zip32::{AccountId, fingerprint::SeedFingerprint};
 
@@ -91,7 +93,6 @@ impl From<MigrateError> for Error {
             MigrateError::SeedNotAvailable => {
                 Error::from(ErrorKind::Generic.context(fl!("err-migrate-wallet-seed-absent")))
             }
-
             MigrateError::MnemonicInvalid(error) => Error::from(ErrorKind::Generic.context(fl!(
                 "err-migrate-wallet-invalid-mnemonic",
                 err = error.to_string()
@@ -307,21 +308,22 @@ impl MigrateZcashdWalletCmd {
         keystore: KeyStore,
         chain_view: ChainView,
         wallet: ZcashdWallet,
+        buffer_wallet_transactions: bool,
     ) -> Result<(), MigrateError> {
         let mut db_data = db.handle().await?;
-        let network = Self::check_network(wallet.network(), db_data.params().network_type())?;
+        let network_params = *db_data.params();
+        Self::check_network(wallet.network(), network_params.network_type())?;
 
         // Obtain information about the current state of the chain, so that we can set the recovery
         // height properly.
         let chain_subscriber = chain_view.subscribe().await?.inner();
         let chain_tip = Self::chain_tip(&chain_subscriber).await?;
-        let sapling_activation = db_data
-            .params()
+        let sapling_activation = network_params
             .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)
             .expect("Sapling activation height is defined.");
 
         // Collect an index from txid to block height for all transactions known to the wallet that
-        // appear in the main chain..
+        // appear in the main chain.
         let mut tx_heights = HashMap::new();
         for (txid, _) in wallet.transactions().iter() {
             let tx_filter = TxFilter {
@@ -339,7 +341,10 @@ impl MigrateZcashdWalletCmd {
                                 err = e.to_string()
                             ))
                         })?);
-                    tx_heights.insert(txid, tx_height);
+                    tx_heights.insert(
+                        txid,
+                        (tx_height, buffer_wallet_transactions.then_some(raw_tx)),
+                    );
                 }
                 Err(FetchServiceError::TonicStatusError(status))
                     if (status.code() as isize) == (tonic::Code::NotFound as isize) =>
@@ -366,6 +371,7 @@ impl MigrateZcashdWalletCmd {
             // minimum possible wallet birthday that is relevant to future recovery scenarios.
             tx_heights
                 .values()
+                .map(|(h, _)| h)
                 .min()
                 .copied()
                 .or(chain_tip)
@@ -524,7 +530,7 @@ impl MigrateZcashdWalletCmd {
             let derivation = key
                 .metadata()
                 .hd_keypath()
-                .map(|keypath| ZcashdHdDerivation::parse_hd_path(&network, keypath))
+                .map(|keypath| ZcashdHdDerivation::parse_hd_path(&network_params, keypath))
                 .transpose()?
                 .zip(key_seed_fp)
                 .map(|(derivation, key_seed_fp)| match derivation {
@@ -606,6 +612,18 @@ impl MigrateZcashdWalletCmd {
             )?;
         }
 
+        // Since we've retrieved the raw transaction data anyway, preemptively store it for faster
+        // access to balance & to set priorities in the scan queue.
+        for (h, raw_tx) in tx_heights.values() {
+            let branch_id = BranchId::for_height(&network_params, *h);
+            if let Some(raw_tx) = raw_tx {
+                let tx = Transaction::read(&raw_tx.data[..], branch_id)?;
+                db_data.with_mut(|mut db| {
+                    decrypt_and_store_transaction(&network_params, &mut db, &tx, Some(*h))
+                })?;
+            }
+        }
+
         Ok(())
     }
 
@@ -631,7 +649,14 @@ impl MigrateZcashdWalletCmd {
 
         let wallet = Self::dump_wallet(&wallet_path, self.allow_warnings)?;
 
-        Self::migrate_zcashd_wallet(db, keystore, chain_view, wallet).await?;
+        Self::migrate_zcashd_wallet(
+            db,
+            keystore,
+            chain_view,
+            wallet,
+            self.buffer_wallet_transactions,
+        )
+        .await?;
 
         Ok(())
     }

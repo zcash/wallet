@@ -154,6 +154,12 @@ pub(crate) struct MigrateZcashdWalletCmd {
     #[arg(long)]
     pub(crate) zcashd_datadir: Option<PathBuf>,
 
+    /// Buffer wallet transactions in-memory in the process of performing the wallet restore. For
+    /// very active wallets, this might exceed the available memory on your machine, so enable this
+    /// with caution.
+    #[arg(long)]
+    pub(crate) buffer_wallet_transactions: bool,
+
     /// Allow a migration when warnings are present. If set to `false`, any warning will be treated
     /// as an error and cause the migration to abort.
     #[arg(long)]
