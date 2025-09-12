@@ -11,6 +11,7 @@ use serde_json::json;
 use zaino_state::FetchServiceSubscriber;
 use zcash_address::{ZcashAddress, unified};
 use zcash_client_backend::data_api::wallet::SpendingKeys;
+use zcash_client_backend::proposal::Proposal;
 use zcash_client_backend::{
     data_api::{
         Account,
@@ -23,7 +24,7 @@ use zcash_client_backend::{
     wallet::OvkPolicy,
     zip321::{Payment, TransactionRequest},
 };
-use zcash_client_sqlite::AccountUuid;
+use zcash_client_sqlite::ReceivedNoteId;
 use zcash_keys::{address::Address, keys::UnifiedSpendingKey};
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::{
@@ -80,7 +81,7 @@ pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn call(
-    wallet: DbHandle,
+    mut wallet: DbHandle,
     keystore: KeyStore,
     chain: FetchServiceSubscriber,
     fromaddress: String,
@@ -187,45 +188,6 @@ pub(crate) async fn call(
         }
     };
 
-    Ok((
-        Some(ContextInfo::new(
-            "z_sendmany",
-            json!({
-                "fromaddress": fromaddress,
-                "amounts": amounts,
-                "minconf": minconf
-            }),
-        )),
-        run(
-            wallet,
-            keystore,
-            chain,
-            account,
-            request,
-            confirmations_policy,
-            privacy_policy,
-        ),
-    ))
-}
-
-/// Construct and send the transaction, returning the resulting txid.
-/// Errors in transaction construction will throw.
-///
-/// Notes:
-/// 1. #1159 Currently there is no limit set on the number of elements, which could
-///    make the tx too large.
-/// 2. #1360 Note selection is not optimal.
-/// 3. #1277 Spendable notes are not locked, so an operation running in parallel
-///    could also try to use them.
-async fn run<A: Account<AccountId = AccountUuid>>(
-    mut wallet: DbHandle,
-    keystore: KeyStore,
-    chain: FetchServiceSubscriber,
-    spend_from_account: A,
-    request: TransactionRequest,
-    confirmations_policy: ConfirmationsPolicy,
-    privacy_policy: PrivacyPolicy,
-) -> RpcResult<SendResult> {
     let params = *wallet.params();
 
     // TODO: Fetch the real maximums within the account so we can detect correctly.
@@ -296,6 +258,7 @@ async fn run<A: Account<AccountId = AccountUuid>>(
         DustOutputPolicy::default(),
         APP.config().note_management.split_policy(),
     );
+
     // TODO: Once `zcash_client_backend` supports spending transparent coins arbitrarily,
     // consider using the privacy policy here to avoid selecting incompatible funds. This
     // would match what `zcashd` did more closely (though we might instead decide to let
@@ -306,7 +269,7 @@ async fn run<A: Account<AccountId = AccountUuid>>(
     let proposal = propose_transfer::<_, _, _, _, Infallible>(
         wallet.as_mut(),
         &params,
-        spend_from_account.id(),
+        account.id(),
         &input_selector,
         &change_strategy,
         request,
@@ -360,15 +323,11 @@ async fn run<A: Account<AccountId = AccountUuid>>(
         }
     }
 
-    let prover = LocalTxProver::bundled();
+    let derivation = account.source().key_derivation().ok_or_else(|| {
+        LegacyCode::InvalidAddressOrKey
+            .with_static("Invalid from address, no payment source found for address.")
+    })?;
 
-    let derivation = spend_from_account
-        .source()
-        .key_derivation()
-        .ok_or_else(|| {
-            LegacyCode::InvalidAddressOrKey
-                .with_static("Invalid from address, no payment source found for address.")
-        })?;
     // Fetch spending key last, to avoid a keystore decryption if unnecessary.
     let seed = keystore
         .decrypt_seed(derivation.seed_fingerprint())
@@ -406,13 +365,50 @@ async fn run<A: Account<AccountId = AccountUuid>>(
         }
     }
 
+    // TODO: verify that the proposal satisfies the requested privacy policy
+
+    Ok((
+        Some(ContextInfo::new(
+            "z_sendmany",
+            json!({
+                "fromaddress": fromaddress,
+                "amounts": amounts,
+                "minconf": minconf
+            }),
+        )),
+        run(
+            wallet,
+            chain,
+            proposal,
+            SpendingKeys::new(usk, standalone_keys),
+        ),
+    ))
+}
+
+/// Construct and send the transaction, returning the resulting txid.
+/// Errors in transaction construction will throw.
+///
+/// Notes:
+/// 1. #1159 Currently there is no limit set on the number of elements, which could
+///    make the tx too large.
+/// 2. #1360 Note selection is not optimal.
+/// 3. #1277 Spendable notes are not locked, so an operation running in parallel
+///    could also try to use them.
+async fn run(
+    mut wallet: DbHandle,
+    chain: FetchServiceSubscriber,
+    proposal: Proposal<StandardFeeRule, ReceivedNoteId>,
+    spending_keys: SpendingKeys,
+) -> RpcResult<SendResult> {
+    let prover = LocalTxProver::bundled();
     let (wallet, txids) = crate::spawn_blocking!("z_sendmany prover", move || {
+        let params = *wallet.params();
         create_proposed_transactions::<_, _, Infallible, _, Infallible, _>(
             wallet.as_mut(),
             &params,
             &prover,
             &prover,
-            &SpendingKeys::new(usk, standalone_keys),
+            &spending_keys,
             OvkPolicy::Sender,
             &proposal,
         )
