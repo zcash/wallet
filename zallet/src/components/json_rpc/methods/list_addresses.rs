@@ -187,6 +187,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                                 diversifier_index,
                                 ..
                             } => diversifier_index.into(),
+                            #[cfg(feature = "transparent-key-import")]
                             zcash_client_backend::data_api::AddressSource::Standalone => {
                                 error!(
                                     "Unified address {} lacks HD derivation information.",

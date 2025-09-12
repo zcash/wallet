@@ -117,25 +117,29 @@ use std::time::{Duration, SystemTime};
 
 use bip0039::{English, Mnemonic};
 use rusqlite::named_params;
-use sapling::zip32::{DiversifiableFullViewingKey, ExtendedSpendingKey};
 use secrecy::{ExposeSecret, SecretString, SecretVec, Zeroize};
 use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
     time,
 };
-use transparent::address::TransparentAddress;
-use zcash_keys::address::Address;
 use zip32::fingerprint::SeedFingerprint;
 
 use crate::network::Network;
 use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
-    fl,
 };
 
 use super::database::Database;
+
+#[cfg(feature = "zcashd-import")]
+use {
+    crate::fl,
+    sapling::zip32::{DiversifiableFullViewingKey, ExtendedSpendingKey},
+    transparent::address::TransparentAddress,
+    zcash_keys::address::Address,
+};
 
 pub(super) mod db;
 
@@ -530,7 +534,7 @@ impl KeyStore {
         Ok(seed_fp)
     }
 
-    #[allow(dead_code)]
+    #[cfg(feature = "zcashd-import")]
     pub(crate) async fn encrypt_and_store_legacy_seed(
         &self,
         legacy_seed: &SecretVec<u8>,
@@ -561,6 +565,7 @@ impl KeyStore {
         Ok(legacy_seed_fp)
     }
 
+    #[cfg(feature = "zcashd-import")]
     pub(crate) async fn encrypt_and_store_standalone_sapling_key(
         &self,
         sapling_key: &ExtendedSpendingKey,
@@ -589,6 +594,7 @@ impl KeyStore {
         Ok(dfvk)
     }
 
+    #[cfg(feature = "zcashd-import")]
     pub(crate) async fn encrypt_and_store_standalone_transparent_key(
         &self,
         key: &zcash_keys::keys::transparent::Key,
@@ -661,6 +667,7 @@ impl KeyStore {
         Ok(seed)
     }
 
+    #[cfg(feature = "zcashd-import")]
     pub(crate) async fn decrypt_standalone_transparent_key(
         &self,
         address: &TransparentAddress,
@@ -711,43 +718,6 @@ fn encrypt_string(
     Ok(ciphertext)
 }
 
-fn encrypt_secret(
-    recipients: &[Box<dyn age::Recipient + Send>],
-    secret: &SecretVec<u8>,
-) -> Result<Vec<u8>, age::EncryptError> {
-    let encryptor = age::Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref() as _))?;
-
-    let mut ciphertext = Vec::with_capacity(secret.expose_secret().len());
-    let mut writer = encryptor.wrap_output(&mut ciphertext)?;
-    writer.write_all(secret.expose_secret())?;
-    writer.finish()?;
-
-    Ok(ciphertext)
-}
-
-fn encrypt_legacy_seed_bytes(
-    recipients: &[Box<dyn age::Recipient + Send>],
-    seed: &SecretVec<u8>,
-) -> Result<Vec<u8>, age::EncryptError> {
-    encrypt_secret(recipients, seed)
-}
-
-fn encrypt_standalone_sapling_key(
-    recipients: &[Box<dyn age::Recipient + Send>],
-    key: &ExtendedSpendingKey,
-) -> Result<Vec<u8>, age::EncryptError> {
-    let secret = SecretVec::new(key.to_bytes().to_vec());
-    encrypt_secret(recipients, &secret)
-}
-
-fn encrypt_standalone_transparent_privkey(
-    recipients: &[Box<dyn age::Recipient + Send>],
-    key: &secp256k1::SecretKey,
-) -> Result<Vec<u8>, age::EncryptError> {
-    let secret = SecretVec::new(key.secret_bytes().to_vec());
-    encrypt_secret(recipients, &secret)
-}
-
 fn decrypt_string(
     identities: &[Box<dyn age::Identity + Send + Sync>],
     ciphertext: &[u8],
@@ -773,6 +743,48 @@ fn decrypt_string(
     Ok(mnemonic)
 }
 
+#[cfg(any(feature = "transparent-key-import", feature = "zcashd-import"))]
+fn encrypt_secret(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    secret: &SecretVec<u8>,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let encryptor = age::Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref() as _))?;
+
+    let mut ciphertext = Vec::with_capacity(secret.expose_secret().len());
+    let mut writer = encryptor.wrap_output(&mut ciphertext)?;
+    writer.write_all(secret.expose_secret())?;
+    writer.finish()?;
+
+    Ok(ciphertext)
+}
+
+#[cfg(feature = "zcashd-import")]
+fn encrypt_legacy_seed_bytes(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    seed: &SecretVec<u8>,
+) -> Result<Vec<u8>, age::EncryptError> {
+    encrypt_secret(recipients, seed)
+}
+
+#[cfg(feature = "zcashd-import")]
+fn encrypt_standalone_sapling_key(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    key: &ExtendedSpendingKey,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let secret = SecretVec::new(key.to_bytes().to_vec());
+    encrypt_secret(recipients, &secret)
+}
+
+#[cfg(feature = "transparent-key-import")]
+fn encrypt_standalone_transparent_privkey(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    key: &secp256k1::SecretKey,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let secret = SecretVec::new(key.secret_bytes().to_vec());
+    encrypt_secret(recipients, &secret)
+}
+
+#[cfg(feature = "transparent-key-import")]
 fn decrypt_standalone_transparent_privkey(
     identities: &[Box<dyn age::Identity + Send + Sync>],
     ciphertext: &[u8],

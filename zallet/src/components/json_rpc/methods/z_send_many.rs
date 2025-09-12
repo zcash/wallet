@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::num::NonZeroU32;
 
@@ -346,24 +346,30 @@ pub(crate) async fn call(
     )
     .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
 
-    let mut standalone_keys = HashMap::new();
-    for step in proposal.steps() {
-        for input in step.transparent_inputs() {
-            if let Some(address) = input.txout().script_pubkey().address() {
-                let secret_key = keystore
-                    .decrypt_standalone_transparent_key(&address)
-                    .await
-                    .map_err(|e| match e.kind() {
-                        // TODO: Improve internal error types.
-                        crate::error::ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
-                            LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
-                        }
-                        _ => LegacyCode::Database.with_message(e.to_string()),
-                    })?;
-                standalone_keys.insert(address, secret_key);
+    #[cfg(feature = "transparent-key-import")]
+    let standalone_keys = {
+        let mut keys = std::collections::HashMap::new();
+        for step in proposal.steps() {
+            for input in step.transparent_inputs() {
+                if let Some(address) = input.txout().script_pubkey().address() {
+                    let secret_key = keystore
+                        .decrypt_standalone_transparent_key(&address)
+                        .await
+                        .map_err(|e| match e.kind() {
+                            // TODO: Improve internal error types.
+                            crate::error::ErrorKind::Generic
+                                if e.to_string() == "Wallet is locked" =>
+                            {
+                                LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
+                            }
+                            _ => LegacyCode::Database.with_message(e.to_string()),
+                        })?;
+                    keys.insert(address, secret_key);
+                }
             }
         }
-    }
+        keys
+    };
 
     // TODO: verify that the proposal satisfies the requested privacy policy
 
@@ -380,7 +386,11 @@ pub(crate) async fn call(
             wallet,
             chain,
             proposal,
-            SpendingKeys::new(usk, standalone_keys),
+            SpendingKeys::new(
+                usk,
+                #[cfg(feature = "zcashd-import")]
+                standalone_keys,
+            ),
         ),
     ))
 }

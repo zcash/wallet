@@ -132,14 +132,10 @@ zcash_client_backend = { workspace = true, features = [
     "orchard",
     "sync",
     "transparent-inputs",
-    "transparent-key-import",
-    "zcashd-compat",
 ] }
 zcash_client_sqlite = { workspace = true, features = [
     "orchard",
     "transparent-inputs",
-    "transparent-key-import",
-    "zcashd-compat",
 ] }
 zcash_keys = { workspace = true, features = ["zcashd-compat", "unstable"] }
 zcash_note_encryption.workspace = true
@@ -150,8 +146,8 @@ zebra-chain.workspace = true
 zebra-rpc.workspace = true
 zebra-state.workspace = true
 zip32.workspace = true
-zewif.workspace = true
-zewif-zcashd.workspace = true
+zewif = { workspace = true, optional = true }
+zewif-zcashd = { workspace = true, optional = true }
 anyhow.workspace = true
 
 console-subscriber = { workspace = true, optional = true }
@@ -190,6 +186,22 @@ rpc-cli = ["jsonrpsee/async-client", "dep:jsonrpsee-http-client"]
 ## For more details, see:
 ## https://github.com/tokio-rs/console/blob/main/console-subscriber/README.md#enabling-tokio-instrumentation
 tokio-console = ["dep:console-subscriber", "tokio/tracing"]
+
+## Allows `zallet` to provide transparent key import functionality, and to work
+## with a wallet imported via the `migrate_zcashd_wallet` command.
+transparent-key-import = [
+  "zcash_client_backend/transparent-key-import",
+  "zcash_client_sqlite/transparent-key-import",
+]
+
+## Allows `zallet` to import zcashd wallets.
+zcashd-import = [
+  "transparent-key-import",
+  "dep:zewif",
+  "dep:zewif-zcashd",
+  "zcash_client_backend/zcashd-compat",
+  "zcash_client_sqlite/zcashd-compat",
+]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [

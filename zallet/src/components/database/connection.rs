@@ -480,6 +480,7 @@ impl WalletWrite for DbConnection {
         })
     }
 
+    #[cfg(feature = "zcashd-import")]
     fn import_standalone_transparent_pubkey(
         &mut self,
         account: Self::AccountId,
