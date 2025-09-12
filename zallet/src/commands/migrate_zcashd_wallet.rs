@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use abscissa_core::{Runnable, Shutdown};
+use abscissa_core::Runnable;
 
 use bip0039::{English, Mnemonic};
 use secp256k1::PublicKey;
@@ -34,9 +34,54 @@ use crate::{
     rosetta::to_chainstate,
 };
 
-use super::migrate_zcash_conf;
+use super::{AsyncRunnable, migrate_zcash_conf};
 
+/// The ZIP 32 account identifier of the zcashd account used for maintaining legacy `getnewaddress`
+/// and `z_getnewaddress` semantics after the zcashd v4.7.0 upgrade to support using
+/// mnemonic-sourced HD derivation for all addresses in the wallet.
 pub const ZCASHD_LEGACY_ACCOUNT: AccountId = AccountId::const_from_u32(0x7FFFFFFF);
+/// A source string to identify an account as being derived from the randomly generated binary HD
+/// seed used for Sapling key generation prior to the zcashd v4.7.0 upgrade.
+pub const ZCASHD_LEGACY_SOURCE: &str = "zcashd_legacy";
+/// A source string to identify an account as being derived from the mnemonic HD seed used for
+/// key derivation after the zcashd v4.7.0 upgrade.
+pub const ZCASHD_MNEMONIC_SOURCE: &str = "zcashd_mnemonic";
+
+impl AsyncRunnable for MigrateZcashdWalletCmd {
+    async fn run(&self) -> Result<(), Error> {
+        let config = APP.config();
+
+        // Start monitoring the chain.
+        let (chain_view, _chain_indexer_task_handle) = ChainView::new(&config).await?;
+        let db = Database::open(&config).await?;
+        let keystore = KeyStore::new(&config, db.clone())?;
+
+        let wallet_path = if self.path.is_relative() {
+            if let Some(datadir) = self.zcashd_datadir.as_ref() {
+                datadir.join(&self.path)
+            } else {
+                migrate_zcash_conf::zcashd_default_data_dir()
+                    .ok_or(ErrorKind::Generic)?
+                    .join(&self.path)
+            }
+        } else {
+            self.path.to_path_buf()
+        };
+
+        let wallet = Self::dump_wallet(&wallet_path, self.allow_warnings)?;
+
+        Self::migrate_zcashd_wallet(
+            db,
+            keystore,
+            chain_view,
+            wallet,
+            self.buffer_wallet_transactions,
+        )
+        .await?;
+
+        Ok(())
+    }
+}
 
 impl MigrateZcashdWalletCmd {
     fn dump_wallet(path: &Path, allow_warnings: bool) -> Result<ZcashdWallet, MigrateError> {
@@ -219,19 +264,7 @@ impl MigrateZcashdWalletCmd {
         };
 
         let legacy_transparent_account_uuid = if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
-            // Always create the zero-indexed unified account
-            db_data.import_account_hd(
-                &format!(
-                    "zcashd imported unified account {}",
-                    u32::from(AccountId::ZERO),
-                ),
-                seed,
-                AccountId::ZERO,
-                &wallet_birthday,
-                Some("zcashd_mnemonic"),
-            )?;
-
-            // If there are any legacy transparent keys, also create the legacy account.
+            // If there are any legacy transparent keys, create the legacy account.
             if !wallet.keys().is_empty() {
                 let (account, _) = db_data.import_account_hd(
                     &format!(
@@ -241,7 +274,7 @@ impl MigrateZcashdWalletCmd {
                     seed,
                     ZCASHD_LEGACY_ACCOUNT,
                     &wallet_birthday,
-                    Some("zcashd_mnemonic"),
+                    Some(ZCASHD_MNEMONIC_SOURCE),
                 )?;
 
                 Some(account.id())
@@ -290,7 +323,7 @@ impl MigrateZcashdWalletCmd {
                         &seed,
                         ZCASHD_LEGACY_ACCOUNT,
                         &wallet_birthday,
-                        Some("zcashd_mnemonic"),
+                        Some(ZCASHD_MNEMONIC_SOURCE),
                     )?;
 
                     Some(account.id())
@@ -317,8 +350,6 @@ impl MigrateZcashdWalletCmd {
             let zip32_account_id = AccountId::try_from(account.zip32_account_id())
                 .map_err(|_| MigrateError::AccountIdInvalid(account.zip32_account_id()))?;
 
-            // FIXME: this `if` is a workaround for the lack of ability to query by seed
-            // fingerprint & zip32 account ID.
             if db_data
                 .get_derived_account(&Zip32Derivation::new(*seed_fp, zip32_account_id, None))?
                 .is_none()
@@ -331,7 +362,7 @@ impl MigrateZcashdWalletCmd {
                     seed,
                     zip32_account_id,
                     &wallet_birthday,
-                    Some("zcashd_mnemonic"),
+                    Some(ZCASHD_MNEMONIC_SOURCE),
                 )?;
             }
         }
@@ -384,8 +415,6 @@ impl MigrateZcashdWalletCmd {
                     .await?;
             }
 
-            // FIXME: this `if` is a workaround for the lack of ability to query by seed fingerprint
-            // & zip32 account ID.
             let account_exists = match key_seed_fp.as_ref() {
                 Some(fp) => db_data
                     .get_derived_account(&Zip32Derivation::new(
@@ -403,7 +432,7 @@ impl MigrateZcashdWalletCmd {
                     &ufvk,
                     &wallet_birthday,
                     AccountPurpose::Spending { derivation },
-                    Some("zcashd_legacy"),
+                    Some(ZCASHD_LEGACY_SOURCE),
                 )?;
             }
         }
@@ -456,55 +485,11 @@ impl MigrateZcashdWalletCmd {
 
         Ok(())
     }
-
-    async fn start(&self) -> Result<(), Error> {
-        let config = APP.config();
-
-        // Start monitoring the chain.
-        let (chain_view, _chain_indexer_task_handle) = ChainView::new(&config).await?;
-        let db = Database::open(&config).await?;
-        let keystore = KeyStore::new(&config, db.clone())?;
-
-        let wallet_path = if self.path.is_relative() {
-            if let Some(datadir) = self.zcashd_datadir.as_ref() {
-                datadir.join(&self.path)
-            } else {
-                migrate_zcash_conf::zcashd_default_data_dir()
-                    .ok_or(ErrorKind::Generic)?
-                    .join(&self.path)
-            }
-        } else {
-            self.path.to_path_buf()
-        };
-
-        let wallet = Self::dump_wallet(&wallet_path, self.allow_warnings)?;
-
-        Self::migrate_zcashd_wallet(
-            db,
-            keystore,
-            chain_view,
-            wallet,
-            self.buffer_wallet_transactions,
-        )
-        .await?;
-
-        Ok(())
-    }
 }
 
 impl Runnable for MigrateZcashdWalletCmd {
     fn run(&self) {
-        match abscissa_tokio::run(&APP, self.start()) {
-            Ok(Ok(())) => (),
-            Ok(Err(e)) => {
-                eprintln!("{}", e);
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-            Err(e) => {
-                eprintln!("{}", e);
-                APP.shutdown_with_exitcode(Shutdown::Forced, 1);
-            }
-        }
+        self.run_on_runtime();
     }
 }
 

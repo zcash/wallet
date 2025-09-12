@@ -786,7 +786,7 @@ fn decrypt_standalone_transparent_privkey(
     let res = decryptor
         .decrypt(identities.iter().map(|i| i.as_ref() as _))
         .map_err(|e| ErrorKind::Generic.context(e))?
-        .read(&mut buf);
+        .read_to_end(&mut buf);
 
     // We intentionally do not use `?` on the decryption expression because doing so in
     // the case of a partial failure could result in part of the secret data being read
