@@ -125,6 +125,7 @@ use tokio::{
 };
 use zip32::fingerprint::SeedFingerprint;
 
+use crate::network::Network;
 use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
@@ -364,14 +365,14 @@ impl KeyStore {
 
     async fn with_db<T>(
         &self,
-        f: impl FnOnce(&rusqlite::Connection) -> Result<T, Error>,
+        f: impl FnOnce(&rusqlite::Connection, &Network) -> Result<T, Error>,
     ) -> Result<T, Error> {
         self.db.handle().await?.with_raw(f)
     }
 
     async fn with_db_mut<T>(
         &self,
-        f: impl FnOnce(&mut rusqlite::Connection) -> Result<T, Error>,
+        f: impl FnOnce(&mut rusqlite::Connection, &Network) -> Result<T, Error>,
     ) -> Result<T, Error> {
         self.db.handle().await?.with_raw_mut(f)
     }
@@ -394,7 +395,7 @@ impl KeyStore {
 
         let now = ::time::OffsetDateTime::now_utc();
 
-        self.with_db_mut(|conn| {
+        self.with_db_mut(|conn, _| {
             let mut stmt = conn
                 .prepare(
                     "INSERT INTO ext_zallet_keystore_age_recipients
@@ -419,7 +420,7 @@ impl KeyStore {
 
     /// Fetches the age recipients for this wallet from the database.
     async fn recipients(&self) -> Result<Vec<Box<dyn age::Recipient + Send>>, Error> {
-        self.with_db(|conn| {
+        self.with_db(|conn, _| {
             let mut stmt = conn
                 .prepare(
                     "SELECT recipient
@@ -452,7 +453,7 @@ impl KeyStore {
 
     /// Lists the fingerprint of every seed available in the keystore.
     pub(crate) async fn list_seed_fingerprints(&self) -> Result<HashSet<SeedFingerprint>, Error> {
-        self.with_db(|conn| {
+        self.with_db(|conn, _| {
             let mut stmt = conn
                 .prepare(
                     "SELECT hd_seed_fingerprint
@@ -475,7 +476,7 @@ impl KeyStore {
     pub(crate) async fn list_legacy_seed_fingerprints(
         &self,
     ) -> Result<HashSet<SeedFingerprint>, Error> {
-        self.with_db(|conn| {
+        self.with_db(|conn, _| {
             let mut stmt = conn
                 .prepare(
                     "SELECT hd_seed_fingerprint
@@ -511,7 +512,7 @@ impl KeyStore {
         let encrypted_mnemonic = encrypt_string(&recipients, mnemonic.expose_secret())
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
-        self.with_db_mut(|conn| {
+        self.with_db_mut(|conn, _| {
             conn.execute(
                 "INSERT INTO ext_zallet_keystore_mnemonics
                 VALUES (:hd_seed_fingerprint, :encrypted_mnemonic)
@@ -542,7 +543,7 @@ impl KeyStore {
         let encrypted_legacy_seed = encrypt_legacy_seed_bytes(&recipients, legacy_seed)
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
-        self.with_db_mut(|conn| {
+        self.with_db_mut(|conn, _| {
             conn.execute(
                 "INSERT INTO ext_zallet_keystore_legacy_seeds
                 VALUES (:hd_seed_fingerprint, :encrypted_legacy_seed)
@@ -569,7 +570,7 @@ impl KeyStore {
         }
 
         let encrypted_mnemonic = self
-            .with_db(|conn| {
+            .with_db(|conn, _| {
                 Ok(conn
                     .query_row(
                         "SELECT encrypted_mnemonic

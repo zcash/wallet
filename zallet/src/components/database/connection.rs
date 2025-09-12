@@ -128,17 +128,20 @@ impl DbConnection {
         })
     }
 
-    pub(crate) fn with_raw<T>(&self, f: impl FnOnce(&rusqlite::Connection) -> T) -> T {
+    pub(crate) fn with_raw<T>(&self, f: impl FnOnce(&rusqlite::Connection, &Network) -> T) -> T {
         tokio::task::block_in_place(|| {
             let _guard = self.lock.read().unwrap();
-            f(self.inner.lock().unwrap().as_ref())
+            f(self.inner.lock().unwrap().as_ref(), &self.params)
         })
     }
 
-    pub(crate) fn with_raw_mut<T>(&self, f: impl FnOnce(&mut rusqlite::Connection) -> T) -> T {
+    pub(crate) fn with_raw_mut<T>(
+        &self,
+        f: impl FnOnce(&mut rusqlite::Connection, &Network) -> T,
+    ) -> T {
         tokio::task::block_in_place(|| {
             let _guard = self.lock.write().unwrap();
-            f(self.inner.lock().unwrap().as_mut())
+            f(self.inner.lock().unwrap().as_mut(), &self.params)
         })
     }
 }
