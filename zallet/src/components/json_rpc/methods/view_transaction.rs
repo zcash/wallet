@@ -475,10 +475,6 @@ pub(crate) async fn call(
             });
         }
 
-        let account_ids = wallet.get_account_ids().map_err(|e| {
-            LegacyCode::Database
-                .with_message(format!("Failed to retrieve transparent account IDs: {e}"))
-        })?;
         // Transparent outputs
         for (output, idx) in bundle.vout.iter().zip(0..) {
             let (account_uuid, address, outgoing, wallet_internal) =

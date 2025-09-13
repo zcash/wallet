@@ -673,23 +673,6 @@ criteria = "safe-to-deploy"
 delta = "0.4.22 -> 0.4.27"
 notes = "Lots of minor updates to macros and such, nothing touching `unsafe`"
 
-[[audits.bytecode-alliance.audits.matchers]]
-who = "Pat Hickey <phickey@fastly.com>"
-criteria = "safe-to-deploy"
-version = "0.1.0"
-
-[[audits.bytecode-alliance.audits.nu-ansi-term]]
-who = "Pat Hickey <phickey@fastly.com>"
-criteria = "safe-to-deploy"
-version = "0.46.0"
-notes = "one use of unsafe to call windows specific api to get console handle."
-
-[[audits.bytecode-alliance.audits.overload]]
-who = "Pat Hickey <phickey@fastly.com>"
-criteria = "safe-to-deploy"
-version = "0.1.1"
-notes = "small crate, only defines macro-rules!, nicely documented as well"
-
 [[audits.bytecode-alliance.audits.percent-encoding]]
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
@@ -2328,6 +2311,13 @@ delta = "0.1.1 -> 0.2.1"
 notes = "Very minor changes."
 aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
+[[audits.mozilla.audits.crossbeam-channel]]
+who = "Jan-Erik Rediger <jrediger@mozilla.com>"
+criteria = "safe-to-deploy"
+delta = "0.5.14 -> 0.5.15"
+notes = "Fixes a regression from an earlier version which could lead to a double free"
+aggregated-from = "https://raw.githubusercontent.com/mozilla/glean/main/supply-chain/audits.toml"
+
 [[audits.mozilla.audits.crunchy]]
 who = "Erich Gubler <erichdongubler@gmail.com>"
 criteria = "safe-to-deploy"
@@ -3020,6 +3010,12 @@ aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-ch
 who = "Mark Hammond <mhammond@skippinet.com.au>"
 criteria = "safe-to-deploy"
 delta = "0.3.17 -> 0.3.19"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
+
+[[audits.mozilla.audits.tracing-subscriber]]
+who = "Mark Hammond <mhammond@skippinet.com.au>"
+criteria = "safe-to-deploy"
+delta = "0.3.19 -> 0.3.20"
 aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
 [[audits.mozilla.audits.unic-langid]]

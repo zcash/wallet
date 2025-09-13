@@ -51,13 +51,11 @@ pub(crate) enum ZalletCmd {
     ExampleConfig(ExampleConfigCmd),
 
     /// Generate a `zallet.toml` config from an existing `zcash.conf` file.
-    #[cfg(zallet_build = "wallet")]
-    #[cfg(feature = "zcashd-import")]
+    #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
     MigrateZcashConf(MigrateZcashConfCmd),
 
     /// Add the keys and transactions of a zcashd wallet.dat file to the wallet database.
-    #[cfg(zallet_build = "wallet")]
-    #[cfg(feature = "zcashd-import")]
+    #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
     MigrateZcashdWallet(MigrateZcashdWalletCmd),
 
     /// Initialize wallet encryption.
@@ -107,8 +105,7 @@ pub(crate) struct ExampleConfigCmd {
 }
 
 /// `migrate-zcash-conf` subcommand
-#[cfg(zallet_build = "wallet")]
-#[cfg(feature = "zcashd-import")]
+#[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct MigrateZcashConfCmd {
@@ -143,8 +140,7 @@ pub(crate) struct MigrateZcashConfCmd {
 }
 
 /// `migrate-zcashd-wallet` subcommand
-#[cfg(zallet_build = "wallet")]
-#[cfg(feature = "zcashd-import")]
+#[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct MigrateZcashdWalletCmd {

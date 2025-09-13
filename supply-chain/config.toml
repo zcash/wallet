@@ -229,7 +229,7 @@ version = "1.7.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.bc-components]]
-version = "0.21.2"
+version = "0.24.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.bc-crypto]]
@@ -237,7 +237,7 @@ version = "0.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.bc-envelope]]
-version = "0.28.1"
+version = "0.33.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.bc-rand]]
@@ -249,11 +249,11 @@ version = "0.8.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.bc-tags]]
-version = "0.2.0"
+version = "0.5.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.bc-ur]]
-version = "0.9.0"
+version = "0.12.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.bech32]]
@@ -541,7 +541,7 @@ version = "6.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.dcbor]]
-version = "0.19.1"
+version = "0.22.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.deadpool]]
@@ -993,7 +993,7 @@ version = "0.10.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.known-values]]
-version = "0.4.0"
+version = "0.7.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.lazy-regex]]
@@ -1068,6 +1068,10 @@ criteria = "safe-to-deploy"
 version = "1.11.1+lz4-1.10.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.matchers]]
+version = "0.2.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.matchit]]
 version = "0.7.3"
 criteria = "safe-to-deploy"
@@ -1126,6 +1130,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.nonempty]]
 version = "0.7.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.nu-ansi-term]]
+version = "0.50.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.num-bigint]]
@@ -1437,15 +1445,7 @@ version = "1.11.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.regex-automata]]
-version = "0.1.10"
-criteria = "safe-to-deploy"
-
-[[exemptions.regex-automata]]
 version = "0.4.8"
-criteria = "safe-to-deploy"
-
-[[exemptions.regex-syntax]]
-version = "0.6.29"
 criteria = "safe-to-deploy"
 
 [[exemptions.reqwest]]

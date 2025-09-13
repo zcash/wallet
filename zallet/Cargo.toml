@@ -188,7 +188,7 @@ rpc-cli = ["jsonrpsee/async-client", "dep:jsonrpsee-http-client"]
 tokio-console = ["dep:console-subscriber", "tokio/tracing"]
 
 ## Allows `zallet` to provide transparent key import functionality, and to work
-## with a wallet imported via the `migrate_zcashd_wallet` command.
+## with a wallet imported via the `migrate-zcashd-wallet` command.
 transparent-key-import = [
   "zcash_client_backend/transparent-key-import",
   "zcash_client_sqlite/transparent-key-import",
