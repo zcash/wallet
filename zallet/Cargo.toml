@@ -72,6 +72,10 @@ assets = [
     ["../README.md", "usr/share/doc/zallet/README.md", "644"],
 ]
 
+[[test]]
+name = "cli_tests"
+required-features = ["zcashd-import"]
+
 [dependencies]
 abscissa_core.workspace = true
 abscissa_tokio.workspace = true
