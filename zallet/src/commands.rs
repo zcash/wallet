@@ -30,8 +30,10 @@ mod generate_mnemonic;
 mod import_mnemonic;
 #[cfg(zallet_build = "wallet")]
 mod init_wallet_encryption;
-#[cfg(zallet_build = "wallet")]
+#[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
 mod migrate_zcash_conf;
+#[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
+mod migrate_zcashd_wallet;
 
 #[cfg(feature = "rpc-cli")]
 pub(crate) mod rpc_cli;

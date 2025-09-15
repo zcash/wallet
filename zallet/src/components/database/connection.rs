@@ -98,7 +98,7 @@ impl DbConnection {
         &self.params
     }
 
-    fn with<T>(
+    pub(crate) fn with<T>(
         &self,
         f: impl FnOnce(WalletDb<&rusqlite::Connection, Network, SystemClock, OsRng>) -> T,
     ) -> T {
@@ -128,17 +128,20 @@ impl DbConnection {
         })
     }
 
-    pub(crate) fn with_raw<T>(&self, f: impl FnOnce(&rusqlite::Connection) -> T) -> T {
+    pub(crate) fn with_raw<T>(&self, f: impl FnOnce(&rusqlite::Connection, &Network) -> T) -> T {
         tokio::task::block_in_place(|| {
             let _guard = self.lock.read().unwrap();
-            f(self.inner.lock().unwrap().as_ref())
+            f(self.inner.lock().unwrap().as_ref(), &self.params)
         })
     }
 
-    pub(crate) fn with_raw_mut<T>(&self, f: impl FnOnce(&mut rusqlite::Connection) -> T) -> T {
+    pub(crate) fn with_raw_mut<T>(
+        &self,
+        f: impl FnOnce(&mut rusqlite::Connection, &Network) -> T,
+    ) -> T {
         tokio::task::block_in_place(|| {
             let _guard = self.lock.write().unwrap();
-            f(self.inner.lock().unwrap().as_mut())
+            f(self.inner.lock().unwrap().as_mut(), &self.params)
         })
     }
 }
@@ -307,8 +310,11 @@ impl WalletRead for DbConnection {
         &self,
         account: Self::AccountId,
         include_change: bool,
+        include_standalone: bool,
     ) -> Result<HashMap<TransparentAddress, Option<TransparentAddressMetadata>>, Self::Error> {
-        self.with(|db_data| db_data.get_transparent_receivers(account, include_change))
+        self.with(|db_data| {
+            db_data.get_transparent_receivers(account, include_change, include_standalone)
+        })
     }
 
     fn get_transparent_balances(
@@ -472,6 +478,15 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| {
             db_data.import_account_ufvk(account_name, unified_key, birthday, purpose, key_source)
         })
+    }
+
+    #[cfg(feature = "zcashd-import")]
+    fn import_standalone_transparent_pubkey(
+        &mut self,
+        account: Self::AccountId,
+        pubkey: secp256k1::PublicKey,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.import_standalone_transparent_pubkey(account, pubkey))
     }
 
     fn get_next_available_address(

@@ -18,7 +18,11 @@ use once_cell::sync::Lazy;
 use tempfile::tempdir;
 
 #[cfg(zallet_build = "wallet")]
-use {abscissa_core::fs::File, age::secrecy::ExposeSecret, std::io::Write};
+use {
+    abscissa_core::fs::File,
+    age::secrecy::ExposeSecret,
+    std::io::{BufRead, Write},
+};
 
 /// Executes your application binary via `cargo run`.
 ///
@@ -97,8 +101,7 @@ fn setup_new_wallet() {
             .capture_stderr()
             .run();
         let stderr = cmd.stderr();
-        stderr.expect_regex(".*Finished.*");
-        stderr.expect_regex(".*Running.*");
+        wait_until_running(stderr);
         stderr.expect_regex(".*Creating empty database.*");
         cmd.wait().unwrap().expect_code(0);
     }
@@ -112,8 +115,7 @@ fn setup_new_wallet() {
             .capture_stderr()
             .run();
         let stderr = cmd.stderr();
-        stderr.expect_regex(".*Finished.*");
-        stderr.expect_regex(".*Running.*");
+        wait_until_running(stderr);
         stderr.expect_regex(".*Applying latest database migrations.*");
         cmd.wait().unwrap().expect_code(0);
     }
@@ -127,5 +129,13 @@ fn setup_new_wallet() {
             .run();
         // We added invalid data to the config in order to ensure that `start` fails.
         cmd.wait().unwrap().expect_code(1);
+    }
+}
+
+#[cfg(zallet_build = "wallet")]
+fn wait_until_running(stderr: &mut Stderr) {
+    let mut buf = String::new();
+    while !buf.contains("Running") {
+        stderr.read_line(&mut buf).unwrap();
     }
 }

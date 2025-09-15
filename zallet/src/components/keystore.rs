@@ -125,13 +125,21 @@ use tokio::{
 };
 use zip32::fingerprint::SeedFingerprint;
 
+use crate::network::Network;
 use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
-    fl,
 };
 
 use super::database::Database;
+
+#[cfg(feature = "zcashd-import")]
+use {
+    crate::fl,
+    sapling::zip32::{DiversifiableFullViewingKey, ExtendedSpendingKey},
+    transparent::address::TransparentAddress,
+    zcash_keys::address::Address,
+};
 
 pub(super) mod db;
 
@@ -364,14 +372,14 @@ impl KeyStore {
 
     async fn with_db<T>(
         &self,
-        f: impl FnOnce(&rusqlite::Connection) -> Result<T, Error>,
+        f: impl FnOnce(&rusqlite::Connection, &Network) -> Result<T, Error>,
     ) -> Result<T, Error> {
         self.db.handle().await?.with_raw(f)
     }
 
     async fn with_db_mut<T>(
         &self,
-        f: impl FnOnce(&mut rusqlite::Connection) -> Result<T, Error>,
+        f: impl FnOnce(&mut rusqlite::Connection, &Network) -> Result<T, Error>,
     ) -> Result<T, Error> {
         self.db.handle().await?.with_raw_mut(f)
     }
@@ -394,7 +402,7 @@ impl KeyStore {
 
         let now = ::time::OffsetDateTime::now_utc();
 
-        self.with_db_mut(|conn| {
+        self.with_db_mut(|conn, _| {
             let mut stmt = conn
                 .prepare(
                     "INSERT INTO ext_zallet_keystore_age_recipients
@@ -419,7 +427,7 @@ impl KeyStore {
 
     /// Fetches the age recipients for this wallet from the database.
     async fn recipients(&self) -> Result<Vec<Box<dyn age::Recipient + Send>>, Error> {
-        self.with_db(|conn| {
+        self.with_db(|conn, _| {
             let mut stmt = conn
                 .prepare(
                     "SELECT recipient
@@ -452,7 +460,7 @@ impl KeyStore {
 
     /// Lists the fingerprint of every seed available in the keystore.
     pub(crate) async fn list_seed_fingerprints(&self) -> Result<HashSet<SeedFingerprint>, Error> {
-        self.with_db(|conn| {
+        self.with_db(|conn, _| {
             let mut stmt = conn
                 .prepare(
                     "SELECT hd_seed_fingerprint
@@ -475,7 +483,7 @@ impl KeyStore {
     pub(crate) async fn list_legacy_seed_fingerprints(
         &self,
     ) -> Result<HashSet<SeedFingerprint>, Error> {
-        self.with_db(|conn| {
+        self.with_db(|conn, _| {
             let mut stmt = conn
                 .prepare(
                     "SELECT hd_seed_fingerprint
@@ -496,22 +504,19 @@ impl KeyStore {
 
     pub(crate) async fn encrypt_and_store_mnemonic(
         &self,
-        mnemonic: &SecretString,
+        mnemonic: Mnemonic,
     ) -> Result<SeedFingerprint, Error> {
         let recipients = self.recipients().await?;
 
-        let seed_bytes = SecretVec::new(
-            Mnemonic::<English>::from_phrase(mnemonic.expose_secret())
-                .map_err(|e| ErrorKind::Generic.context(e))?
-                .to_seed("")
-                .to_vec(),
-        );
+        let seed_bytes = SecretVec::new(mnemonic.to_seed("").to_vec());
         let seed_fp = SeedFingerprint::from_seed(seed_bytes.expose_secret()).expect("valid length");
 
+        // Take ownership of the memory of the mnemonic to ensure it will be correctly zeroized on drop
+        let mnemonic = SecretString::new(mnemonic.into_phrase());
         let encrypted_mnemonic = encrypt_string(&recipients, mnemonic.expose_secret())
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
-        self.with_db_mut(|conn| {
+        self.with_db_mut(|conn, _| {
             conn.execute(
                 "INSERT INTO ext_zallet_keystore_mnemonics
                 VALUES (:hd_seed_fingerprint, :encrypted_mnemonic)
@@ -529,7 +534,7 @@ impl KeyStore {
         Ok(seed_fp)
     }
 
-    #[allow(dead_code)]
+    #[cfg(feature = "zcashd-import")]
     pub(crate) async fn encrypt_and_store_legacy_seed(
         &self,
         legacy_seed: &SecretVec<u8>,
@@ -542,7 +547,7 @@ impl KeyStore {
         let encrypted_legacy_seed = encrypt_legacy_seed_bytes(&recipients, legacy_seed)
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
-        self.with_db_mut(|conn| {
+        self.with_db_mut(|conn, _| {
             conn.execute(
                 "INSERT INTO ext_zallet_keystore_legacy_seeds
                 VALUES (:hd_seed_fingerprint, :encrypted_legacy_seed)
@@ -560,6 +565,64 @@ impl KeyStore {
         Ok(legacy_seed_fp)
     }
 
+    #[cfg(feature = "zcashd-import")]
+    pub(crate) async fn encrypt_and_store_standalone_sapling_key(
+        &self,
+        sapling_key: &ExtendedSpendingKey,
+    ) -> Result<DiversifiableFullViewingKey, Error> {
+        let recipients = self.recipients().await?;
+
+        let dfvk = sapling_key.to_diversifiable_full_viewing_key();
+        let encrypted_sapling_extsk = encrypt_standalone_sapling_key(&recipients, sapling_key)
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+
+        self.with_db_mut(|conn, _| {
+            conn.execute(
+                "INSERT INTO ext_zallet_keystore_standalone_sapling_keys
+                VALUES (:dfvk, :encrypted_sapling_extsk)
+                ON CONFLICT (dfvk) DO NOTHING ",
+                named_params! {
+                    ":dfvk": &dfvk.to_bytes(),
+                    ":encrypted_sapling_extsk": encrypted_sapling_extsk,
+                },
+            )
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+            Ok(())
+        })
+        .await?;
+
+        Ok(dfvk)
+    }
+
+    #[cfg(feature = "zcashd-import")]
+    pub(crate) async fn encrypt_and_store_standalone_transparent_key(
+        &self,
+        key: &zcash_keys::keys::transparent::Key,
+    ) -> Result<(), Error> {
+        let recipients = self.recipients().await?;
+
+        let encrypted_transparent_key =
+            encrypt_standalone_transparent_privkey(&recipients, key.secret())
+                .map_err(|e| ErrorKind::Generic.context(e))?;
+
+        self.with_db_mut(|conn, _| {
+            conn.execute(
+                "INSERT INTO ext_zallet_keystore_standalone_transparent_keys
+                VALUES (:pubkey, :encrypted_key_bytes)
+                ON CONFLICT (pubkey) DO NOTHING ",
+                named_params! {
+                    ":pubkey": &key.pubkey().serialize(),
+                    ":encrypted_key_bytes": encrypted_transparent_key,
+                },
+            )
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+            Ok(())
+        })
+        .await?;
+
+        Ok(())
+    }
+
     /// Decrypts the mnemonic phrase corresponding to the given seed fingerprint.
     async fn decrypt_mnemonic(&self, seed_fp: &SeedFingerprint) -> Result<SecretString, Error> {
         // Acquire a read lock on the identities for decryption.
@@ -569,7 +632,7 @@ impl KeyStore {
         }
 
         let encrypted_mnemonic = self
-            .with_db(|conn| {
+            .with_db(|conn, _| {
                 Ok(conn
                     .query_row(
                         "SELECT encrypted_mnemonic
@@ -603,6 +666,42 @@ impl KeyStore {
 
         Ok(seed)
     }
+
+    #[cfg(feature = "zcashd-import")]
+    pub(crate) async fn decrypt_standalone_transparent_key(
+        &self,
+        address: &TransparentAddress,
+    ) -> Result<secp256k1::SecretKey, Error> {
+        // Acquire a read lock on the identities for decryption.
+        let identities = self.identities.read().await;
+        if identities.is_empty() {
+            return Err(ErrorKind::Generic.context("Wallet is locked").into());
+        }
+
+        let encrypted_key_bytes = self
+            .with_db(|conn, network| {
+                let addr_str = Address::Transparent(*address).encode(network);
+                let encrypted_key_bytes = conn
+                    .query_row(
+                        "SELECT encrypted_key_bytes
+                         FROM ext_zallet_keystore_standalone_transparent_keys ztk
+                         JOIN addresses a ON ztk.pubkey = a.imported_transparent_receiver_pubkey
+                         WHERE a.cached_transparent_receiver_address = :address",
+                        named_params! {
+                            ":address": addr_str,
+                        },
+                        |row| row.get::<_, Vec<u8>>("encrypted_key_bytes"),
+                    )
+                    .map_err(|e| ErrorKind::Generic.context(e))?;
+                Ok(encrypted_key_bytes)
+            })
+            .await?;
+
+        let secret_key =
+            decrypt_standalone_transparent_privkey(&identities, &encrypted_key_bytes[..])?;
+
+        Ok(secret_key)
+    }
 }
 
 fn encrypt_string(
@@ -614,20 +713,6 @@ fn encrypt_string(
     let mut ciphertext = Vec::with_capacity(plaintext.len());
     let mut writer = encryptor.wrap_output(&mut ciphertext)?;
     writer.write_all(plaintext.as_bytes())?;
-    writer.finish()?;
-
-    Ok(ciphertext)
-}
-
-fn encrypt_legacy_seed_bytes(
-    recipients: &[Box<dyn age::Recipient + Send>],
-    seed: &SecretVec<u8>,
-) -> Result<Vec<u8>, age::EncryptError> {
-    let encryptor = age::Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref() as _))?;
-
-    let mut ciphertext = Vec::with_capacity(seed.expose_secret().len());
-    let mut writer = encryptor.wrap_output(&mut ciphertext)?;
-    writer.write_all(seed.expose_secret())?;
     writer.finish()?;
 
     Ok(ciphertext)
@@ -656,4 +741,74 @@ fn decrypt_string(
     res?;
 
     Ok(mnemonic)
+}
+
+#[cfg(any(feature = "transparent-key-import", feature = "zcashd-import"))]
+fn encrypt_secret(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    secret: &SecretVec<u8>,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let encryptor = age::Encryptor::with_recipients(recipients.iter().map(|r| r.as_ref() as _))?;
+
+    let mut ciphertext = Vec::with_capacity(secret.expose_secret().len());
+    let mut writer = encryptor.wrap_output(&mut ciphertext)?;
+    writer.write_all(secret.expose_secret())?;
+    writer.finish()?;
+
+    Ok(ciphertext)
+}
+
+#[cfg(feature = "zcashd-import")]
+fn encrypt_legacy_seed_bytes(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    seed: &SecretVec<u8>,
+) -> Result<Vec<u8>, age::EncryptError> {
+    encrypt_secret(recipients, seed)
+}
+
+#[cfg(feature = "zcashd-import")]
+fn encrypt_standalone_sapling_key(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    key: &ExtendedSpendingKey,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let secret = SecretVec::new(key.to_bytes().to_vec());
+    encrypt_secret(recipients, &secret)
+}
+
+#[cfg(feature = "transparent-key-import")]
+fn encrypt_standalone_transparent_privkey(
+    recipients: &[Box<dyn age::Recipient + Send>],
+    key: &secp256k1::SecretKey,
+) -> Result<Vec<u8>, age::EncryptError> {
+    let secret = SecretVec::new(key.secret_bytes().to_vec());
+    encrypt_secret(recipients, &secret)
+}
+
+#[cfg(feature = "transparent-key-import")]
+fn decrypt_standalone_transparent_privkey(
+    identities: &[Box<dyn age::Identity + Send + Sync>],
+    ciphertext: &[u8],
+) -> Result<secp256k1::SecretKey, Error> {
+    let decryptor = age::Decryptor::new(ciphertext).map_err(|e| ErrorKind::Generic.context(e))?;
+
+    // The plaintext is always shorter than the ciphertext. Over-allocating the initial
+    // string ensures that no internal re-allocations occur that might leave plaintext
+    // bytes strewn around the heap.
+    let mut buf = Vec::with_capacity(ciphertext.len());
+    let res = decryptor
+        .decrypt(identities.iter().map(|i| i.as_ref() as _))
+        .map_err(|e| ErrorKind::Generic.context(e))?
+        .read_to_end(&mut buf);
+
+    // We intentionally do not use `?` on the decryption expression because doing so in
+    // the case of a partial failure could result in part of the secret data being read
+    // into `buf`, which would not then be properly zeroized. Instead, we take ownership
+    // of the buffer in construction of a `SecretVec` to ensure that the memory is
+    // zeroed out when we raise the error on the following line.
+    let buf_secret = SecretVec::new(buf);
+    res.map_err(|e| ErrorKind::Generic.context(e))?;
+    let secret_key = secp256k1::SecretKey::from_slice(buf_secret.expose_secret())
+        .map_err(|e| ErrorKind::Generic.context(e))?;
+
+    Ok(secret_key)
 }

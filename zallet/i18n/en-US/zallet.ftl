@@ -112,6 +112,43 @@ err-migrate-unknown-zcashd-option = Unknown {-zcashd} option '{$option}'
 err-failed-seed-fingerprinting =
     Zallet was unable to import invalid seed data, likely due to the seed having
     an invalid length.
+err-migrate-wallet-bdb-parse =
+    An error occurred in parsing the {-zcashd} wallet file at '{$path}': '{$err}'
+err-migrate-wallet-db-dump =
+    An error occurred in extracting wallet data from '{$path}': '{$err}'
+err-migrate-wallet-seed-absent =
+    The {-zcashd} wallet file did not contain HD seed information. Wallets from
+    prior to the Sapling network upgrade are not supported by this migration
+    tool.
+err-migrate-wallet-invalid-mnemonic =
+    The {-zcashd} wallet file contained invalid mnemonic seed phrase data and
+    may be corrupt: '{$err}'
+err-migrate-wallet-key-decoding=
+    The {-zcashd} wallet file contained invalid mnemonic transparent secret key
+    data and may be corrupt: '{$err}'
+err-migrate-wallet-key-data=
+    The {-zcashd} wallet file contained invalid key data and may be corrupt:
+    '{$err}'
+err-migrate-wallet-network-mismatch =
+    The {-zcashd} wallet being imported is for the '{$wallet_network}' network,
+    but this {-zallet} instance is configured for '{$zallet_network}'
+err-migrate-wallet-regtest =
+    Migration of regtest wallets is not yet supported.
+err-migrate-wallet-storage =
+    An database error occurred in wallet migration. This is indicative of a
+    programming error; please report the following error to (TBD): '{$err}'
+err-migrate-wallet-invalid-chain-data =
+    Invalid chain data was encountered in wallet migration. This is indicative of a
+    programming error; please report the following error to (TBD): '{$err}'
+err-migrate-wallet-key-decoding =
+    An error occurred decoding key material: '{$err}'.
+err-migrate-wallet-tx-fetch =
+    An error occurred fetching transaction data: '{$err}'.
+err-migrate-wallet-data-parse=
+    An error occurred parsing zcashd wallet data: '{$err}'.
+err-migrate-wallet-invalid-account-id =
+    Error encountered in wallet migration: '{$account_id}' is not a valid ZIP
+    32 account identifier.
 
 err-ux-A = Did {-zallet} not do what you expected? Could the error be more useful?
 err-ux-B = Tell us

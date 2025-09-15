@@ -38,6 +38,14 @@ impl RusqliteMigration for Migration {
             CREATE TABLE ext_zallet_keystore_legacy_seeds (
                 hd_seed_fingerprint BLOB NOT NULL UNIQUE,
                 encrypted_legacy_seed BLOB NOT NULL
+            );
+            CREATE TABLE ext_zallet_keystore_standalone_sapling_keys (
+                dfvk BLOB NOT NULL UNIQUE,
+                encrypted_sapling_extsk BLOB NOT NULL
+            );
+            CREATE TABLE ext_zallet_keystore_standalone_transparent_keys (
+                pubkey BLOB NOT NULL UNIQUE,
+                encrypted_transparent_privkey BLOB NOT NULL
             );",
         )?;
         Ok(())

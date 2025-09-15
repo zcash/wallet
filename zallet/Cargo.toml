@@ -72,6 +72,14 @@ assets = [
     ["../README.md", "usr/share/doc/zallet/README.md", "644"],
 ]
 
+[[test]]
+name = "cli_tests"
+required-features = ["zcashd-import"]
+
+[[test]]
+name = "zallet_acceptance"
+path = "tests/acceptance.rs"
+
 [dependencies]
 abscissa_core.workspace = true
 abscissa_tokio.workspace = true
@@ -91,7 +99,7 @@ http-body-util.workspace = true
 hyper.workspace = true
 i18n-embed = { workspace = true, features = ["desktop-requester"] }
 i18n-embed-fl.workspace = true
-incrementalmerkletree.workspace = true
+incrementalmerkletree = { workspace = true, features = ["legacy-api"] }
 jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 nix = { workspace = true, features = ["signal"] }
@@ -106,6 +114,7 @@ sapling.workspace = true
 schemars.workspace = true
 schemerz.workspace = true
 schemerz-rusqlite.workspace = true
+secp256k1.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -136,7 +145,7 @@ zcash_client_sqlite = { workspace = true, features = [
     "orchard",
     "transparent-inputs",
 ] }
-zcash_keys.workspace = true
+zcash_keys = { workspace = true, features = ["zcashd-compat", "unstable"] }
 zcash_note_encryption.workspace = true
 zcash_primitives.workspace = true
 zcash_proofs = { workspace = true, features = ["bundled-prover"] }
@@ -145,6 +154,9 @@ zebra-chain.workspace = true
 zebra-rpc.workspace = true
 zebra-state.workspace = true
 zip32.workspace = true
+zewif = { workspace = true, optional = true }
+zewif-zcashd = { workspace = true, optional = true }
+anyhow.workspace = true
 
 console-subscriber = { workspace = true, optional = true }
 jsonrpsee-http-client = { workspace = true, optional = true }
@@ -182,6 +194,22 @@ rpc-cli = ["jsonrpsee/async-client", "dep:jsonrpsee-http-client"]
 ## For more details, see:
 ## https://github.com/tokio-rs/console/blob/main/console-subscriber/README.md#enabling-tokio-instrumentation
 tokio-console = ["dep:console-subscriber", "tokio/tracing"]
+
+## Allows `zallet` to provide transparent key import functionality, and to work
+## with a wallet imported via the `migrate-zcashd-wallet` command.
+transparent-key-import = [
+  "zcash_client_backend/transparent-key-import",
+  "zcash_client_sqlite/transparent-key-import",
+]
+
+## Allows `zallet` to import zcashd wallets.
+zcashd-import = [
+  "transparent-key-import",
+  "dep:zewif",
+  "dep:zewif-zcashd",
+  "zcash_client_backend/zcashd-compat",
+  "zcash_client_sqlite/zcashd-compat",
+]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [

@@ -214,7 +214,7 @@ pub(crate) fn call(
         let is_watch_only = !matches!(account.purpose(), AccountPurpose::Spending { .. });
 
         let utxos = wallet
-            .get_transparent_receivers(account_id, true)
+            .get_transparent_receivers(account_id, true, true)
             .map_err(|e| {
                 RpcError::owned(
                     LegacyCode::Database.into(),
@@ -250,7 +250,7 @@ pub(crate) fn call(
                         Some(format!("{e}")),
                     )
                 })?
-                .is_some_and(|m| m.scope() == TransparentKeyScope::INTERNAL);
+                .is_some_and(|m| m.scope() == Some(TransparentKeyScope::INTERNAL));
 
             unspent_outputs.push(UnspentOutput {
                 txid: utxo.outpoint().txid().to_string(),

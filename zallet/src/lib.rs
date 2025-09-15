@@ -27,6 +27,9 @@ pub mod network;
 mod prelude;
 mod task;
 
+#[cfg(feature = "zcashd-import")]
+mod rosetta;
+
 // Needed for the `Component` derive to work.
 use abscissa_core::{Application, Version, component};
 

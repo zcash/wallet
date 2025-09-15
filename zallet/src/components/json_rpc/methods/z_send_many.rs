@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use zaino_state::FetchServiceSubscriber;
 use zcash_address::{ZcashAddress, unified};
+use zcash_client_backend::data_api::wallet::SpendingKeys;
+use zcash_client_backend::proposal::Proposal;
 use zcash_client_backend::{
     data_api::{
         Account,
@@ -22,7 +24,7 @@ use zcash_client_backend::{
     wallet::OvkPolicy,
     zip321::{Payment, TransactionRequest},
 };
-use zcash_client_sqlite::AccountUuid;
+use zcash_client_sqlite::ReceivedNoteId;
 use zcash_keys::{address::Address, keys::UnifiedSpendingKey};
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::{
@@ -79,7 +81,7 @@ pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn call(
-    wallet: DbHandle,
+    mut wallet: DbHandle,
     keystore: KeyStore,
     chain: FetchServiceSubscriber,
     fromaddress: String,
@@ -160,10 +162,6 @@ pub(crate) async fn call(
             get_account_for_address(wallet.as_ref(), &address)
         }
     }?;
-    let derivation = account.source().key_derivation().ok_or_else(|| {
-        LegacyCode::InvalidAddressOrKey
-            .with_static("Invalid from address, no payment source found for address.")
-    })?;
 
     let privacy_policy = match privacy_policy.as_deref() {
         Some("LegacyCompat") => Err(LegacyCode::InvalidParameter
@@ -190,64 +188,6 @@ pub(crate) async fn call(
         }
     };
 
-    // Fetch spending key last, to avoid a keystore decryption if unnecessary.
-    let seed = keystore
-        .decrypt_seed(derivation.seed_fingerprint())
-        .await
-        .map_err(|e| match e.kind() {
-            // TODO: Improve internal error types.
-            crate::error::ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
-                LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
-            }
-            _ => LegacyCode::Database.with_message(e.to_string()),
-        })?;
-    let usk = UnifiedSpendingKey::from_seed(
-        wallet.params(),
-        seed.expose_secret(),
-        derivation.account_index(),
-    )
-    .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
-
-    Ok((
-        Some(ContextInfo::new(
-            "z_sendmany",
-            json!({
-                "fromaddress": fromaddress,
-                "amounts": amounts,
-                "minconf": minconf
-            }),
-        )),
-        run(
-            wallet,
-            chain,
-            account.id(),
-            request,
-            confirmations_policy,
-            privacy_policy,
-            usk,
-        ),
-    ))
-}
-
-/// Construct and send the transaction, returning the resulting txid.
-/// Errors in transaction construction will throw.
-///
-/// Notes:
-/// 1. #1159 Currently there is no limit set on the number of elements, which could
-///    make the tx too large.
-/// 2. #1360 Note selection is not optimal.
-/// 3. #1277 Spendable notes are not locked, so an operation running in parallel
-///    could also try to use them.
-async fn run(
-    mut wallet: DbHandle,
-    chain: FetchServiceSubscriber,
-    spend_from_account: AccountUuid,
-    request: TransactionRequest,
-    confirmations_policy: ConfirmationsPolicy,
-    privacy_policy: PrivacyPolicy,
-    // TODO: Support legacy transparent pool of funds. https://github.com/zcash/wallet/issues/138
-    usk: UnifiedSpendingKey,
-) -> RpcResult<SendResult> {
     let params = *wallet.params();
 
     // TODO: Fetch the real maximums within the account so we can detect correctly.
@@ -318,6 +258,7 @@ async fn run(
         DustOutputPolicy::default(),
         APP.config().note_management.split_policy(),
     );
+
     // TODO: Once `zcash_client_backend` supports spending transparent coins arbitrarily,
     // consider using the privacy policy here to avoid selecting incompatible funds. This
     // would match what `zcashd` did more closely (though we might instead decide to let
@@ -328,7 +269,7 @@ async fn run(
     let proposal = propose_transfer::<_, _, _, _, Infallible>(
         wallet.as_mut(),
         &params,
-        spend_from_account,
+        account.id(),
         &input_selector,
         &change_strategy,
         request,
@@ -382,15 +323,102 @@ async fn run(
         }
     }
 
-    let prover = LocalTxProver::bundled();
+    let derivation = account.source().key_derivation().ok_or_else(|| {
+        LegacyCode::InvalidAddressOrKey
+            .with_static("Invalid from address, no payment source found for address.")
+    })?;
 
+    // Fetch spending key last, to avoid a keystore decryption if unnecessary.
+    let seed = keystore
+        .decrypt_seed(derivation.seed_fingerprint())
+        .await
+        .map_err(|e| match e.kind() {
+            // TODO: Improve internal error types.
+            crate::error::ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
+                LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
+            }
+            _ => LegacyCode::Database.with_message(e.to_string()),
+        })?;
+    let usk = UnifiedSpendingKey::from_seed(
+        wallet.params(),
+        seed.expose_secret(),
+        derivation.account_index(),
+    )
+    .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
+
+    #[cfg(feature = "transparent-key-import")]
+    let standalone_keys = {
+        let mut keys = std::collections::HashMap::new();
+        for step in proposal.steps() {
+            for input in step.transparent_inputs() {
+                if let Some(address) = input.txout().script_pubkey().address() {
+                    let secret_key = keystore
+                        .decrypt_standalone_transparent_key(&address)
+                        .await
+                        .map_err(|e| match e.kind() {
+                            // TODO: Improve internal error types.
+                            crate::error::ErrorKind::Generic
+                                if e.to_string() == "Wallet is locked" =>
+                            {
+                                LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
+                            }
+                            _ => LegacyCode::Database.with_message(e.to_string()),
+                        })?;
+                    keys.insert(address, secret_key);
+                }
+            }
+        }
+        keys
+    };
+
+    // TODO: verify that the proposal satisfies the requested privacy policy
+
+    Ok((
+        Some(ContextInfo::new(
+            "z_sendmany",
+            json!({
+                "fromaddress": fromaddress,
+                "amounts": amounts,
+                "minconf": minconf
+            }),
+        )),
+        run(
+            wallet,
+            chain,
+            proposal,
+            SpendingKeys::new(
+                usk,
+                #[cfg(feature = "zcashd-import")]
+                standalone_keys,
+            ),
+        ),
+    ))
+}
+
+/// Construct and send the transaction, returning the resulting txid.
+/// Errors in transaction construction will throw.
+///
+/// Notes:
+/// 1. #1159 Currently there is no limit set on the number of elements, which could
+///    make the tx too large.
+/// 2. #1360 Note selection is not optimal.
+/// 3. #1277 Spendable notes are not locked, so an operation running in parallel
+///    could also try to use them.
+async fn run(
+    mut wallet: DbHandle,
+    chain: FetchServiceSubscriber,
+    proposal: Proposal<StandardFeeRule, ReceivedNoteId>,
+    spending_keys: SpendingKeys,
+) -> RpcResult<SendResult> {
+    let prover = LocalTxProver::bundled();
     let (wallet, txids) = crate::spawn_blocking!("z_sendmany prover", move || {
+        let params = *wallet.params();
         create_proposed_transactions::<_, _, Infallible, _, Infallible, _>(
             wallet.as_mut(),
             &params,
             &prover,
             &prover,
-            &usk,
+            &spending_keys,
             OvkPolicy::Sender,
             &proposal,
         )

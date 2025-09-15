@@ -351,7 +351,7 @@ pub(crate) async fn call(
         };
 
         wallet
-            .with_raw(|conn| {
+            .with_raw(|conn, _| {
                 conn.query_row(
                     &format!(
                         "SELECT txid, {output_prefix}_index, accounts.uuid, address, value
@@ -391,7 +391,7 @@ pub(crate) async fn call(
         fallback_addr: impl FnOnce() -> Option<String>,
     ) -> RpcResult<Option<String>> {
         Ok(wallet
-            .with_raw(|conn| {
+            .with_raw(|conn, _| {
                 conn.query_row(
                     "SELECT to_address
                             FROM sent_notes
@@ -497,7 +497,10 @@ pub(crate) async fn call(
                             account_uuid,
                             Some(address.encode(wallet.params())),
                             wallet_scope.is_none(),
-                            matches!(wallet_scope, Some(TransparentKeyScope::INTERNAL)),
+                            // The outer `Some` indicates that we have address metadata; the inner
+                            // `Option` is `None` for addresses associated with imported transparent
+                            // spending keys.
+                            wallet_scope == Some(Some(TransparentKeyScope::INTERNAL)),
                         )
                     }
                 };
@@ -794,7 +797,7 @@ pub(crate) async fn call(
         .map_err(|e| LegacyCode::Database.with_message(format!("Failed to compute fee: {e}")))?;
 
     #[cfg(zallet_build = "wallet")]
-    let accounts = wallet.with_raw(|conn| {
+    let accounts = wallet.with_raw(|conn, _| {
         let mut stmt = conn
             .prepare(
                 "SELECT account_uuid, account_balance_delta

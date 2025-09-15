@@ -158,20 +158,20 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
             let addr = address_info.address();
             match addr {
                 Address::Transparent(_) | Address::Tex(_) => {
-                    match address_info.transparent_key_scope() {
-                        Some(TransparentKeyScope::EXTERNAL) => {
+                    match address_info.source().transparent_key_scope() {
+                        Some(&TransparentKeyScope::EXTERNAL) => {
                             transparent_addresses.push(addr.encode(wallet.params()));
                         }
-                        Some(TransparentKeyScope::INTERNAL) => {
+                        Some(&TransparentKeyScope::INTERNAL) => {
                             transparent_change_addresses.push(addr.encode(wallet.params()));
                         }
-                        Some(TransparentKeyScope::EPHEMERAL) => {
+                        Some(&TransparentKeyScope::EPHEMERAL) => {
                             transparent_ephemeral_addresses.push(addr.encode(wallet.params()));
                         }
                         _ => {
                             error!(
                                 "Unexpected {:?} for address {}",
-                                address_info.transparent_key_scope(),
+                                address_info.source().transparent_key_scope(),
                                 addr.encode(wallet.params()),
                             );
                             return Err(RpcErrorCode::InternalError.into());
@@ -179,21 +179,39 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
                     }
                 }
                 Address::Sapling(_) => sapling_addresses.push(addr.encode(wallet.params())),
-                Address::Unified(addr) => unified_addresses.push(UnifiedAddress {
-                    diversifier_index: address_info.diversifier_index().into(),
-                    receiver_types: addr
-                        .receiver_types()
-                        .into_iter()
-                        .map(|r| match r {
-                            unified::Typecode::P2pkh => "p2pkh".into(),
-                            unified::Typecode::P2sh => "p2sh".into(),
-                            unified::Typecode::Sapling => "sapling".into(),
-                            unified::Typecode::Orchard => "orchard".into(),
-                            unified::Typecode::Unknown(typecode) => format!("unknown({typecode})"),
-                        })
-                        .collect(),
-                    address: addr.encode(wallet.params()),
-                }),
+                Address::Unified(addr) => {
+                    let address = addr.encode(wallet.params());
+                    unified_addresses.push(UnifiedAddress {
+                        diversifier_index: match address_info.source() {
+                            zcash_client_backend::data_api::AddressSource::Derived {
+                                diversifier_index,
+                                ..
+                            } => diversifier_index.into(),
+                            #[cfg(feature = "transparent-key-import")]
+                            zcash_client_backend::data_api::AddressSource::Standalone => {
+                                error!(
+                                    "Unified address {} lacks HD derivation information.",
+                                    address
+                                );
+                                return Err(RpcErrorCode::InternalError.into());
+                            }
+                        },
+                        receiver_types: addr
+                            .receiver_types()
+                            .into_iter()
+                            .map(|r| match r {
+                                unified::Typecode::P2pkh => "p2pkh".into(),
+                                unified::Typecode::P2sh => "p2sh".into(),
+                                unified::Typecode::Sapling => "sapling".into(),
+                                unified::Typecode::Orchard => "orchard".into(),
+                                unified::Typecode::Unknown(typecode) => {
+                                    format!("unknown({typecode})")
+                                }
+                            })
+                            .collect(),
+                        address,
+                    })
+                }
             }
         }
 

@@ -70,7 +70,7 @@ impl Database {
             // any changes (including migrations, some of which make use of the network
             // params), to avoid leaving the database in an inconsistent state. We can
             // assume the presence of this table, as it's added by the initial migrations.
-            handle.with_raw(|conn| {
+            handle.with_raw(|conn, _| {
                 let wallet_network_type = conn
                     .query_row(
                         "SELECT network_type FROM ext_zallet_db_wallet_metadata",
@@ -127,7 +127,7 @@ impl Database {
         // an easy way to detect whether any migrations actually ran, so we check whether
         // the most recent entry matches the current version tuple, and only record an
         // entry if it doesn't.
-        handle.with_raw_mut(|conn| {
+        handle.with_raw_mut(|conn, _| {
             #[allow(clippy::const_is_empty)]
             let (git_revision, clean) = (!crate::build::COMMIT_HASH.is_empty())
                 .then_some((crate::build::COMMIT_HASH, crate::build::GIT_CLEAN))
