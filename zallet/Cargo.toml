@@ -76,6 +76,10 @@ assets = [
 name = "cli_tests"
 required-features = ["zcashd-import"]
 
+[[test]]
+name = "zallet_acceptance"
+path = "tests/acceptance.rs"
+
 [dependencies]
 abscissa_core.workspace = true
 abscissa_tokio.workspace = true
