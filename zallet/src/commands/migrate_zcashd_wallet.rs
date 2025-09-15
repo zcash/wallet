@@ -9,6 +9,7 @@ use bip0039::{English, Mnemonic};
 use secp256k1::PublicKey;
 use secrecy::SecretVec;
 use shardtree::error::ShardTreeError;
+use transparent::address::TransparentAddress;
 use zaino_proto::proto::service::TxFilter;
 use zaino_state::{FetchServiceError, LightWalletIndexer};
 use zcash_client_backend::data_api::{
@@ -16,9 +17,12 @@ use zcash_client_backend::data_api::{
     wallet::decrypt_and_store_transaction,
 };
 use zcash_client_sqlite::error::SqliteClientError;
-use zcash_keys::keys::{
-    DerivationError, UnifiedFullViewingKey,
-    zcashd::{PathParseError, ZcashdHdDerivation},
+use zcash_keys::{
+    encoding::AddressCodec,
+    keys::{
+        DerivationError, UnifiedFullViewingKey,
+        zcashd::{PathParseError, ZcashdHdDerivation},
+    },
 };
 use zcash_primitives::transaction::Transaction;
 use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
@@ -85,6 +89,8 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
 
 impl MigrateZcashdWalletCmd {
     fn dump_wallet(path: &Path, allow_warnings: bool) -> Result<ZcashdWallet, MigrateError> {
+        info!("Parsing zcashd wallet at {}", path.display());
+
         let db_dump = BDBDump::from_file(path).map_err(|e| MigrateError::Zewif {
             error_type: ZewifError::BdbDump,
             wallet_path: path.to_path_buf(),
@@ -107,6 +113,8 @@ impl MigrateZcashdWalletCmd {
                     error: e,
                 }
             })?;
+
+        info!("Wallet version: {}", zcashd_wallet.client_version());
 
         Ok(zcashd_wallet)
     }
@@ -233,6 +241,7 @@ impl MigrateZcashdWalletCmd {
                 }
             }
         }
+        info!("Wallet contains {} transactions", tx_heights.len());
 
         // Since zcashd scans in linear order, we can reliably choose the earliest wallet
         // transaction's mined height as the birthday height, so long as it is in the "stable"
@@ -254,6 +263,10 @@ impl MigrateZcashdWalletCmd {
             chain_tip,
         )
         .await?;
+        info!(
+            "Setting the wallet birthday to height {}",
+            wallet_birthday.height(),
+        );
 
         let mnemonic_seed_data = match Self::parse_mnemonic(wallet.bip39_mnemonic().mnemonic())? {
             Some(m) => Some((
@@ -335,6 +348,14 @@ impl MigrateZcashdWalletCmd {
 
         // Add unified accounts. The only source of unified accounts in zcashd is derivation from
         // the mnemonic seed.
+        if wallet.unified_accounts().account_metadata.is_empty() {
+            info!("Wallet contains no unified accounts (z_getnewaccount was never used)");
+        } else {
+            info!(
+                "Importing {} unified accounts (created with z_getnewaccount)",
+                wallet.unified_accounts().account_metadata.len()
+            );
+        }
         for (_, account) in wallet.unified_accounts().account_metadata.iter() {
             // The only way that a unified account could be created in zcashd was
             // to be derived from the mnemonic seed, so we can safely unwrap here.
@@ -372,6 +393,7 @@ impl MigrateZcashdWalletCmd {
         // * The mnemonic HD seed, under a standard ZIP 32 key path
         // * The mnemonic HD seed, under the "legacy" account with an additional hardened path element
         // * Zcashd Sapling spending key import
+        info!("Importing legacy Sapling keys"); // TODO: Expose how many there are in zewif-zcashd.
         for (idx, key) in wallet.sapling_keys().keypairs().enumerate() {
             // `zewif_zcashd` parses to an earlier version of the `sapling` types, so we
             // must roundtrip through the byte representation into the version we need.
@@ -459,28 +481,40 @@ impl MigrateZcashdWalletCmd {
             Ok(key)
         }
 
-        for key in wallet.keys().keypairs() {
+        info!("Importing legacy standalone transparent keys"); // TODO: Expose how many there are in zewif-zcashd.
+        for (i, key) in wallet.keys().keypairs().enumerate() {
             let key = convert_key(key)?;
+            let pubkey = key.pubkey();
+            debug!(
+                "[{i}] Importing key for address {}",
+                TransparentAddress::from_pubkey(&pubkey).encode(&network_params),
+            );
+
             keystore
                 .encrypt_and_store_standalone_transparent_key(&key)
                 .await?;
 
             db_data.import_standalone_transparent_pubkey(
                 legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?,
-                key.pubkey(),
+                pubkey,
             )?;
         }
 
         // Since we've retrieved the raw transaction data anyway, preemptively store it for faster
         // access to balance & to set priorities in the scan queue.
-        for (h, raw_tx) in tx_heights.values() {
-            let branch_id = BranchId::for_height(&network_params, *h);
-            if let Some(raw_tx) = raw_tx {
-                let tx = Transaction::read(&raw_tx.data[..], branch_id)?;
-                db_data.with_mut(|mut db| {
-                    decrypt_and_store_transaction(&network_params, &mut db, &tx, Some(*h))
-                })?;
+        if buffer_wallet_transactions {
+            info!("Importing transactions");
+            for (h, raw_tx) in tx_heights.values() {
+                let branch_id = BranchId::for_height(&network_params, *h);
+                if let Some(raw_tx) = raw_tx {
+                    let tx = Transaction::read(&raw_tx.data[..], branch_id)?;
+                    db_data.with_mut(|mut db| {
+                        decrypt_and_store_transaction(&network_params, &mut db, &tx, Some(*h))
+                    })?;
+                }
             }
+        } else {
+            info!("Not importing transactions (--buffer-wallet-transactions not set)");
         }
 
         Ok(())
