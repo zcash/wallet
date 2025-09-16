@@ -20,7 +20,11 @@
 -allow-warnings = --allow-warnings
 -allow-alpha-example = --this-is-alpha-code-and-you-will-need-to-recreate-the-example-later
 -allow-alpha-migration = --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later
+-allow-multiple-wallet-imports = --allow-multiple-wallet-imports
 -datadir = --datadir
+
+-legacy_pool_seed_fingerprint = legacy_pool_seed_fingerprint
+-zallet_toml = zallet.toml
 
 ## Usage
 
@@ -73,6 +77,11 @@ migrate-alpha-code =
 
 migrate-config-written = {-zallet} config written to {$conf}
 
+migrate-wallet-legacy-seed-fp =
+    Importing zcashd legacy account for seed fingerprint '{$seed_fp}'. If you wish to
+    enable legacy zcashd semantics for wallet RPC methods, you should set
+    '{-legacy_pool_seed_fingerprint}' to this value in '{-zallet_toml}'.",
+
 ## General errors
 
 err-kind-generic = Error
@@ -112,6 +121,12 @@ err-migrate-unknown-zcashd-option = Unknown {-zcashd} option '{$option}'
 err-failed-seed-fingerprinting =
     Zallet was unable to import invalid seed data, likely due to the seed having
     an invalid length.
+err-migrate-wallet-multi-import-disabled =
+    The {-allow-multiple-wallet-imports} flag must be provided to allow the
+    import of more than a single {-zcashd} `wallet.dat` file into {-zallet}.
+err-migrate-wallet-duplicate-import =
+    The {-zcashd} wallet containing seed with fingerprint '{$seed_fp}' has
+    already been imported.
 err-migrate-wallet-bdb-parse =
     An error occurred in parsing the {-zcashd} wallet file at '{$path}': '{$err}'
 err-migrate-wallet-db-dump =
