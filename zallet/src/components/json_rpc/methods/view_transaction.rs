@@ -421,58 +421,61 @@ pub(crate) async fn call(
     }
 
     if let Some(bundle) = tx.transparent_bundle() {
-        // Transparent inputs
-        for (input, idx) in bundle.vin.iter().zip(0u16..) {
-            let txid_prev = input.prevout().txid().to_string();
+        // Skip transparent inputs for coinbase transactions (as they are not spends).
+        if !bundle.is_coinbase() {
+            // Transparent inputs
+            for (input, idx) in bundle.vin.iter().zip(0u16..) {
+                let txid_prev = input.prevout().txid().to_string();
 
-            // TODO: Migrate to a hopefully much nicer Rust API once we migrate to the new Zaino ChainIndex trait.
-            let (account_uuid, address, value) =
-                match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await {
-                    Ok(GetRawTransaction::Object(tx)) => {
-                        let output = tx
-                            .outputs()
-                            .get(usize::try_from(input.prevout().n()).expect("should fit"))
-                            .expect("Zaino should have rejected this earlier");
-                        let address =
-                            transparent::address::Script::from(output.script_pub_key().hex())
-                                .address();
+                // TODO: Migrate to a hopefully much nicer Rust API once we migrate to the new Zaino ChainIndex trait.
+                let (account_uuid, address, value) =
+                    match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await {
+                        Ok(GetRawTransaction::Object(tx)) => {
+                            let output = tx
+                                .outputs()
+                                .get(usize::try_from(input.prevout().n()).expect("should fit"))
+                                .expect("Zaino should have rejected this earlier");
+                            let address =
+                                transparent::address::Script::from(output.script_pub_key().hex())
+                                    .address();
 
-                        let account_id = address.as_ref().and_then(|address| {
-                            account_ids.iter().find(|account| {
-                                wallet
-                                    .get_transparent_address_metadata(**account, address)
-                                    .transpose()
-                                    .is_some()
-                            })
-                        });
+                            let account_id = address.as_ref().and_then(|address| {
+                                account_ids.iter().find(|account| {
+                                    wallet
+                                        .get_transparent_address_metadata(**account, address)
+                                        .transpose()
+                                        .is_some()
+                                })
+                            });
 
-                        (
-                            account_id.map(|account| account.expose_uuid().to_string()),
-                            address.map(|addr| addr.encode(wallet.params())),
-                            Zatoshis::from_nonnegative_i64(output.value_zat())
-                                .expect("Zaino should have rejected this earlier"),
-                        )
-                    }
-                    Ok(_) => unreachable!(),
-                    Err(_) => todo!(),
-                };
+                            (
+                                account_id.map(|account| account.expose_uuid().to_string()),
+                                address.map(|addr| addr.encode(wallet.params())),
+                                Zatoshis::from_nonnegative_i64(output.value_zat())
+                                    .expect("Zaino should have rejected this earlier"),
+                            )
+                        }
+                        Ok(_) => unreachable!(),
+                        Err(_) => todo!(),
+                    };
 
-            transparent_input_values.insert(input.prevout(), value);
+                transparent_input_values.insert(input.prevout(), value);
 
-            spends.push(Spend {
-                pool: POOL_TRANSPARENT,
-                t_in: Some(idx),
-                spend: None,
-                action: None,
-                txid_prev,
-                t_out_prev: Some(input.prevout().n()),
-                output_prev: None,
-                action_prev: None,
-                account_uuid,
-                address,
-                value: value_from_zatoshis(value),
-                value_zat: value.into_u64(),
-            });
+                spends.push(Spend {
+                    pool: POOL_TRANSPARENT,
+                    t_in: Some(idx),
+                    spend: None,
+                    action: None,
+                    txid_prev,
+                    t_out_prev: Some(input.prevout().n()),
+                    output_prev: None,
+                    action_prev: None,
+                    account_uuid,
+                    address,
+                    value: value_from_zatoshis(value),
+                    value_zat: value.into_u64(),
+                });
+            }
         }
 
         // Transparent outputs
