@@ -99,8 +99,8 @@ pub(crate) struct Transaction {
 
     /// The fee paid by the transaction.
     ///
-    /// Omitted if the fee cannot be determined because one or more transparent inputs of
-    /// the transaction cannot be found.
+    /// Omitted if this is a coinbase transaction, or if the fee cannot be determined
+    /// because one or more transparent inputs of the transaction cannot be found.
     #[serde(skip_serializing_if = "Option::is_none")]
     fee: Option<JsonZec>,
 
@@ -421,58 +421,61 @@ pub(crate) async fn call(
     }
 
     if let Some(bundle) = tx.transparent_bundle() {
-        // Transparent inputs
-        for (input, idx) in bundle.vin.iter().zip(0u16..) {
-            let txid_prev = input.prevout().txid().to_string();
+        // Skip transparent inputs for coinbase transactions (as they are not spends).
+        if !bundle.is_coinbase() {
+            // Transparent inputs
+            for (input, idx) in bundle.vin.iter().zip(0u16..) {
+                let txid_prev = input.prevout().txid().to_string();
 
-            // TODO: Migrate to a hopefully much nicer Rust API once we migrate to the new Zaino ChainIndex trait.
-            let (account_uuid, address, value) =
-                match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await {
-                    Ok(GetRawTransaction::Object(tx)) => {
-                        let output = tx
-                            .outputs()
-                            .get(usize::try_from(input.prevout().n()).expect("should fit"))
-                            .expect("Zaino should have rejected this earlier");
-                        let address =
-                            transparent::address::Script::from(output.script_pub_key().hex())
-                                .address();
+                // TODO: Migrate to a hopefully much nicer Rust API once we migrate to the new Zaino ChainIndex trait.
+                let (account_uuid, address, value) =
+                    match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await {
+                        Ok(GetRawTransaction::Object(tx)) => {
+                            let output = tx
+                                .outputs()
+                                .get(usize::try_from(input.prevout().n()).expect("should fit"))
+                                .expect("Zaino should have rejected this earlier");
+                            let address =
+                                transparent::address::Script::from(output.script_pub_key().hex())
+                                    .address();
 
-                        let account_id = address.as_ref().and_then(|address| {
-                            account_ids.iter().find(|account| {
-                                wallet
-                                    .get_transparent_address_metadata(**account, address)
-                                    .transpose()
-                                    .is_some()
-                            })
-                        });
+                            let account_id = address.as_ref().and_then(|address| {
+                                account_ids.iter().find(|account| {
+                                    wallet
+                                        .get_transparent_address_metadata(**account, address)
+                                        .transpose()
+                                        .is_some()
+                                })
+                            });
 
-                        (
-                            account_id.map(|account| account.expose_uuid().to_string()),
-                            address.map(|addr| addr.encode(wallet.params())),
-                            Zatoshis::from_nonnegative_i64(output.value_zat())
-                                .expect("Zaino should have rejected this earlier"),
-                        )
-                    }
-                    Ok(_) => unreachable!(),
-                    Err(_) => todo!(),
-                };
+                            (
+                                account_id.map(|account| account.expose_uuid().to_string()),
+                                address.map(|addr| addr.encode(wallet.params())),
+                                Zatoshis::from_nonnegative_i64(output.value_zat())
+                                    .expect("Zaino should have rejected this earlier"),
+                            )
+                        }
+                        Ok(_) => unreachable!(),
+                        Err(_) => todo!(),
+                    };
 
-            transparent_input_values.insert(input.prevout(), value);
+                transparent_input_values.insert(input.prevout(), value);
 
-            spends.push(Spend {
-                pool: POOL_TRANSPARENT,
-                t_in: Some(idx),
-                spend: None,
-                action: None,
-                txid_prev,
-                t_out_prev: Some(input.prevout().n()),
-                output_prev: None,
-                action_prev: None,
-                account_uuid,
-                address,
-                value: value_from_zatoshis(value),
-                value_zat: value.into_u64(),
-            });
+                spends.push(Spend {
+                    pool: POOL_TRANSPARENT,
+                    t_in: Some(idx),
+                    spend: None,
+                    action: None,
+                    txid_prev,
+                    t_out_prev: Some(input.prevout().n()),
+                    output_prev: None,
+                    action_prev: None,
+                    account_uuid,
+                    address,
+                    value: value_from_zatoshis(value),
+                    value_zat: value.into_u64(),
+                });
+            }
         }
 
         // Transparent outputs
@@ -899,29 +902,31 @@ impl WalletTxInfo {
             // TODO: Once Zaino updates its API to support atomic queries, it should not
             // be possible to fail to fetch the block that a transaction was observed
             // mined in.
-            let block_metadata = wallet
-                .block_metadata(height)?
-                // This would be a race condition between this and a reorg.
-                .ok_or(SqliteClientError::ChainHeightUnknown)?;
-            let block = chain
-                .get_block(BlockId {
-                    height: 0,
-                    hash: block_metadata.block_hash().0.to_vec(),
-                })
-                .await
-                .map_err(|_| SqliteClientError::ChainHeightUnknown)?;
+            // TODO: Block data optional until we migrate to `ChainIndex`.
+            //       https://github.com/zcash/wallet/issues/237
+            if let Some(block_metadata) = wallet.block_metadata(height)? {
+                let block = chain
+                    .get_block(BlockId {
+                        height: 0,
+                        hash: block_metadata.block_hash().0.to_vec(),
+                    })
+                    .await
+                    .map_err(|_| SqliteClientError::ChainHeightUnknown)?;
 
-            let tx_index = block
-                .vtx
-                .iter()
-                .find(|ctx| ctx.hash == tx.txid().as_ref())
-                .map(|ctx| u32::try_from(ctx.index).expect("Zaino should provide valid data"));
+                let tx_index = block
+                    .vtx
+                    .iter()
+                    .find(|ctx| ctx.hash == tx.txid().as_ref())
+                    .map(|ctx| u32::try_from(ctx.index).expect("Zaino should provide valid data"));
 
-            (
-                Some(block_metadata.block_hash().to_string()),
-                tx_index,
-                Some(block.time.into()),
-            )
+                (
+                    Some(block_metadata.block_hash().to_string()),
+                    tx_index,
+                    Some(block.time.into()),
+                )
+            } else {
+                (None, None, None)
+            }
         } else {
             match (
                 is_expired_tx(tx, chain_height),
