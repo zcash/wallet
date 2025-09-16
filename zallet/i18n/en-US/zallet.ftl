@@ -23,6 +23,9 @@
 -allow-multiple-wallet-imports = --allow-multiple-wallet-imports
 -datadir = --datadir
 
+-legacy_pool_seed_fingerprint = legacy_pool_seed_fingerprint
+-zallet_toml = zallet.toml
+
 ## Usage
 
 usage-header = Usage
@@ -73,6 +76,11 @@ migrate-alpha-code =
     this, use '{-allow-alpha-migration}'.
 
 migrate-config-written = {-zallet} config written to {$conf}
+
+migrate-wallet-legacy-seed-fp =
+    Importing zcashd legacy account for seed fingerprint '{$seed_fp}'. If you wish to
+    enable legacy zcashd semantics for wallet RPC methods, you should set
+    '{-legacy_pool_seed_fingerprint}' to this value in '{-zallet_toml}'.",
 
 ## General errors
 

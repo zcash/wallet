@@ -313,6 +313,7 @@ impl MigrateZcashdWalletCmd {
             wallet_birthday.height(),
         );
 
+        let mnemonic_seed_fp = mnemonic_seed_data.as_ref().map(|(_, fp)| *fp);
         let legacy_transparent_account_uuid = if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
             // If there are any legacy transparent keys, create the legacy account.
             if !wallet.keys().is_empty() {
@@ -327,6 +328,16 @@ impl MigrateZcashdWalletCmd {
                     Some(ZCASHD_MNEMONIC_SOURCE),
                 )?;
 
+                println!(
+                    "{}",
+                    fl!(
+                        "migrate-wallet-legacy-seed-fp",
+                        seed_fp = mnemonic_seed_fp
+                            .expect("present for mnemonic seed")
+                            .to_string()
+                    )
+                );
+
                 Some(account.id())
             } else {
                 None
@@ -334,8 +345,6 @@ impl MigrateZcashdWalletCmd {
         } else {
             None
         };
-
-        let mnemonic_seed_fp = mnemonic_seed_data.as_ref().map(|(_, fp)| *fp);
 
         let legacy_seed_data = match wallet.legacy_hd_seed() {
             Some(d) => Some((
