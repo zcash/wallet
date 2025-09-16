@@ -93,7 +93,8 @@ pub(crate) async fn call(
     Option<ContextInfo>,
     impl Future<Output = RpcResult<SendResult>>,
 )> {
-    // TODO: Check that Sapling is active.
+    // TODO: Check that Sapling is active, by inspecting height of `chain` snapshot.
+    //       https://github.com/zcash/wallet/issues/237
 
     if amounts.is_empty() {
         return Err(
@@ -173,7 +174,7 @@ pub(crate) async fn call(
     }?;
 
     // Sanity check for transaction size
-    // TODO
+    // TODO: https://github.com/zcash/wallet/issues/255
 
     let confirmations_policy = match minconf {
         Some(minconf) => NonZeroU32::new(minconf).map_or(
@@ -191,6 +192,7 @@ pub(crate) async fn call(
     let params = *wallet.params();
 
     // TODO: Fetch the real maximums within the account so we can detect correctly.
+    //       https://github.com/zcash/wallet/issues/257
     let mut max_sapling_available = Zatoshis::const_from_u64(MAX_MONEY);
     let mut max_orchard_available = Zatoshis::const_from_u64(MAX_MONEY);
 
@@ -334,6 +336,7 @@ pub(crate) async fn call(
         .await
         .map_err(|e| match e.kind() {
             // TODO: Improve internal error types.
+            //       https://github.com/zcash/wallet/issues/256
             crate::error::ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
                 LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
             }

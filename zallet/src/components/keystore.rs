@@ -169,7 +169,8 @@ impl fmt::Debug for KeyStore {
 impl KeyStore {
     pub(crate) fn new(config: &ZalletConfig, db: Database) -> Result<Self, Error> {
         // TODO: Maybe support storing the identity in `zallet.toml` instead of as a
-        // separate file on disk?
+        //       separate file on disk?
+        //       https://github.com/zcash/wallet/issues/253
         let path = config.encryption_identity();
 
         let (encrypted_identities, identities) = {

@@ -245,8 +245,6 @@ as_of_version = "0.0.0"
 #
 # Note management configuration section.
 #
-# TODO: Decide whether this should be part of `[builder]`.
-#
 [note_management]
 
 # The minimum value that Zallet should target for each shielded note in the wallet.

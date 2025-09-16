@@ -59,6 +59,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
 
         // `z_listaccounts` assumes a single HD seed.
         // TODO: Fix this limitation.
+        //       https://github.com/zcash/wallet/issues/82
         let account = account
             .source()
             .key_derivation()
@@ -69,6 +70,7 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
             account,
             addresses: vec![Address {
                 // TODO: Expose the real diversifier index.
+                //       https://github.com/zcash/wallet/issues/82
                 diversifier_index: 0,
                 ua: address.encode(wallet.params()),
             }],

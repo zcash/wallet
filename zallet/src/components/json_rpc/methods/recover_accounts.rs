@@ -64,6 +64,7 @@ pub(crate) async fn call(
 ) -> Response {
     ensure_wallet_is_unlocked(keystore).await?;
     // TODO: Ensure wallet is backed up.
+    //       https://github.com/zcash/wallet/issues/201
 
     let recover_until = wallet
         .chain_height()

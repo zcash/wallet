@@ -538,8 +538,9 @@ impl KeyStoreSection {
 }
 
 /// Note management configuration section.
-///
-/// TODO: Decide whether this should be part of `[builder]`.
+//
+// TODO: Decide whether this should be part of `[builder]`.
+//       https://github.com/zcash/wallet/issues/251
 #[cfg(zallet_build = "wallet")]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]

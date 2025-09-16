@@ -278,6 +278,7 @@ pub(crate) async fn call(
 
     // Fetch this early so we can detect if the wallet is not ready yet.
     // TODO: Replace with Zaino `ChainIndex` so we can operate against a chain snapshot.
+    //       https://github.com/zcash/wallet/issues/237
     let chain_height = wallet
         .chain_height()
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
@@ -291,7 +292,8 @@ pub(crate) async fn call(
         )?;
 
     // TODO: Should we enforce ZIP 212 when viewing outputs of a transaction that is
-    // already in the wallet?
+    //       already in the wallet?
+    //       https://github.com/zcash/wallet/issues/254
     let zip212_enforcement = sapling::note_encryption::Zip212Enforcement::GracePeriod;
 
     let mut spends = vec![];
@@ -428,6 +430,7 @@ pub(crate) async fn call(
                 let txid_prev = input.prevout().txid().to_string();
 
                 // TODO: Migrate to a hopefully much nicer Rust API once we migrate to the new Zaino ChainIndex trait.
+                //       https://github.com/zcash/wallet/issues/237
                 let (account_uuid, address, value) =
                     match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await {
                         Ok(GetRawTransaction::Object(tx)) => {
@@ -879,7 +882,8 @@ impl WalletTxInfo {
             match mined_height {
                 Some(mined_height) => i64::from(chain_height + 1 - mined_height),
                 None => {
-                    // TODO: Also check if the transaction is in the mempool for this branch.
+                    // TODO: Also check if the transaction is in the mempool.
+                    //       https://github.com/zcash/wallet/issues/237
                     -1
                 }
             }
@@ -900,8 +904,9 @@ impl WalletTxInfo {
             status = "mined";
 
             // TODO: Once Zaino updates its API to support atomic queries, it should not
-            // be possible to fail to fetch the block that a transaction was observed
-            // mined in.
+            //       be possible to fail to fetch the block that a transaction was
+            //       observed mined in.
+            //       https://github.com/zcash/wallet/issues/237
             // TODO: Block data optional until we migrate to `ChainIndex`.
             //       https://github.com/zcash/wallet/issues/237
             if let Some(block_metadata) = wallet.block_metadata(height)? {
