@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
 
@@ -7,14 +7,14 @@ use abscissa_core::Runnable;
 
 use bip0039::{English, Mnemonic};
 use secp256k1::PublicKey;
-use secrecy::SecretVec;
+use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
 use transparent::address::TransparentAddress;
 use zaino_proto::proto::service::TxFilter;
 use zaino_state::{FetchServiceError, LightWalletIndexer};
 use zcash_client_backend::data_api::{
-    Account as _, AccountBirthday, AccountPurpose, WalletRead, WalletWrite as _, Zip32Derivation,
-    wallet::decrypt_and_store_transaction,
+    Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
+    Zip32Derivation, wallet::decrypt_and_store_transaction,
 };
 use zcash_client_sqlite::error::SqliteClientError;
 use zcash_keys::{
@@ -80,6 +80,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             chain_view,
             wallet,
             self.buffer_wallet_transactions,
+            self.allow_multiple_wallet_imports,
         )
         .await?;
 
@@ -192,10 +193,54 @@ impl MigrateZcashdWalletCmd {
         chain_view: ChainView,
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
+        allow_multiple_wallet_imports: bool,
     ) -> Result<(), MigrateError> {
         let mut db_data = db.handle().await?;
         let network_params = *db_data.params();
         Self::check_network(wallet.network(), network_params.network_type())?;
+
+        let existing_zcash_sourced_accounts = db_data.get_account_ids()?.into_iter().try_fold(
+            HashSet::new(),
+            |mut found, account_id| {
+                let account = db_data
+                    .get_account(account_id)?
+                    .expect("account exists for just-retrieved id");
+
+                match account.source() {
+                    AccountSource::Derived {
+                        derivation,
+                        key_source,
+                    } if key_source.as_ref() == Some(&ZCASHD_MNEMONIC_SOURCE.to_string()) => {
+                        found.insert(*derivation.seed_fingerprint());
+                    }
+                    _ => {}
+                }
+
+                Ok::<_, SqliteClientError>(found)
+            },
+        )?;
+
+        let mnemonic_seed_data = match Self::parse_mnemonic(wallet.bip39_mnemonic().mnemonic())? {
+            Some(m) => Some((
+                SecretVec::new(m.to_seed("").to_vec()),
+                keystore.encrypt_and_store_mnemonic(m).await?,
+            )),
+            None => None,
+        };
+
+        if !existing_zcash_sourced_accounts.is_empty() {
+            if allow_multiple_wallet_imports {
+                if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
+                    let seed_fp =
+                        SeedFingerprint::from_seed(seed.expose_secret()).expect("valid length");
+                    if existing_zcash_sourced_accounts.contains(&seed_fp) {
+                        return Err(MigrateError::DuplicateImport(seed_fp));
+                    }
+                }
+            } else {
+                return Err(MigrateError::MultiImportDisabled);
+            }
+        }
 
         // Obtain information about the current state of the chain, so that we can set the recovery
         // height properly.
@@ -267,14 +312,6 @@ impl MigrateZcashdWalletCmd {
             "Setting the wallet birthday to height {}",
             wallet_birthday.height(),
         );
-
-        let mnemonic_seed_data = match Self::parse_mnemonic(wallet.bip39_mnemonic().mnemonic())? {
-            Some(m) => Some((
-                SecretVec::new(m.to_seed("").to_vec()),
-                keystore.encrypt_and_store_mnemonic(m).await?,
-            )),
-            None => None,
-        };
 
         let legacy_transparent_account_uuid = if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
             // If there are any legacy transparent keys, create the legacy account.
@@ -557,6 +594,8 @@ pub(crate) enum MigrateError {
     KeyDerivation(DerivationError),
     HdPath(PathParseError),
     AccountIdInvalid(u32),
+    MultiImportDisabled,
+    DuplicateImport(SeedFingerprint),
 }
 
 impl From<MigrateError> for Error {
@@ -633,6 +672,15 @@ impl From<MigrateError> for Error {
                 "err-migrate-wallet-invalid-account-id",
                 account_id = id
             ))),
+            MigrateError::MultiImportDisabled => Error::from(
+                ErrorKind::Generic.context(fl!("err-migrate-wallet-multi-import-disabled")),
+            ),
+            MigrateError::DuplicateImport(seed_fingerprint) => {
+                Error::from(ErrorKind::Generic.context(fl!(
+                    "err-migrate-wallet-duplicate-import",
+                    seed_fp = format!("{}", seed_fingerprint)
+                )))
+            }
         }
     }
 }

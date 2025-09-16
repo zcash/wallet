@@ -160,8 +160,17 @@ pub(crate) struct MigrateZcashdWalletCmd {
     #[arg(long)]
     pub(crate) buffer_wallet_transactions: bool,
 
+    /// Allow import of wallet data from multiple `zcashd` `wallet.dat` files. Each imported wallet
+    /// will create a distinct set of accounts in `zallet`. Attempts to import wallet data
+    /// corresponding to an already-imported wallet will result in an error.
+    #[arg(long)]
+    pub(crate) allow_multiple_wallet_imports: bool,
+
     /// Allow a migration when warnings are present. If set to `false`, any warning will be treated
-    /// as an error and cause the migration to abort.
+    /// as an error and cause the migration to abort. Setting this to `true` will allow the import
+    /// of partially-corrupted wallets, or wallets that contain transaction data from consensus
+    /// forks of the Zcash chain (only transaction data corresponding to known consensus rules will
+    /// be imported.)
     #[arg(long)]
     pub(crate) allow_warnings: bool,
 }
