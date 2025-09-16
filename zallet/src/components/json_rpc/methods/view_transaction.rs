@@ -99,8 +99,8 @@ pub(crate) struct Transaction {
 
     /// The fee paid by the transaction.
     ///
-    /// Omitted if the fee cannot be determined because one or more transparent inputs of
-    /// the transaction cannot be found.
+    /// Omitted if this is a coinbase transaction, or if the fee cannot be determined
+    /// because one or more transparent inputs of the transaction cannot be found.
     #[serde(skip_serializing_if = "Option::is_none")]
     fee: Option<JsonZec>,
 
