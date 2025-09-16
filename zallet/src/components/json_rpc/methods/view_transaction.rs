@@ -902,29 +902,31 @@ impl WalletTxInfo {
             // TODO: Once Zaino updates its API to support atomic queries, it should not
             // be possible to fail to fetch the block that a transaction was observed
             // mined in.
-            let block_metadata = wallet
-                .block_metadata(height)?
-                // This would be a race condition between this and a reorg.
-                .ok_or(SqliteClientError::ChainHeightUnknown)?;
-            let block = chain
-                .get_block(BlockId {
-                    height: 0,
-                    hash: block_metadata.block_hash().0.to_vec(),
-                })
-                .await
-                .map_err(|_| SqliteClientError::ChainHeightUnknown)?;
+            // TODO: Block data optional until we migrate to `ChainIndex`.
+            //       https://github.com/zcash/wallet/issues/237
+            if let Some(block_metadata) = wallet.block_metadata(height)? {
+                let block = chain
+                    .get_block(BlockId {
+                        height: 0,
+                        hash: block_metadata.block_hash().0.to_vec(),
+                    })
+                    .await
+                    .map_err(|_| SqliteClientError::ChainHeightUnknown)?;
 
-            let tx_index = block
-                .vtx
-                .iter()
-                .find(|ctx| ctx.hash == tx.txid().as_ref())
-                .map(|ctx| u32::try_from(ctx.index).expect("Zaino should provide valid data"));
+                let tx_index = block
+                    .vtx
+                    .iter()
+                    .find(|ctx| ctx.hash == tx.txid().as_ref())
+                    .map(|ctx| u32::try_from(ctx.index).expect("Zaino should provide valid data"));
 
-            (
-                Some(block_metadata.block_hash().to_string()),
-                tx_index,
-                Some(block.time.into()),
-            )
+                (
+                    Some(block_metadata.block_hash().to_string()),
+                    tx_index,
+                    Some(block.time.into()),
+                )
+            } else {
+                (None, None, None)
+            }
         } else {
             match (
                 is_expired_tx(tx, chain_height),
