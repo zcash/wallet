@@ -107,12 +107,12 @@ pub(super) const PARAM_ADDRESSES_DESC: &str =
 pub(super) const PARAM_AS_OF_HEIGHT_DESC: &str = "Execute the query as if it were run when the blockchain was at the height specified by this argument.";
 
 // FIXME: the following parameters are not yet properly supported
-// * include_watch_only
+// * include_watchonly
 pub(crate) fn call(
     wallet: &DbConnection,
     minconf: Option<u32>,
     maxconf: Option<u32>,
-    _include_watch_only: Option<bool>,
+    _include_watchonly: Option<bool>,
     addresses: Option<Vec<String>>,
     as_of_height: Option<i64>,
 ) -> Response {
@@ -122,7 +122,7 @@ pub(crate) fn call(
         None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), true),
     };
 
-    //let include_watch_only = include_watch_only.unwrap_or(false);
+    //let include_watchonly = include_watchonly.unwrap_or(false);
     let addresses = addresses
         .unwrap_or_default()
         .iter()

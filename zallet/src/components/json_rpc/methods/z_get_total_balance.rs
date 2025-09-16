@@ -31,18 +31,18 @@ pub(crate) struct TotalBalance {
 
 pub(super) const PARAM_MINCONF_DESC: &str =
     "Only include notes in transactions confirmed at least this many times.";
-pub(super) const PARAM_INCLUDE_WATCH_ONLY_DESC: &str =
+pub(super) const PARAM_INCLUDE_WATCHONLY_DESC: &str =
     "Also include balance in watchonly addresses.";
 
 pub(crate) fn call(
     wallet: &DbConnection,
     minconf: Option<u32>,
-    include_watch_only: Option<bool>,
+    include_watchonly: Option<bool>,
 ) -> Response {
-    match include_watch_only {
+    match include_watchonly {
         Some(true) => Ok(()),
         None | Some(false) => Err(LegacyCode::Misc
-            .with_message("include_watch_only argument must be set to true (for now)")),
+            .with_message("include_watchonly argument must be set to true (for now)")),
     }?;
 
     let confirmations_policy = match minconf {
