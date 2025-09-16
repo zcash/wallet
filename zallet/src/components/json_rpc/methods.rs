@@ -138,6 +138,7 @@ pub(crate) trait Rpc {
     async fn get_raw_transaction(
         &self,
         txid: &str,
+        // TODO: Bitcoin now also allows this to be named `verbosity`.
         verbose: Option<u64>,
         blockhash: Option<String>,
     ) -> get_raw_transaction::Response;
@@ -291,20 +292,20 @@ pub(crate) trait WalletRpc {
 
     /// Returns the total value of funds stored in the node's wallet.
     ///
-    /// TODO: Currently watchonly addresses cannot be omitted; `includeWatchonly` must be
+    /// TODO: Currently watchonly addresses cannot be omitted; `include_watchonly` must be
     /// set to true.
     ///
     /// # Arguments
     ///
     /// - `minconf` (numeric, optional, default=1) Only include private and transparent
     ///   transactions confirmed at least this many times.
-    /// - `includeWatchonly` (bool, optional, default=false) Also include balance in
+    /// - `include_watchonly` (bool, optional, default=false) Also include balance in
     ///   watchonly addresses (see 'importaddress' and 'z_importviewingkey').
     #[method(name = "z_gettotalbalance")]
     async fn z_get_total_balance(
         &self,
         minconf: Option<u32>,
-        #[argument(rename = "includeWatchonly")] include_watch_only: Option<bool>,
+        include_watchonly: Option<bool>,
     ) -> z_get_total_balance::Response;
 
     /// Returns an array of unspent shielded notes with between minconf and maxconf
@@ -384,7 +385,7 @@ pub(crate) trait WalletRpc {
     /// - `minconf` (numeric, optional) Only use funds confirmed at least this many times.
     /// - `fee` (numeric, optional) If set, it must be null. Zallet always uses a fee
     ///   calculated according to ZIP 317.
-    /// - `privacyPolicy` (string, optional, default=`"FullPrivacy"`) Policy for what
+    /// - `privacy_policy` (string, optional, default=`"FullPrivacy"`) Policy for what
     ///   information leakage is acceptable. One of the following strings:
     ///   - `"FullPrivacy"`: Only allow fully-shielded transactions (involving a single
     ///     shielded value pool).
@@ -412,7 +413,7 @@ pub(crate) trait WalletRpc {
         amounts: Vec<z_send_many::AmountParameter>,
         minconf: Option<u32>,
         fee: Option<JsonValue>,
-        #[argument(rename = "privacyPolicy")] privacy_policy: Option<String>,
+        privacy_policy: Option<String>,
     ) -> z_send_many::Response;
 }
 
@@ -622,9 +623,9 @@ impl WalletRpcServer for WalletRpcImpl {
     async fn z_get_total_balance(
         &self,
         minconf: Option<u32>,
-        include_watch_only: Option<bool>,
+        include_watchonly: Option<bool>,
     ) -> z_get_total_balance::Response {
-        z_get_total_balance::call(self.wallet().await?.as_ref(), minconf, include_watch_only)
+        z_get_total_balance::call(self.wallet().await?.as_ref(), minconf, include_watchonly)
     }
 
     async fn list_unspent(
