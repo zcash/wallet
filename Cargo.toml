@@ -39,8 +39,8 @@ age = { version = "0.11", features = ["armor", "cli-common", "plugin"] }
 bip0039 = "0.12"
 
 # Localization
-i18n-embed = { version = "0.15", features = ["fluent-system"] }
-i18n-embed-fl = "0.9"
+i18n-embed = { version = "0.16", features = ["fluent-system"] }
+i18n-embed-fl = "0.10"
 rust-embed = "8"
 
 # Parsing and serialization
@@ -125,7 +125,7 @@ anyhow = "1.0"
 tonic = "0.13"
 
 [patch.crates-io]
-age = { git = "https://github.com/str4d/rage.git", rev = "84dc1e9f641994388f107ceebdbaa00126e30e16" }
+age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633bb70c91eef91142fd4" }
 
 abscissa_core = { git = "https://github.com/iqlusioninc/abscissa.git", rev = "fdb60678fb3a883decf63d6d3ebc512abd20406f" }
 abscissa_tokio = { git = "https://github.com/iqlusioninc/abscissa.git", rev = "fdb60678fb3a883decf63d6d3ebc512abd20406f" }
