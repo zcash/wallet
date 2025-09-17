@@ -55,6 +55,10 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
     async fn run(&self) -> Result<(), Error> {
         let config = APP.config();
 
+        if !self.this_is_alpha_code_and_you_will_need_to_redo_the_migration_later {
+            return Err(ErrorKind::Generic.context(fl!("migrate-alpha-code")).into());
+        }
+
         // Start monitoring the chain.
         let (chain_view, _chain_indexer_task_handle) = ChainView::new(&config).await?;
         let db = Database::open(&config).await?;

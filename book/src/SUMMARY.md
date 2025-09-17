@@ -14,6 +14,7 @@
   - [start](cli/start.md)
   - [example-config](cli/example-config.md)
   - [migrate-zcash-conf](cli/migrate-zcash-conf.md)
+  - [migrate-zcashd-wallet](cli/migrate-zcashd-wallet.md)
   - [init-wallet-encryption](cli/init-wallet-encryption.md)
   - [generate-mnemonic](cli/generate-mnemonic.md)
   - [import-mnemonic](cli/import-mnemonic.md)

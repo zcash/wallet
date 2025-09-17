@@ -70,7 +70,7 @@ migrate-warn-unsupported =
     as soon as possible to discuss alternatives.
 
 migrate-alpha-code =
-    This command is not stable, and parts of your {-zcashd} config may not get
+    This command is not stable, and parts of your {-zcashd} data may not get
     migrated correctly. You will need to rerun this command again once {-zallet}
     is stable to migrate your config correctly. To confirm you are aware of
     this, use '{-allow-alpha-migration}'.

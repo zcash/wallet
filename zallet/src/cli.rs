@@ -173,6 +173,10 @@ pub(crate) struct MigrateZcashdWalletCmd {
     /// be imported.)
     #[arg(long)]
     pub(crate) allow_warnings: bool,
+
+    /// Temporary flag ensuring any alpha users are aware the migration is not stable.
+    #[arg(long)]
+    pub(crate) this_is_alpha_code_and_you_will_need_to_redo_the_migration_later: bool,
 }
 
 /// `init-wallet-encryption` subcommand

@@ -9,6 +9,7 @@ The following sections provide in-depth information on the different commands av
 - [`zallet start`](start.md)
 - [`zallet example-config`](example-config.md)
 - [`zallet migrate-zcash-conf`](migrate-zcash-conf.md)
+- [`zallet migrate-zcashd-wallet`](migrate-zcashd-wallet.md)
 - [`zallet init-wallet-encryption`](init-wallet-encryption.md)
 - [`zallet generate-mnemonic`](generate-mnemonic.md)
 - [`zallet import-mnemonic`](import-mnemonic.md)
