@@ -7331,6 +7331,7 @@ dependencies = [
  "tracing-subscriber",
  "trycmd",
  "uuid",
+ "which 8.0.0",
  "xdg",
  "zaino-fetch",
  "zaino-proto",
@@ -8123,7 +8124,7 @@ dependencies = [
 [[package]]
 name = "zewif-zcashd"
 version = "0.1.0"
-source = "git+https://github.com/zcash/zewif-zcashd.git?rev=02a98d6236e24819904e084180da9ba0f5c9b5d0#02a98d6236e24819904e084180da9ba0f5c9b5d0"
+source = "git+https://github.com/zcash/zewif-zcashd.git?rev=9c72d1805c269f88ea5caa4eb33c6d38013b9776#9c72d1805c269f88ea5caa4eb33c6d38013b9776"
 dependencies = [
  "anyhow",
  "bitflags 2.9.0",
