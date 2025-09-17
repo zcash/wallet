@@ -1,0 +1,103 @@
+name: deb
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1-slim@sha256:57d415bbd61ce11e2d5f73de068103c7bd9f3188dc132c97cef4a8f62989e944
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install gcloud SDK
+        shell: bash
+        run: |
+          apt-get update && apt-get install -y curl python3 python3-distutils lsb-release apt-transport-https ca-certificates gnupg
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+            | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+            | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          apt-get update && apt-get install -y google-cloud-sdk
+
+      - name: Install depends
+        shell: bash
+        run: |
+          apt-get update && \
+          apt-get install -y --no-install-recommends \
+          clang \
+          libclang-dev \
+          pkg-config \
+          git \
+          aptly \
+          wget
+
+      - name: Authenticate with gcloud using process substitution
+        shell: bash
+        run: |
+          gcloud auth activate-service-account --key-file=<(echo "${{ secrets.GCP_SA_KEY }}" | base64 -d)
+
+      - name: Download file from GCS
+        shell: bash
+        run: gsutil -q cp gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-packages/encrypted_gpg.kms encrypted_gpg.kms
+
+      - name: Decrypt file using KMS
+        shell: bash
+        run: |
+          gcloud kms decrypt \
+            --key gpg \
+            --project ${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --keyring gpg \
+            --location global \
+            --plaintext-file private.pgp \
+            --ciphertext-file encrypted_gpg.kms
+
+      - name: Import GPG
+        shell: bash    
+        run: |
+          gpg --import private.pgp
+          wget -qO - https://apt.z.cash/zcash.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: build package
+        shell: bash
+        run: |
+          cargo build --release && strip target/release/zallet && \
+          cargo deb
+
+      - name: Mirror apt.z.cash
+        shell: bash
+        run: |
+          aptly mirror create zcash https://apt.z.cash bookworm
+
+      - name: Create local snapshot of apt.z.cash with zallet
+        shell: bash
+        run: |
+          aptly repo create --distribution bookworm --component main zcash_local
+          aptly repo add zcash_local target/debian/zallet_*_amd64.deb
+          aptly mirror update zcash
+          aptly snapshot create snapshot_zcash from mirror zcash
+          aptly snapshot create snapshot_local from repo zcash_local
+          aptly snapshot merge snapshot_combined snapshot_zcash snapshot_local
+
+      - name: Sign & publish snapshot of apt
+        shell: bash
+        run: |
+          export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@z.cash | head -n 2 | grep -v sec)
+          aptly publish snapshot -architectures=amd64 -gpg-key="$key" snapshot_combined
+
+
+      - name: upload files to the bucket
+        run: |
+          gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
+          gsutil -q -m rsync -r $HOME/.aptly/public/dists/bookworm gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
