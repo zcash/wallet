@@ -23,7 +23,7 @@ jobs:
         set -Eeuo pipefail
         IFS=$'\n\t'
 
-        if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc-[0-9]+)?$ ]]; then
+        if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$ ]]; then
           echo "Valid version: $VERSION"
           echo "tags=latest,$VERSION,$SHA" >> "$GITHUB_OUTPUT"
         else
