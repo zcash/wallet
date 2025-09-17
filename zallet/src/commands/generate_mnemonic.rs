@@ -29,7 +29,9 @@ impl AsyncRunnable for GenerateMnemonicCmd {
         let mnemonic = Mnemonic::<English>::from_entropy(entropy)
             .expect("valid entropy length won't fail to generate the mnemonic");
 
-        keystore.encrypt_and_store_mnemonic(mnemonic).await?;
+        let seedfp = keystore.encrypt_and_store_mnemonic(mnemonic).await?;
+
+        println!("Seed fingerprint: {seedfp}");
 
         Ok(())
     }
