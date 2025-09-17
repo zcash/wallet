@@ -22,6 +22,8 @@
 -allow-alpha-migration = --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later
 -allow-multiple-wallet-imports = --allow-multiple-wallet-imports
 -datadir = --datadir
+-db_dump = db_dump
+-zcashd_install_dir = --zcashd_install_dir
 
 -legacy_pool_seed_fingerprint = legacy_pool_seed_fingerprint
 -zallet_toml = zallet.toml
@@ -129,6 +131,11 @@ err-migrate-wallet-duplicate-import =
     already been imported.
 err-migrate-wallet-bdb-parse =
     An error occurred in parsing the {-zcashd} wallet file at '{$path}': '{$err}'
+err-migrate-wallet-db-dump-not-found =
+    The {-db_dump} command line utility was not found. Either set the
+    {-zcashd-install-dir} command-line argument to the local zcashd installation
+    root (which must contain the `zcutil/bin/` utilities) or ensure that {-db_dump}
+    is available on the system `$PATH`.
 err-migrate-wallet-db-dump =
     An error occurred in extracting wallet data from '{$path}': '{$err}'
 err-migrate-wallet-seed-absent =

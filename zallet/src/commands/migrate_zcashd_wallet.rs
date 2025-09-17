@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use abscissa_core::Runnable;
@@ -64,19 +64,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db.clone())?;
 
-        let wallet_path = if self.path.is_relative() {
-            if let Some(datadir) = self.zcashd_datadir.as_ref() {
-                datadir.join(&self.path)
-            } else {
-                migrate_zcash_conf::zcashd_default_data_dir()
-                    .ok_or(ErrorKind::Generic)?
-                    .join(&self.path)
-            }
-        } else {
-            self.path.to_path_buf()
-        };
-
-        let wallet = Self::dump_wallet(&wallet_path, self.allow_warnings)?;
+        let wallet = self.dump_wallet()?;
 
         Self::migrate_zcashd_wallet(
             db,
@@ -93,35 +81,64 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
 }
 
 impl MigrateZcashdWalletCmd {
-    fn dump_wallet(path: &Path, allow_warnings: bool) -> Result<ZcashdWallet, MigrateError> {
-        info!("Parsing zcashd wallet at {}", path.display());
-
-        let db_dump = BDBDump::from_file(path).map_err(|e| MigrateError::Zewif {
-            error_type: ZewifError::BdbDump,
-            wallet_path: path.to_path_buf(),
-            error: e,
-        })?;
-
-        let zcashd_dump = ZcashdDump::from_bdb_dump(&db_dump, allow_warnings).map_err(|e| {
-            MigrateError::Zewif {
-                error_type: ZewifError::ZcashdDump,
-                wallet_path: path.to_path_buf(),
-                error: e,
+    fn dump_wallet(&self) -> Result<ZcashdWallet, MigrateError> {
+        let wallet_path = if self.path.is_relative() {
+            if let Some(datadir) = self.zcashd_datadir.as_ref() {
+                datadir.join(&self.path)
+            } else {
+                migrate_zcash_conf::zcashd_default_data_dir()
+                    .ok_or(MigrateError::Wrapped(ErrorKind::Generic.into()))?
+                    .join(&self.path)
             }
-        })?;
+        } else {
+            self.path.to_path_buf()
+        };
 
-        let (zcashd_wallet, _unparsed_keys) =
-            ZcashdParser::parse_dump(&zcashd_dump, !allow_warnings).map_err(|e| {
-                MigrateError::Zewif {
-                    error_type: ZewifError::ZcashdDump,
-                    wallet_path: path.to_path_buf(),
+        let db_dump_path = match &self.zcashd_install_dir {
+            Some(path) => {
+                let db_dump_path = path.join("zcutil").join("bin").join("db_dump");
+                db_dump_path
+                    .is_file()
+                    .then_some(db_dump_path)
+                    .ok_or(which::Error::CannotFindBinaryPath)
+            }
+            None => which::which("db_dump"),
+        };
+
+        if let Ok(db_dump_path) = db_dump_path {
+            let db_dump = BDBDump::from_file(db_dump_path.as_path(), wallet_path.as_path())
+                .map_err(|e| MigrateError::Zewif {
+                    error_type: ZewifError::BdbDump,
+                    wallet_path: wallet_path.to_path_buf(),
                     error: e,
-                }
-            })?;
+                })?;
 
-        info!("Wallet version: {}", zcashd_wallet.client_version());
+            let zcashd_dump =
+                ZcashdDump::from_bdb_dump(&db_dump, self.allow_warnings).map_err(|e| {
+                    MigrateError::Zewif {
+                        error_type: ZewifError::ZcashdDump,
+                        wallet_path: wallet_path.clone(),
+                        error: e,
+                    }
+                })?;
 
-        Ok(zcashd_wallet)
+            let (zcashd_wallet, _unparsed_keys) =
+                ZcashdParser::parse_dump(&zcashd_dump, !self.allow_warnings).map_err(|e| {
+                    MigrateError::Zewif {
+                        error_type: ZewifError::ZcashdDump,
+                        wallet_path,
+                        error: e,
+                    }
+                })?;
+
+            Ok(zcashd_wallet)
+        } else {
+            Err(MigrateError::Wrapped(
+                ErrorKind::Generic
+                    .context(fl!("err-migrate-wallet-db-dump-not-found"))
+                    .into(),
+            ))
+        }
     }
 
     async fn chain_tip<C: LightWalletIndexer>(

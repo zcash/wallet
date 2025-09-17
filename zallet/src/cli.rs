@@ -166,6 +166,14 @@ pub(crate) struct MigrateZcashdWalletCmd {
     #[arg(long)]
     pub(crate) allow_multiple_wallet_imports: bool,
 
+    /// Specify the path to the zcashd installation directory.
+    ///
+    /// This is required for locating the `db_dump` command used to extract data from the
+    /// `wallet.dat` file. Wallet migration without a local `zcashd` installation is not yet
+    /// supported.
+    #[arg(long)]
+    pub(crate) zcashd_install_dir: Option<PathBuf>,
+
     /// Allow a migration when warnings are present. If set to `false`, any warning will be treated
     /// as an error and cause the migration to abort. Setting this to `true` will allow the import
     /// of partially-corrupted wallets, or wallets that contain transaction data from consensus
