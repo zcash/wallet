@@ -5,7 +5,7 @@
 The command takes the UUID of the account for which the mnemonic should be exported. You
 can obtain this from a running Zallet wallet with `zallet rpc z_listaccounts`.
 
-The mnemonic is encrypted to the same age identity that the wallet uses to internally
+The mnemonic is encrypted to the same `age` identity that the wallet uses to internally
 encrypt key material. You can then use a tool like [`rage`] to decrypt the resulting
 file.
 
