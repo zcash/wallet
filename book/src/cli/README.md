@@ -13,5 +13,6 @@ The following sections provide in-depth information on the different commands av
 - [`zallet init-wallet-encryption`](init-wallet-encryption.md)
 - [`zallet generate-mnemonic`](generate-mnemonic.md)
 - [`zallet import-mnemonic`](import-mnemonic.md)
+- [`zallet export-mnemonic`](export-mnemonic.md)
 - [`zallet rpc`](rpc.md)
 - [`zallet repair` subcommands](repair/README.md)

@@ -180,6 +180,7 @@ rust-embed.workspace = true
 shadow-rs = { workspace = true, default-features = true }
 spdx = "0.10"
 syn = "2"
+uuid.workspace = true
 
 [dev-dependencies]
 abscissa_core = { workspace = true, features = ["testing"] }
