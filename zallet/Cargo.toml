@@ -5,6 +5,7 @@ authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "A prototype wallet. Don't rely on this for privacy or with significant funds yet!"
+repository.workspace = true
 license.workspace = true
 categories.workspace = true
 
