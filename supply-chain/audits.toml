@@ -240,12 +240,6 @@ It uses `#![forbid(unsafe_code, unstable_features)]`, and does not have any
 powerful imports.
 """
 
-[[audits.zip32]]
-who = "Kris Nuttycombe <kris@nutty.land>"
-criteria = "safe-to-deploy"
-delta = "0.2.0 -> 0.2.0@git:3fd1ab9e1cb943edde58579cd5c65095494810cb"
-importable = false
-
 [[trusted.equihash]]
 criteria = "safe-to-deploy"
 user-id = 6289 # Jack Grigg (str4d)
@@ -461,6 +455,12 @@ criteria = "safe-to-deploy"
 user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2024-12-17"
 end = "2026-03-04"
+
+[[trusted.zip32]]
+criteria = "safe-to-deploy"
+user-id = 6289 # Jack Grigg (str4d)
+start = "2023-12-06"
+end = "2026-09-17"
 
 [[trusted.zip32]]
 criteria = "safe-to-deploy"
