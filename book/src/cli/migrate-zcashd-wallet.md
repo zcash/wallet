@@ -23,6 +23,17 @@ Additional CLI arguments:
   specified, Zallet will attempt to find `db_dump` on the system path; however,
   it is recommended to use a `db_dump` provided via local `zcashd` installation
   to ensure version compatibility with the `wallet.dat` file.
+- `--allow-multiple-wallet-imports`: An optional flag that must be set if a
+  user wants to import keys and transactions from multiple `wallet.dat` files
+  (not required for the first `wallet.dat` import.)
+- `--buffer-wallet-transactions`: If set, Zallet will eagerly fetch transaction
+  data from the chain as part of wallet migration instead of via ordinary chain
+  sync. This may speed up wallet recovery, but requires all wallet transactions
+  to be buffered in-memory which may cause out-of-memory errors for large
+  wallets.
+- `--allow-warnings`: If set, Zallet will ignore errors in parsing transactions
+  extracted from the `wallet.dat` file. This can enable the import of key data
+  from wallets that have been used on consensus forks of the Zcash chain.
 
 > For the Zallet alpha releases, the command also currently takes another required flag
 > `--this-is-alpha-code-and-you-will-need-to-redo-the-migration-later`.
