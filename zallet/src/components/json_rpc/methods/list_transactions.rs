@@ -3,6 +3,7 @@ use jsonrpsee::core::RpcResult;
 use rusqlite::named_params;
 use schemars::JsonSchema;
 use serde::Serialize;
+use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 use zcash_client_sqlite::error::SqliteClientError;
 use zcash_protocol::{
@@ -36,6 +37,8 @@ pub(super) const PARAM_OFFSET_DESC: &str =
 pub(super) const PARAM_LIMIT_DESC: &str =
     "The maximum number of results to return from a single call.";
 
+/// Basic information about a transaction output that was either created or received by this
+/// wallet.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 struct WalletTxOutput {
     pool: String,
@@ -186,7 +189,17 @@ impl WalletTx {
             received_note_count,
             block_time,
             block_datetime: block_time
-                .and_then(|t| chrono::DateTime::from_timestamp(t, 0).map(|d| format!("{}", d))),
+                .map(|t| {
+                    let datetime = time::OffsetDateTime::from_unix_timestamp(t).map_err(|e| {
+                        SqliteClientError::CorruptedData(format!("Invalid unix timestamp {t}: {e}"))
+                    })?;
+                    Ok::<_, SqliteClientError>(
+                        datetime
+                            .format(&Rfc3339)
+                            .expect("datetime can be formatted"),
+                    )
+                })
+                .transpose()?,
             expired_unmined,
             outputs,
         })

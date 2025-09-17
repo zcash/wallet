@@ -60,7 +60,6 @@ clap = { version = "4.5", features = ["derive"] }
 rpassword = "7"
 
 # RPC
-chrono = "0.4"
 http-body-util = "0.1"
 hyper = "1"
 jsonrpsee = "0.24"

@@ -7277,7 +7277,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bip0039",
- "chrono",
  "clap",
  "clap_complete",
  "clap_mangen",

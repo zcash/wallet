@@ -86,7 +86,6 @@ abscissa_tokio.workspace = true
 age.workspace = true
 async-trait.workspace = true
 bip0039.workspace = true
-chrono.workspace = true
 clap = { workspace = true, features = ["string", "unstable-styles"] }
 deadpool.workspace = true
 deadpool-sqlite.workspace = true

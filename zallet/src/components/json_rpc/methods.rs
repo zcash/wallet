@@ -124,6 +124,36 @@ pub(crate) trait Rpc {
         unified_address: &str,
     ) -> list_unified_receivers::Response;
 
+    /// Returns a list of the wallet's transactions, optionally filtered by account and block
+    /// range.
+    ///
+    /// # Arguments
+    /// - `account_uuid`: The UUID of the wallet account. If omitted, return transactions for all
+    ///   accounts in the wallet.
+    /// - `start_height`: The inclusive lower bound of block heights for which transactions mined
+    ///   in those blocks should be returned. If omitted, the start height will default to the
+    ///   account birthday height if an account UUID is specified, or the minimum birthday
+    ///   height among accounts in the wallet if no account is specified.
+    /// - `end_height`: The exclusive upper bound of block heights for which transactions mined
+    ///   in those blocks should be returned. If omitted, return all transactions mined or created
+    ///   above the start height.
+    /// - `offset`: An optional number of transactions to skip over before a page of results is
+    ///   returned. Defaults to zero.
+    /// - `limit`: An optional upper bound on the number of results that should be returned in a
+    ///   page.  
+    ///
+    /// WARNING: This is currently an experimental feature; arguments and result data may change at
+    /// any time.
+    #[method(name = "z_listtransactions")]
+    async fn list_transactions(
+        &self,
+        account_uuid: Option<String>,
+        start_height: Option<u32>,
+        end_height: Option<u32>,
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> list_transactions::Response;
+
     /// Returns the raw transaction data for the given transaction ID.
     ///
     /// NOTE: If `blockhash` is provided, only that block will be searched, and if the
@@ -341,36 +371,6 @@ pub(crate) trait WalletRpc {
         as_of_height: Option<i64>,
     ) -> list_unspent::Response;
 
-    /// Returns a list of the wallet's transactions, optionally filtered by account and block
-    /// range.
-    ///
-    /// # Arguments
-    /// - `account_uuid`: The UUID of the wallet account. If omitted, return transactions for all
-    ///   accounts in the wallet.
-    /// - `start_height`: The inclusive lower bound of block heights for which transactions mined
-    ///   in those blocks should be returned. If omitted, the start height will default to the
-    ///   account birthday height if an account UUID is specified, or the minimum birthday
-    ///   height among accounts in the wallet if no account is specified.
-    /// - `end_height`: The exclusive upper bound of block heights for which transactions mined
-    ///   in those blocks should be returned. If omitted, return all transactions mined or created
-    ///   above the start height.
-    /// - `offest`: An optional number of transactions to skip over before a page of results is
-    ///   returned. Defaults to zero.
-    /// - `limit`: An optional upper bound on the number of results that should be returned in a
-    ///   page.  
-    ///
-    /// WARNING: This is currently an experimental feature; arguments and result data may change at
-    /// any time.
-    #[method(name = "z_listtransactions")]
-    async fn list_transactions(
-        &self,
-        account_uuid: Option<String>,
-        start_height: Option<u32>,
-        end_height: Option<u32>,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> list_transactions::Response;
-
     #[method(name = "z_getnotescount")]
     async fn get_notes_count(
         &self,
@@ -559,6 +559,25 @@ impl RpcServer for RpcImpl {
         list_unified_receivers::call(self.wallet().await?.as_ref(), unified_address)
     }
 
+    async fn list_transactions(
+        &self,
+        account_uuid: Option<String>,
+        start_height: Option<u32>,
+        end_height: Option<u32>,
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> list_transactions::Response {
+        list_transactions::call(
+            self.wallet().await?.as_ref(),
+            account_uuid,
+            start_height,
+            end_height,
+            offset,
+            limit,
+        )
+        .await
+    }
+
     async fn get_raw_transaction(
         &self,
         txid: &str,
@@ -621,25 +640,6 @@ impl WalletRpcServer for WalletRpcImpl {
 
     async fn lock_wallet(&self) -> lock_wallet::Response {
         lock_wallet::call(&self.keystore).await
-    }
-
-    async fn list_transactions(
-        &self,
-        account_uuid: Option<String>,
-        start_height: Option<u32>,
-        end_height: Option<u32>,
-        offset: Option<u32>,
-        limit: Option<u32>,
-    ) -> list_transactions::Response {
-        list_transactions::call(
-            self.wallet().await?.as_ref(),
-            account_uuid,
-            start_height,
-            end_height,
-            offset,
-            limit,
-        )
-        .await
     }
 
     async fn get_new_account(
