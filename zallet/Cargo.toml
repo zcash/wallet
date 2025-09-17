@@ -76,6 +76,8 @@ assets = [
 
     ["../README.md", "usr/share/doc/zallet/README.md", "644"],
 ]
+features = ["rpc-cli", "zcashd-import"]
+separate-debug-symbols = true
 
 [[test]]
 name = "cli_tests"

@@ -72,7 +72,6 @@ jobs:
       - name: build package
         shell: bash
         run: |
-          cargo build --release && strip target/release/zallet && \
           cargo deb
 
       - name: Mirror apt.z.cash

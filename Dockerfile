@@ -22,7 +22,7 @@ RUN --mount=type=bind,source=zallet,target=zallet \
     --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
     --mount=type=cache,target=/app/.cargo \
     --mount=type=cache,target=/app/target/ \
-    cargo build --locked --release --package zallet --bin zallet && \
+    cargo build --locked --release --features rpc-cli,zcashd-import --package zallet --bin zallet && \
     cp /app/target/release/zallet /usr/local/bin/
 
 
