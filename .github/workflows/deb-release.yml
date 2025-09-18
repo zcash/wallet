@@ -83,6 +83,12 @@ jobs:
         run: |
           cargo deb
 
+      - name: Rename package to not collide across the matrix
+        shell: bash
+        run: |
+          mv target/debian/zallet_*.deb ./
+          mv zallet_*.deb "$(basename -s .deb zallet_*.deb)_${{ matrix.debian }}.deb"
+
       - name: Mirror apt.z.cash
         shell: bash
         run: |
@@ -92,7 +98,7 @@ jobs:
         shell: bash
         run: |
           aptly repo create --distribution ${{ matrix.debian }} --component main zcash_local
-          aptly repo add zcash_local target/debian/zallet_*_amd64.deb
+          aptly repo add zcash_local zallet_*.deb
           aptly mirror update zcash
           aptly snapshot create snapshot_zcash from mirror zcash
           aptly snapshot create snapshot_local from repo zcash_local
