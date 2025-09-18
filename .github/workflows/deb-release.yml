@@ -28,6 +28,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Ensure we build with latest stable Rust
+        run: rm rust-toolchain.toml
+
       - name: Install gcloud SDK
         shell: bash
         run: |
@@ -74,9 +77,6 @@ jobs:
 
       - name: Install cargo-deb
         run: cargo install cargo-deb
-
-      - name: Ensure we build with latest stable Rust
-        run: rm rust-toolchain.toml
 
       - name: Build package
         shell: bash
