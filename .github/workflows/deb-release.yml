@@ -11,22 +11,36 @@ permissions:
 
 jobs:
   release:
-    name: Build and deploy Zallet ${{ matrix.debian }} package to apt.z.cash
+    name: Build and deploy Zallet ${{ matrix.name }} package to apt.z.cash
     runs-on: ubuntu-latest
     container:
       image: "rust:${{ matrix.debian }}"
 
     strategy:
       matrix:
-        debian:
-          - bullseye
-          - bookworm
+        name:
+          - bullseye-amd64
+          - bookworm-amd64
+
+        include:
+          - name: bullseye-amd64
+            debian: bullseye
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
+
+          - name: bookworm-amd64
+            debian: bookworm
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Ensure we build with latest stable Rust
+        run: rm rust-toolchain.toml
 
       - name: Install gcloud SDK
         shell: bash
@@ -75,13 +89,16 @@ jobs:
       - name: Install cargo-deb
         run: cargo install cargo-deb
 
-      - name: Ensure we build with latest stable Rust
-        run: rm rust-toolchain.toml
-
       - name: Build package
         shell: bash
         run: |
           cargo deb
+
+      - name: Rename package to not collide across the matrix
+        shell: bash
+        run: |
+          mv target/debian/zallet_*.deb ./
+          mv zallet_*.deb "$(basename -s .deb zallet_*.deb)_${{ matrix.debian }}.deb"
 
       - name: Mirror apt.z.cash
         shell: bash
@@ -92,7 +109,7 @@ jobs:
         shell: bash
         run: |
           aptly repo create --distribution ${{ matrix.debian }} --component main zcash_local
-          aptly repo add zcash_local target/debian/zallet_*_amd64.deb
+          aptly repo add zcash_local zallet_*.deb
           aptly mirror update zcash
           aptly snapshot create snapshot_zcash from mirror zcash
           aptly snapshot create snapshot_local from repo zcash_local
@@ -102,7 +119,7 @@ jobs:
         shell: bash
         run: |
           export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@z.cash | head -n 2 | grep -v sec)
-          aptly publish snapshot -architectures=amd64 -gpg-key="$key" snapshot_combined
+          aptly publish snapshot -architectures=${{ matrix.arch }} -gpg-key="$key" snapshot_combined
 
       - name: Upload snapshot to the apt.z.cash bucket for approval
         run: |
