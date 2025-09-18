@@ -124,4 +124,4 @@ jobs:
       - name: Upload snapshot to the apt.z.cash bucket for approval
         run: |
           gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
-          gsutil -q -m rsync -r $HOME/.aptly/public/dists/${{ matrix.debian }} gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
+          gsutil -q -m rsync -r $HOME/.aptly/public/dists/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
