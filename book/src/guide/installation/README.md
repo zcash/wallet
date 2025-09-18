@@ -1,8 +1,5 @@
 # Installation
 
-> WARNING: For the first Zallet alpha release (0.1.0), no binaries are provided. Follow
-> the instructions to [Build from source using Rust](#build-from-source-using-rust).
-
 There are multiple ways to install the `zallet` binary. The table below has a summary of
 the simplest options:
 
