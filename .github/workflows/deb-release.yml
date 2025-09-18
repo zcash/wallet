@@ -11,16 +11,27 @@ permissions:
 
 jobs:
   release:
-    name: Build and deploy Zallet ${{ matrix.debian }} package to apt.z.cash
+    name: Build and deploy Zallet ${{ matrix.name }} package to apt.z.cash
     runs-on: ubuntu-latest
     container:
       image: "rust:${{ matrix.debian }}"
 
     strategy:
       matrix:
-        debian:
-          - bullseye
-          - bookworm
+        name:
+          - bullseye-amd64
+          - bookworm-amd64
+
+        include:
+          - name: bullseye-amd64
+            debian: bullseye
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
+
+          - name: bookworm-amd64
+            debian: bookworm
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
 
     steps:
       - name: Checkout
@@ -108,7 +119,7 @@ jobs:
         shell: bash
         run: |
           export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@z.cash | head -n 2 | grep -v sec)
-          aptly publish snapshot -architectures=amd64 -gpg-key="$key" snapshot_combined
+          aptly publish snapshot -architectures=${{ matrix.arch }} -gpg-key="$key" snapshot_combined
 
       - name: Upload snapshot to the apt.z.cash bucket for approval
         run: |
