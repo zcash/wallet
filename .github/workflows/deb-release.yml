@@ -1,17 +1,27 @@
-name: deb
+name: Build and deploy Debian packages
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   release:
+    name: Build and deploy Zallet ${{ matrix.debian }} package to apt.z.cash
     runs-on: ubuntu-latest
     container:
-      image: rust:1-slim@sha256:57d415bbd61ce11e2d5f73de068103c7bd9f3188dc132c97cef4a8f62989e944
+      image: "rust:${{ matrix.debian }}"
+
+    strategy:
+      matrix:
+        debian:
+          - bullseye
+          - bookworm
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,12 +43,8 @@ jobs:
         run: |
           apt-get update && \
           apt-get install -y --no-install-recommends \
-          clang \
           libclang-dev \
-          pkg-config \
-          git \
-          aptly \
-          wget
+          aptly
 
       - name: Authenticate with gcloud using process substitution
         shell: bash
@@ -69,7 +75,10 @@ jobs:
       - name: Install cargo-deb
         run: cargo install cargo-deb
 
-      - name: build package
+      - name: Ensure we build with latest stable Rust
+        run: rm rust-toolchain.toml
+
+      - name: Build package
         shell: bash
         run: |
           cargo deb
@@ -77,26 +86,25 @@ jobs:
       - name: Mirror apt.z.cash
         shell: bash
         run: |
-          aptly mirror create zcash https://apt.z.cash bookworm
+          aptly mirror create zcash https://apt.z.cash ${{ matrix.debian }}
 
       - name: Create local snapshot of apt.z.cash with zallet
         shell: bash
         run: |
-          aptly repo create --distribution bookworm --component main zcash_local
+          aptly repo create --distribution ${{ matrix.debian }} --component main zcash_local
           aptly repo add zcash_local target/debian/zallet_*_amd64.deb
           aptly mirror update zcash
           aptly snapshot create snapshot_zcash from mirror zcash
           aptly snapshot create snapshot_local from repo zcash_local
           aptly snapshot merge snapshot_combined snapshot_zcash snapshot_local
 
-      - name: Sign & publish snapshot of apt
+      - name: Sign & publish snapshot of local apt repository
         shell: bash
         run: |
           export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@z.cash | head -n 2 | grep -v sec)
           aptly publish snapshot -architectures=amd64 -gpg-key="$key" snapshot_combined
 
-
-      - name: upload files to the bucket
+      - name: Upload snapshot to the apt.z.cash bucket for approval
         run: |
           gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
-          gsutil -q -m rsync -r $HOME/.aptly/public/dists/bookworm gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
+          gsutil -q -m rsync -r $HOME/.aptly/public/dists/${{ matrix.debian }} gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
