@@ -15,6 +15,6 @@
 # Now un-exclude required files and folders:
 #
 !.cargo
-!*.toml
-!*.lock
+!Cargo.toml
+!Cargo.lock
 !zallet
