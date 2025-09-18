@@ -107,7 +107,6 @@ audit-as-crates-io = true
 [policy.zebra-state]
 
 [policy.zip32]
-audit-as-crates-io = true
 
 [policy.zip321]
 audit-as-crates-io = true
@@ -2094,10 +2093,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.zerocopy-derive]]
 version = "0.8.24"
-criteria = "safe-to-deploy"
-
-[[exemptions.zip32]]
-version = "0.1.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.zip321]]

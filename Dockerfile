@@ -1,35 +1,35 @@
 # syntax=docker/dockerfile:1
-# --- Stage 1: Build with Rust --- (amd64) (RUST version: 1.86.0)
-FROM rust:1.86.0-slim@sha256:57d415bbd61ce11e2d5f73de068103c7bd9f3188dc132c97cef4a8f62989e944 AS builder
-
-WORKDIR /app
+# --- Stage 1: Build with Rust --- (amd64)
+FROM rust:bookworm AS builder
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        clang \
-        libclang-dev \
-        pkg-config \
-        git && \
-    rm -rf /var/lib/apt/lists/*
+        libclang-dev
 
-COPY --link . .
+# Make a fake Rust app to keep a cached layer of compiled crates
+WORKDIR /usr/src/app
+COPY Cargo.toml Cargo.lock ./
+COPY zallet/Cargo.toml ./zallet/
+# Needs at least a main.rs file with a main function
+RUN mkdir -p zallet/src/bin/zallet && echo "fn main(){}" > zallet/src/bin/zallet/main.rs
+RUN mkdir zallet/tests && touch zallet/tests/cli_tests.rs
+# Will build all dependent crates in release mode
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/src/app/target \
+    cargo build --release --features rpc-cli,zcashd-import
 
+# Copy the rest
+COPY . .
 # Build the zallet binary
-# Leverage a cache mount to ${CARGO_HOME} for downloaded dependencies,
-# and a cache mount to ${CARGO_TARGET_DIR} for compiled dependencies.
-RUN --mount=type=bind,source=zallet,target=zallet \
-    --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
-    --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
-    --mount=type=cache,target=/app/.cargo \
-    --mount=type=cache,target=/app/target/ \
-    cargo build --locked --release --package zallet --bin zallet && \
-    cp /app/target/release/zallet /usr/local/bin/
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/src/app/target \
+    cargo install --locked --features rpc-cli,zcashd-import --path ./zallet --bins
 
 
 # --- Stage 2: Minimal runtime with distroless ---
-FROM gcr.io/distroless/cc AS runtime
+FROM gcr.io/distroless/cc-debian12 AS runtime
 
-COPY --link --from=builder /usr/local/bin/zallet /usr/local/bin/
+COPY --link --from=builder /usr/local/cargo/bin/zallet /usr/local/bin/
 
 # USER nonroot (UID 65532) — for K8s, use runAsUser: 65532
 USER nonroot
