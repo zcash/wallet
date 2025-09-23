@@ -125,3 +125,17 @@ jobs:
         run: |
           gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
           gsutil -q -m rsync -r $HOME/.aptly/public/dists/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
+
+      - name: Prepare Signature artifacts
+        run: |
+          mkdir artifacts
+          mv zallet_*.deb artifacts/
+          cd artifacts
+          gpg -u sysadmin@z.cash --armor --digest-algo SHA256 --detach-sign zallet_*.deb
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836
+        with:
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
