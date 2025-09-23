@@ -9,10 +9,22 @@ on:
 permissions:
   contents: read
 
+# Prevent concurrent runs for the same tag from racing (e.g., re-runs)
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build and deploy Zallet ${{ matrix.name }} package to apt.z.cash
     runs-on: ubuntu-latest
+
+    # Required permissions for Release upload + OIDC/Sigstore attestation
+    permissions:
+      contents: write        # needed to create/update the Release and upload assets
+      id-token: write        # required for OIDC/Sigstore
+      attestations: write    # required to persist the attestation
+    
     container:
       image: "rust:${{ matrix.debian }}"
 
@@ -35,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
 
@@ -125,3 +137,62 @@ jobs:
         run: |
           gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
           gsutil -q -m rsync -r $HOME/.aptly/public/dists/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
+
+      - name: Prepare Signature artifacts
+        run: |
+          mkdir artifacts
+          mv zallet_*.deb artifacts/
+          cd artifacts
+          gpg -u sysadmin@z.cash --armor --digest-algo SHA256 --detach-sign zallet_*.deb
+
+      # ==== Build Provenance Attestation (SLSA/Sigstore) ====
+      - name: Generate build provenance attestation for .deb
+        id: attest
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: artifacts/zallet_*.deb
+
+      # === Make the attestation bundle filename unique per matrix ===
+      - name: Make attestation filename unique
+        shell: bash
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs['bundle-path'] }}
+        run: |
+          # Each matrix strategy builds a single package, so this matches a single file.
+          FILENAME=$(basename artifacts/zallet_*.deb)
+
+          # Use quotes and `--` to avoid argument injection/word splitting
+          cp -- "$BUNDLE_PATH" "artifacts/${FILENAME}.intoto.jsonl"
+
+      # Upload all artifacts from this matrix to a shared storage for the publish job
+      - name: Upload artifacts for publish job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: artifacts-${{ matrix.name }}
+          path: artifacts/*
+
+  publish:
+    name: Create/Update GitHub Release (aggregate)
+    needs: release
+    if: ${{ github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish/Update GitHub Release (incremental)
+        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
+        with:
+          tag_name: ${{ github.ref_name }}   # vX.Y.Z (no refs/tags/...)
+          generate_release_notes: true
+          append_body: true
+          overwrite_files: true
+          files: artifacts/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
