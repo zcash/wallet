@@ -152,19 +152,42 @@ jobs:
         with:
           subject-path: artifacts/*.deb
 
-      # Optional: also attach the attestation bundle file to the Release for distribution
-      - name: Upload attestation bundle (optional)
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836
-        with:
-          files: ${{ steps.attest.outputs.bundle-path }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # === Make the attestation bundle filename unique per matrix ===
+      - name: Make attestation filename unique
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp "${{ steps.attest.outputs.bundle-path }}" "artifacts/attestation-${{ matrix.name }}.intoto.jsonl"
 
-      - name: Upload to Release
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836
+      # Upload all artifacts from this matrix to a shared storage for the publish job
+      - name: Upload artifacts for publish job
+        uses: actions/upload-artifact@v4
         with:
-          files: artifacts/*
+          name: artifacts-${{ matrix.name }}
+          path: artifacts/*
+
+  publish:
+    name: Create/Update GitHub Release (aggregate)
+    needs: release
+    if: ${{ github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish/Update GitHub Release (incremental)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}   # vX.Y.Z (no refs/tags/...)
+          generate_release_notes: true
+          append_body: true
+          overwrite_files: true
+          files: artifacts/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
