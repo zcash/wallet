@@ -646,7 +646,7 @@ pub(crate) async fn call(
 
 impl TransparentInput {
     fn encode(tx_in: &TxIn<transparent::bundle::Authorized>, is_coinbase: bool) -> Self {
-        let script_hex = hex::encode(&tx_in.script_sig().0);
+        let script_hex = hex::encode(&tx_in.script_sig().0.0);
 
         if is_coinbase {
             Self {
@@ -679,7 +679,7 @@ impl TransparentOutput {
             // TODO: Implement this
             //       https://github.com/zcash/wallet/issues/235
             asm: "TODO: Implement this".into(),
-            hex: hex::encode(&tx_out.script_pubkey().0),
+            hex: hex::encode(&tx_out.script_pubkey().0.0),
             // TODO: zcashd relied on initialization behaviour for the default value
             //       for null-data or non-standard outputs. Figure out what it is.
             //       https://github.com/zcash/wallet/issues/236

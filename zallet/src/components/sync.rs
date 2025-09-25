@@ -29,6 +29,7 @@ use zcash_protocol::{
     consensus::{self, BlockHeight},
     value::Zatoshis,
 };
+use zcash_script::script;
 use zebra_chain::transaction::SerializedTransaction;
 use zebra_rpc::methods::{AddressStrings, GetAddressTxIdsRequest};
 
@@ -455,7 +456,7 @@ async fn poll_transparent(
                 OutPoint::new(txid.0, index.index()),
                 TxOut::new(
                     Zatoshis::const_from_u64(value_zat),
-                    Script(script.as_raw_bytes().to_vec()),
+                    Script(script::Code(script.as_raw_bytes().to_vec())),
                 ),
                 Some(BlockHeight::from_u32(mined_height.0)),
             )
