@@ -9,10 +9,22 @@ on:
 permissions:
   contents: read
 
+# Prevent concurrent runs for the same tag from racing (e.g., re-runs)
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build and deploy Zallet ${{ matrix.name }} package to apt.z.cash
     runs-on: ubuntu-latest
+
+    # Required permissions for Release upload + OIDC/Sigstore attestation
+    permissions:
+      contents: write        # needed to create/update the Release and upload assets
+      id-token: write        # required for OIDC/Sigstore
+      attestations: write    # required to persist the attestation
+    
     container:
       image: "rust:${{ matrix.debian }}"
 
@@ -125,3 +137,57 @@ jobs:
         run: |
           gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
           gsutil -q -m rsync -r $HOME/.aptly/public/dists/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
+
+      - name: Prepare Signature artifacts
+        run: |
+          mkdir artifacts
+          mv zallet_*.deb artifacts/
+          cd artifacts
+          gpg -u sysadmin@z.cash --armor --digest-algo SHA256 --detach-sign zallet_*.deb
+
+      # ==== Build Provenance Attestation (SLSA/Sigstore) ====
+      - name: Generate build provenance attestation for .deb
+        id: attest
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: artifacts/*.deb
+
+      # === Make the attestation bundle filename unique per matrix ===
+      - name: Make attestation filename unique
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp "${{ steps.attest.outputs.bundle-path }}" "artifacts/attestation-${{ matrix.name }}.intoto.jsonl"
+
+      # Upload all artifacts from this matrix to a shared storage for the publish job
+      - name: Upload artifacts for publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.name }}
+          path: artifacts/*
+
+  publish:
+    name: Create/Update GitHub Release (aggregate)
+    needs: release
+    if: ${{ github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish/Update GitHub Release (incremental)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}   # vX.Y.Z (no refs/tags/...)
+          generate_release_notes: true
+          append_body: true
+          overwrite_files: true
+          files: artifacts/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
