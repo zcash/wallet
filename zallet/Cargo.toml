@@ -158,6 +158,7 @@ zcash_note_encryption.workspace = true
 zcash_primitives.workspace = true
 zcash_proofs = { workspace = true, features = ["bundled-prover"] }
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
+zcash_script.workspace = true
 zebra-chain.workspace = true
 zebra-rpc.workspace = true
 zebra-state.workspace = true

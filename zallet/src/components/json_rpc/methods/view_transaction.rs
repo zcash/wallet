@@ -6,7 +6,7 @@ use orchard::note_encryption::OrchardDomain;
 use rusqlite::{OptionalExtension, named_params};
 use schemars::JsonSchema;
 use serde::Serialize;
-use transparent::keys::TransparentKeyScope;
+use transparent::{address::TransparentAddress, keys::TransparentKeyScope};
 use zaino_proto::proto::service::BlockId;
 use zaino_state::{FetchServiceSubscriber, LightWalletIndexer, ZcashIndexer};
 use zcash_address::{
@@ -23,6 +23,7 @@ use zcash_protocol::{
     memo::Memo,
     value::{BalanceError, Zatoshis},
 };
+use zcash_script::script;
 use zebra_rpc::methods::GetRawTransaction;
 
 use crate::components::{
@@ -438,9 +439,12 @@ pub(crate) async fn call(
                                 .outputs()
                                 .get(usize::try_from(input.prevout().n()).expect("should fit"))
                                 .expect("Zaino should have rejected this earlier");
-                            let address =
-                                transparent::address::Script::from(output.script_pub_key().hex())
-                                    .address();
+                            let address = script::FromChain::parse(&script::Code(
+                                output.script_pub_key().hex().as_raw_bytes().to_vec(),
+                            ))
+                            .ok()
+                            .as_ref()
+                            .and_then(TransparentAddress::from_script_from_chain);
 
                             let account_id = address.as_ref().and_then(|address| {
                                 account_ids.iter().find(|account| {

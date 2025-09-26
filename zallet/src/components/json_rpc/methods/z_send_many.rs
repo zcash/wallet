@@ -50,6 +50,9 @@ use crate::{
     prelude::*,
 };
 
+#[cfg(feature = "transparent-key-import")]
+use {transparent::address::TransparentAddress, zcash_script::script};
+
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub(crate) struct AmountParameter {
     /// A taddr, zaddr, or Unified Address.
@@ -354,7 +357,11 @@ pub(crate) async fn call(
         let mut keys = std::collections::HashMap::new();
         for step in proposal.steps() {
             for input in step.transparent_inputs() {
-                if let Some(address) = input.txout().script_pubkey().address() {
+                if let Some(address) = script::FromChain::parse(&input.txout().script_pubkey().0)
+                    .ok()
+                    .as_ref()
+                    .and_then(TransparentAddress::from_script_from_chain)
+                {
                     let secret_key = keystore
                         .decrypt_standalone_transparent_key(&address)
                         .await

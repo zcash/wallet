@@ -30,6 +30,7 @@ exceptions = [
     { name = "bindgen", allow = ["BSD-3-Clause"] },
     { name = "bitcoin-private", allow = ["CC0-1.0"] },
     { name = "bitcoin_hashes", allow = ["CC0-1.0"] },
+    { name = "bounded-vec", allow = ["CC0-1.0"] },
     { name = "const_format", allow = ["Zlib"] },
     { name = "const_format_proc_macros", allow = ["Zlib"] },
     { name = "curve25519-dalek", allow = ["BSD-3-Clause"] },
