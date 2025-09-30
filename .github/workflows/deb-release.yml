@@ -155,9 +155,22 @@ jobs:
       # === Make the attestation bundle filename unique per matrix ===
       - name: Make attestation filename unique
         shell: bash
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs['bundle-path'] }}
+          MATRIX_NAME: ${{ matrix.name }}
         run: |
+          set -Eeuo pipefail
+          IFS=$'\n\t'
+      
           mkdir -p artifacts
-          cp "${{ steps.attest.outputs.bundle-path }}" "artifacts/attestation-${{ matrix.name }}.intoto.jsonl"
+      
+          # (defense-in-depth) allow only safe chars in MATRIX_NAME
+          case "$MATRIX_NAME" in
+            (*[!a-zA-Z0-9._-]*|'') echo "Invalid matrix name: $MATRIX_NAME" >&2; exit 2;;
+          esac
+      
+          # Use quotes and `--` to avoid argument injection/word splitting
+          cp -- "$BUNDLE_PATH" "artifacts/attestation-${MATRIX_NAME}.intoto.jsonl"
 
       # Upload all artifacts from this matrix to a shared storage for the publish job
       - name: Upload artifacts for publish job
