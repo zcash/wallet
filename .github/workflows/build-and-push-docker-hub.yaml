@@ -6,7 +6,10 @@ on:
       - "v*.*.*"
   workflow_dispatch:
 
-permissions: {}
+# Grant OIDC + read so the called workflow can do keyless signing
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   set_env:
@@ -18,24 +21,28 @@ jobs:
       VERSION: ${{ github.ref_name }}
       SHA: ${{ github.sha }}
     steps:
-    - id: version_step
-      run: |
-        set -Eeuo pipefail
-        IFS=$'\n\t'
+      - id: version_step
+        run: |
+          set -Eeuo pipefail
+          IFS=$'\n\t'
 
-        if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$ ]]; then
-          echo "Valid version: $VERSION"
-          echo "tags=latest,$VERSION,$SHA" >> "$GITHUB_OUTPUT"
-        else
-          echo "Invalid ref_name format: $VERSION" >&2
-          exit 1
-        fi
+          if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$ ]]; then
+            echo "Valid version: $VERSION"
+            echo "tags=latest,$VERSION,$SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "Invalid ref_name format: $VERSION" >&2
+            exit 1
+          fi
 
   build_push:
     uses: zcash/.github/.github/workflows/build-and-push-docker-hub.yaml@main
     needs: set_env
+
+    # Pass through the same permissions to the called workflow (optional but tidy)
+    permissions: inherit
+
     with:
-      image_name: zallet
+      image_name: ${{ secrets.DOCKERHUB_USERNAME }}/zallet
       image_tags: ${{ needs.set_env.outputs.tags }}
       dockerfile: Dockerfile
       context: .
