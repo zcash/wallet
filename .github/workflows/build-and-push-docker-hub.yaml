@@ -42,7 +42,7 @@ jobs:
     permissions: inherit
 
     with:
-      image_name: ${{ secrets.DOCKERHUB_USERNAME }}/zallet
+      image_name: zallet
       image_tags: ${{ needs.set_env.outputs.tags }}
       dockerfile: Dockerfile
       context: .
