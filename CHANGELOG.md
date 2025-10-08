@@ -8,6 +8,10 @@ be considered breaking changes.
 
 ## [0.1.0-alpha.2] - PLANNED
 
+### Added
+- JSON-RPC authorization mechanisms, matching zcashd:
+  - Multi-user (supporting both bare and hashed passwords in `zallet.toml`).
+
 ### Fixed
 - Several balance calculation bugs have been fixed.
 - JSON-RPC 1.x responses now use the expected HTTP error codes.

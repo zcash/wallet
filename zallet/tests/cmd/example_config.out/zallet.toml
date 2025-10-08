@@ -281,3 +281,27 @@ as_of_version = "0.1.0-alpha.1"
 # Timeout (in seconds) during HTTP requests.
 #timeout = 30
 
+
+#
+# A user that is authorized to access the JSON-RPC interface.
+#
+# Repeat this section to add more entries to the list.
+#
+#[[rpc.auth]]
+
+# The username for accessing the JSON-RPC interface.
+#
+# Each username must be unique. If duplicates are present, only one of the passwords
+# will work.
+#user = UNSET
+
+# The password for this user.
+#
+# This cannot be set when `pwhash` is set.
+#password = UNSET
+
+# A hash of the password for this user.
+#
+# This can be generated with `zallet rpc add-user`.
+#pwhash = UNSET
+

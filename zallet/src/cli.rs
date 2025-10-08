@@ -77,6 +77,9 @@ pub(crate) enum ZalletCmd {
     #[cfg(zallet_build = "wallet")]
     ExportMnemonic(ExportMnemonicCmd),
 
+    /// Adds a user authorization for the JSON-RPC interface.
+    AddRpcUser(AddRpcUserCmd),
+
     /// Communicate with a Zallet wallet's JSON-RPC interface.
     #[cfg(feature = "rpc-cli")]
     Rpc(RpcCliCmd),
@@ -223,6 +226,14 @@ pub(crate) struct ExportMnemonicCmd {
 
     /// The UUID of the account from which to export.
     pub(crate) account_uuid: Uuid,
+}
+
+/// `add-rpc-user` subcommand
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct AddRpcUserCmd {
+    /// The username to add.
+    pub(crate) username: String,
 }
 
 /// `rpc` subcommand

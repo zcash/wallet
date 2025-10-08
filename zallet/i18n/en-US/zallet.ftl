@@ -17,6 +17,8 @@
 
 {-systemd} = systemd
 
+-zallet-add-rpc-user = {-zallet} add-rpc-user
+
 -allow-warnings = --allow-warnings
 -allow-alpha-example = --this-is-alpha-code-and-you-will-need-to-recreate-the-example-later
 -allow-alpha-migration = --this-is-alpha-code-and-you-will-need-to-redo-the-migration-later
@@ -28,11 +30,24 @@
 -legacy_pool_seed_fingerprint = legacy_pool_seed_fingerprint
 -zallet_toml = zallet.toml
 
+-cfg-rpc-auth-password = rpc.auth.password
+-cfg-rpc-auth-pwhash = rpc.auth.pwhash
+
 ## Usage
 
 usage-header = Usage
 
 flags-header = Options
+
+## Startup messages
+
+rpc-bare-password-auth-info = Using '{-cfg-rpc-auth-password}' authorization
+rpc-bare-password-auth-warn =
+    The use of '{-cfg-rpc-auth-password}' is less secure, because credentials are
+    configured in plain text. It is recommended that locally-run instances switch to
+    cookie-based auth, or otherwise to use `rpc.auth.pwhash` credentials generated with
+    '{-zallet-add-rpc-user}'.
+rpc-pwhash-auth-info = Using '{-cfg-rpc-auth-pwhash}' authorization
 
 ## zallet.toml example messages
 

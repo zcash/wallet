@@ -23,6 +23,7 @@ use {
 mod error;
 pub(crate) use error::LegacyCode;
 
+pub(crate) mod authorization;
 mod http_request_compatibility;
 mod rpc_call_compatibility;
 
@@ -48,11 +49,15 @@ pub(crate) async fn spawn(
         chain_view,
     );
 
-    let http_middleware_layer = http_request_compatibility::HttpRequestMiddlewareLayer::new();
+    let timeout = config.timeout();
 
     let http_middleware = tower::ServiceBuilder::new()
-        .layer(http_middleware_layer)
-        .timeout(config.timeout());
+        .layer(
+            authorization::AuthorizationLayer::new(config.auth)
+                .map_err(|()| ErrorKind::Init.context("Invalid `rpc.auth` configuration"))?,
+        )
+        .layer(http_request_compatibility::HttpRequestMiddlewareLayer::new())
+        .timeout(timeout);
 
     let rpc_middleware = RpcServiceBuilder::new()
         .rpc_logger(1024)

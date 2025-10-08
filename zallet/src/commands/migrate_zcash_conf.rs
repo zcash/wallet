@@ -10,10 +10,10 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
 };
 
-use crate::commands::AsyncRunnable;
 use crate::{
     cli::MigrateZcashConfCmd,
-    config::ZalletConfig,
+    commands::AsyncRunnable,
+    config::{RpcAuthSection, ZalletConfig},
     error::{Error, ErrorKind},
     fl,
     network::RegTestNuParam,
@@ -509,9 +509,18 @@ fn build_actions() -> HashMap<&'static str, Action> {
         .chain(Action::ignore("rpcallowip"))
         // Unsupported in `zcashd` since 1.0.0-beta1.
         .chain(Action::ignore("rpcasyncthreads"))
-        // TODO: Support mapping multi-arg options.
-        // TODO: Decide whether we want to support non-cookie-based auth.
-        .chain(Action::ignore("rpcauth"))
+        .chain(Action::map_multi(
+            "rpcauth",
+            |config| &mut config.rpc.auth,
+            |value| {
+                let (username, pwhash) = value.split_once(':').ok_or(())?;
+                Ok(RpcAuthSection {
+                    user: username.into(),
+                    password: None,
+                    pwhash: Some(pwhash.into()),
+                })
+            },
+        ))
         // TODO: Need to check how this interacts with `rpcport`; we may instead need a
         // warning here and no migration.
         .chain(Action::map_multi(
