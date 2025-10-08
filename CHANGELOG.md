@@ -12,6 +12,7 @@ be considered breaking changes.
 - A bug causing some funds to not be counted in balance calculations has been
   fixed.
 - JSON-RPC 1.x responses now use the expected HTTP error codes.
+- JSON-RPC error codes now match zcashd more often.
 
 ## [0.1.0-alpha.1] - 2025-09-18
 

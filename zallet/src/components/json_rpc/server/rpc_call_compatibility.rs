@@ -8,7 +8,7 @@ use jsonrpsee::{
     MethodResponse,
     server::middleware::rpc::{RpcService, RpcServiceT, layer::ResponseFuture},
     tracing::debug,
-    types::ErrorObject,
+    types::{ErrorCode, ErrorObject, Response, ResponsePayload},
 };
 
 use crate::components::json_rpc::server::error::LegacyCode;
@@ -22,9 +22,8 @@ use crate::components::json_rpc::server::error::LegacyCode;
 /// [`jsonrpsee::types`] returns specific error codes while parsing requests:
 /// <https://docs.rs/jsonrpsee-types/latest/jsonrpsee_types/error/enum.ErrorCode.html>
 ///
-/// But these codes are different from `zcashd`, and some RPC clients rely on the exact code.
-/// Specifically, the [`jsonrpsee::types::error::INVALID_PARAMS_CODE`] is different:
-/// <https://docs.rs/jsonrpsee-types/latest/jsonrpsee_types/error/constant.INVALID_PARAMS_CODE.html>
+/// But these codes are different from `zcashd`, and some RPC clients rely on the exact
+/// code.
 pub struct FixRpcResponseMiddleware {
     service: RpcService,
 }
@@ -44,32 +43,45 @@ impl<'a> RpcServiceT<'a> for FixRpcResponseMiddleware {
         ResponseFuture::future(Box::pin(async move {
             let response = service.call(request).await;
             if response.is_error() {
-                let original_error_code = response
-                    .as_error_code()
-                    .expect("response should have an error code");
-                if original_error_code == jsonrpsee::types::ErrorCode::InvalidParams.code() {
-                    let new_error_code = LegacyCode::Misc.into();
-                    debug!("Replacing RPC error: {original_error_code} with {new_error_code}");
-                    let json: serde_json::Value =
-                        serde_json::from_str(response.into_parts().0.as_str())
-                            .expect("response string should be valid json");
-                    let id = match &json["id"] {
-                        serde_json::Value::Null => Some(jsonrpsee::types::Id::Null),
-                        serde_json::Value::Number(n) => {
-                            n.as_u64().map(jsonrpsee::types::Id::Number)
-                        }
-                        serde_json::Value::String(s) => Some(jsonrpsee::types::Id::Str(s.into())),
-                        _ => None,
-                    }
-                    .expect("response json should have an id");
+                let result: Response<'_, &serde_json::value::RawValue> =
+                    serde_json::from_str(response.as_result())
+                        .expect("response string should be valid json");
 
-                    return MethodResponse::error(
-                        id,
-                        ErrorObject::borrowed(new_error_code, "Invalid params", None),
-                    );
+                let replace_code = |old, new: ErrorObject<'_>| {
+                    debug!("Replacing RPC error: {old} with {new}");
+                    MethodResponse::error(result.id, new)
+                };
+
+                let err = match result.payload {
+                    ResponsePayload::Error(err) => err,
+                    ResponsePayload::Success(_) => unreachable!(),
+                };
+
+                match (
+                    err.code().into(),
+                    err.data().map(|d| d.get().trim_matches('"')),
+                ) {
+                    // `jsonrpsee` parses the method into a `&str` using serde, so at this
+                    // layer we get any JSON type that serde can massage into a string,
+                    // while any other JSON type is rejected before this `RpcService` is
+                    // called. This is a bug in `jsonrpsee`, and there's nothing we can do
+                    // here to detect it.
+                    // - https://github.com/zcash/zcash/blob/16ac743764a513e41dafb2cd79c2417c5bb41e81/src/rpc/server.cpp#L407-L434
+                    (ErrorCode::MethodNotFound, _) => response,
+                    // - This was unused prior to zcashd 5.6.0; Bitcoin Core used its own
+                    //   error code for generic invalid parameter errors.
+                    // - From 5.6.0, this was used only for help text when an invalid
+                    //   number of parameters was returned.
+                    (ErrorCode::InvalidParams, Some("No more params")) => response,
+                    (ErrorCode::InvalidParams, data) => replace_code(
+                        err.code(),
+                        LegacyCode::InvalidParameter.with_message(data.unwrap_or(err.message())),
+                    ),
+                    _ => response,
                 }
+            } else {
+                response
             }
-            response
         }))
     }
 }
