@@ -7,10 +7,11 @@ use std::pin::Pin;
 
 use futures::FutureExt;
 use http_body_util::BodyExt;
-use hyper::header;
+use hyper::{StatusCode, header};
 use jsonrpsee::{
     core::BoxError,
     server::{HttpBody, HttpRequest, HttpResponse},
+    types::{ErrorCode, ErrorObject},
 };
 use serde::{Deserialize, Serialize};
 use tower::Service;
@@ -132,19 +133,41 @@ impl<S> HttpRequestMiddleware<S> {
         version: JsonRpcVersion,
         response: HttpResponse<HttpBody>,
     ) -> HttpResponse<HttpBody> {
-        let (parts, body) = response.into_parts();
+        let (mut parts, body) = response.into_parts();
         let bytes = body
             .collect()
             .await
             .expect("Failed to collect body data")
             .to_bytes();
 
-        let bytes = match serde_json::from_slice::<'_, JsonRpcResponse>(bytes.as_ref()) {
-            Ok(response) => serde_json::to_vec(&response.into_version(version))
-                .expect("valid")
-                .into(),
-            _ => bytes,
-        };
+        let bytes =
+            match serde_json::from_slice::<'_, JsonRpcResponse>(bytes.as_ref()) {
+                Ok(response) => {
+                    // For Bitcoin-flavoured JSON-RPC, use the expected HTTP status codes for
+                    // RPC error responses.
+                    // - https://github.com/zcash/zcash/blob/16ac743764a513e41dafb2cd79c2417c5bb41e81/src/httprpc.cpp#L63-L78
+                    // - https://www.jsonrpc.org/historical/json-rpc-over-http.html#response-codes
+                    match version {
+                        JsonRpcVersion::Bitcoind | JsonRpcVersion::Lightwalletd => {
+                            if let Some(e) = response.error.as_ref().and_then(|e| {
+                                serde_json::from_str::<'_, ErrorObject<'_>>(e.get()).ok()
+                            }) {
+                                parts.status = match e.code().into() {
+                                    ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
+                                    ErrorCode::MethodNotFound => StatusCode::NOT_FOUND,
+                                    _ => StatusCode::INTERNAL_SERVER_ERROR,
+                                };
+                            }
+                        }
+                        _ => (),
+                    }
+
+                    serde_json::to_vec(&response.into_version(version))
+                        .expect("valid")
+                        .into()
+                }
+                _ => bytes,
+            };
 
         HttpResponse::from_parts(parts, HttpBody::from(bytes.as_ref().to_vec()))
     }
