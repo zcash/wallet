@@ -28,6 +28,32 @@ contacting us in the `#wallet-dev` channel of the
 
 See the [user guide](book/src/README.md) for information on how to set up a Zallet wallet.
 
+## Reproducible Builds
+
+Zallet leverages [StageX](https://codeberg.org/stagex/stagex/) to provied a 
+full source bootstrapped, and deterministic/reproducible build and runtime 
+dependencies. This helps mitigate supply chain attacks, and especially trusting 
+trust style attacks and reduces trust in any single computer or individual.
+
+### Requirements
+* Docker 25+
+* [`containerd` support](https://docs.docker.com/engine/storage/containerd/#enable-containerd-image-store-on-docker-engine)
+* GNU Make
+
+### Usage
+
+* To `build` and `import` the image use the `make` command
+
+* The `build` commmands uses the `utils/compat.sh` and `utils/builds.sh`
+in order to ensure that the user has required dependencies installed and that
+the [OCI](https://opencontainers.org/) image built is deterministic by using
+the appropriate flags.
+
+### Details
+
+* `stagex/core-user-runtime` is used to set user to non-root and provide a 
+minimal filesystem
+
 ## License
 
 All code in this workspace is licensed under either of
