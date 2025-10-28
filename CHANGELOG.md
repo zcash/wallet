@@ -10,6 +10,7 @@ be considered breaking changes.
 
 ### Fixed
 - Several balance calculation bugs have been fixed.
+- Bugs related to detection and selection of unspent outputs have been fixed.
 - JSON-RPC 1.x responses now use the expected HTTP error codes.
 - JSON-RPC error codes now match zcashd more often.
 
