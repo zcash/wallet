@@ -4,6 +4,7 @@ use std::sync::Arc;
 use jsonrpsee::tracing::{error, info};
 use tokio::net::lookup_host;
 use tokio::sync::RwLock;
+use zaino_common::{CacheConfig, DatabaseConfig, ServiceConfig, StorageConfig};
 use zaino_state::{
     FetchService, FetchServiceConfig, FetchServiceSubscriber, IndexerService, IndexerSubscriber,
     StatusType, ZcashService,
@@ -92,13 +93,15 @@ impl ChainView {
             config.indexer.validator_cookie_path.clone(),
             config.indexer.validator_user.clone(),
             config.indexer.validator_password.clone(),
-            None,
-            None,
-            None,
-            None,
-            config.indexer_db_path().to_path_buf(),
-            None,
-            config.consensus.network().to_zebra(),
+            ServiceConfig::default(),
+            StorageConfig {
+                cache: CacheConfig::default(),
+                database: DatabaseConfig {
+                    path: config.indexer_db_path().to_path_buf(),
+                    size: zaino_common::DatabaseSize::default(),
+                },
+            },
+            config.consensus.network().to_zaino(),
             false,
             // Setting this to `false` causes start-up to block on completely filling the
             // cache. Zaino's DB currently only contains a cache of CompactBlocks, so we
