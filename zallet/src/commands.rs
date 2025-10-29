@@ -20,6 +20,7 @@ use crate::{
     prelude::APP,
 };
 
+mod add_rpc_user;
 mod example_config;
 mod repair;
 mod start;

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use documented::{Documented, DocumentedFields};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use zcash_client_backend::data_api::wallet::ConfirmationsPolicy;
 use zcash_protocol::consensus::NetworkType;
@@ -604,6 +605,10 @@ pub struct RpcSection {
 
     /// Timeout (in seconds) during HTTP requests.
     pub timeout: Option<u64>,
+
+    /// A list of users for which access to the JSON-RPC interface is authorized.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auth: Vec<RpcAuthSection>,
 }
 
 impl RpcSection {
@@ -612,6 +617,38 @@ impl RpcSection {
     /// Default is 30 seconds.
     pub fn timeout(&self) -> Duration {
         Duration::from_secs(self.timeout.unwrap_or(30))
+    }
+}
+
+/// A user that is authorized to access the JSON-RPC interface.
+#[derive(Clone, Debug, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct RpcAuthSection {
+    /// The username for accessing the JSON-RPC interface.
+    ///
+    /// Each username must be unique. If duplicates are present, only one of the passwords
+    /// will work.
+    pub user: String,
+
+    /// The password for this user.
+    ///
+    /// This cannot be set when `pwhash` is set.
+    #[serde(serialize_with = "serialize_rpc_password")]
+    pub password: Option<SecretString>,
+
+    /// A hash of the password for this user.
+    ///
+    /// This can be generated with `zallet rpc add-user`.
+    pub pwhash: Option<String>,
+}
+
+fn serialize_rpc_password<S: serde::Serializer>(
+    password: &Option<SecretString>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match password {
+        Some(p) => p.expose_secret().serialize(serializer),
+        None => None::<String>.serialize(serializer),
     }
 }
 
@@ -689,6 +726,7 @@ impl ZalletConfig {
         #[cfg(zallet_build = "wallet")]
         const NOTE_MANAGEMENT: &str = "note_management";
         const RPC: &str = "rpc";
+        const RPC_AUTH: &str = "rpc.auth";
         fn builder<T: Serialize>(
             f: &'static str,
             d: T,
@@ -795,6 +833,23 @@ impl ZalletConfig {
             section_name: &'static str,
             sec_def: &impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
         ) {
+            write_section_inner::<T>(config, section_name, false, sec_def);
+        }
+
+        fn write_list_section<'a, T: Documented + DocumentedFields>(
+            config: &mut String,
+            section_name: &'static str,
+            sec_def: &impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
+        ) {
+            write_section_inner::<T>(config, section_name, true, sec_def);
+        }
+
+        fn write_section_inner<'a, T: Documented + DocumentedFields>(
+            config: &mut String,
+            section_name: &'static str,
+            is_list: bool,
+            sec_def: &impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
+        ) {
             writeln!(config).unwrap();
             writeln!(config, "#").unwrap();
             for line in T::DOCS.lines() {
@@ -805,7 +860,17 @@ impl ZalletConfig {
                 }
             }
             writeln!(config, "#").unwrap();
-            writeln!(config, "[{section_name}]").unwrap();
+            if is_list {
+                writeln!(
+                    config,
+                    "# Repeat this section to add more entries to the list."
+                )
+                .unwrap();
+                writeln!(config, "#").unwrap();
+                writeln!(config, "#[[{section_name}]]").unwrap();
+            } else {
+                writeln!(config, "[{section_name}]").unwrap();
+            }
             writeln!(config).unwrap();
 
             for field_name in T::FIELD_NAMES {
@@ -824,6 +889,9 @@ impl ZalletConfig {
                         FEATURES_EXPERIMENTAL,
                         sec_def,
                     ),
+                    (RPC, "auth") => {
+                        write_list_section::<RpcAuthSection>(config, RPC_AUTH, sec_def)
+                    }
                     // Ignore flattened fields (present to support parsing old configs).
                     (FEATURES_DEPRECATED, "other") | (FEATURES_EXPERIMENTAL, "other") => (),
                     // Render section field.
@@ -832,7 +900,11 @@ impl ZalletConfig {
                         field_name,
                         (section_name == CONSENSUS && *field_name == "network")
                             || (section_name == FEATURES && *field_name == "as_of_version"),
-                        sec_def(section_name, field_name),
+                        if is_list {
+                            None
+                        } else {
+                            sec_def(section_name, field_name)
+                        },
                     ),
                 }
             }

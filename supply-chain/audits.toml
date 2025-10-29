@@ -37,6 +37,11 @@ who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "1.0.95 -> 1.0.97"
 
+[[audits.base64ct]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.7.3 -> 1.8.0"
+
 [[audits.basic-toml]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"

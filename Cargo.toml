@@ -34,6 +34,10 @@ home = "0.5"
 known-folders = "1"
 xdg = "2.5"
 
+# Hashing
+hmac = "0.12"
+sha2 = "0.10"
+
 # Key storage
 age = { version = "0.11", features = ["armor", "cli-common", "plugin"] }
 bip0039 = "0.12"
@@ -44,6 +48,7 @@ i18n-embed-fl = "0.10"
 rust-embed = "8"
 
 # Parsing and serialization
+base64ct = "1.8"
 hex = "0.4"
 serde = { version = "1", features = ["serde_derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "raw_value"] }
@@ -52,6 +57,9 @@ zcash_address = "0.9"
 
 # Randomness
 rand = "0.8"
+
+# Secret management
+secrecy = { version = "0.8", features = ["serde"] }
 
 # CLI
 abscissa_core = "0.8"
@@ -108,7 +116,6 @@ incrementalmerkletree = "0.8.2"
 rusqlite = { version = "0.32", features = ["time"] }
 schemerz = "0.2"
 schemerz-rusqlite = "0.320.0"
-secrecy = "0.8"
 shardtree = "0.6"
 time = "0.3"
 uuid = "1"

@@ -33,5 +33,9 @@ bind = [
     "127.0.0.1:8234",
 ]
 
+[[rpc.auth]]
+pwhash = "50bb6ea2ab224071ecc3ef195a3a8$9090d8985b8d9969aa2062d134ebb2d568cd585a383ed76931ac34c7d4c8ebf5"
+user = "foobar"
+
 """
 stderr = ""
