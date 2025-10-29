@@ -3250,29 +3250,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lazy-regex"
-version = "3.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60c7310b93682b36b98fa7ea4de998d3463ccbebd94d935d6b48ba5b6ffa7126"
-dependencies = [
- "lazy-regex-proc_macros",
- "once_cell",
- "regex",
-]
-
-[[package]]
-name = "lazy-regex-proc_macros"
-version = "3.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ba01db5ef81e17eb10a5e0f2109d1b3a3e29bac3070fdbd7d156bf7dbd206a1"
-dependencies = [
- "proc-macro2",
- "quote",
- "regex",
- "syn 2.0.100",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3312,7 +3289,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -4298,7 +4275,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -4318,7 +4295,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.100",
@@ -6797,7 +6774,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7185,9 +7162,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "zaino-common"
+version = "0.1.2"
+source = "git+https://github.com/zingolabs/zaino.git?rev=1391981631e292ea3a294a8962ba28440af33bf2#1391981631e292ea3a294a8962ba28440af33bf2"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
+ "zebra-chain",
+]
+
+[[package]]
 name = "zaino-fetch"
 version = "0.1.2"
-source = "git+https://github.com/Electric-Coin-Company/zaino.git?rev=1004733f3303b1c48b6df6db610c54401554683c#1004733f3303b1c48b6df6db610c54401554683c"
+source = "git+https://github.com/zingolabs/zaino.git?rev=1391981631e292ea3a294a8962ba28440af33bf2#1391981631e292ea3a294a8962ba28440af33bf2"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -7207,16 +7194,14 @@ dependencies = [
  "tracing",
  "url",
  "zaino-proto",
- "zcash_protocol 0.6.2",
  "zebra-chain",
  "zebra-rpc",
- "zebra-state",
 ]
 
 [[package]]
 name = "zaino-proto"
 version = "0.1.2"
-source = "git+https://github.com/Electric-Coin-Company/zaino.git?rev=1004733f3303b1c48b6df6db610c54401554683c#1004733f3303b1c48b6df6db610c54401554683c"
+source = "git+https://github.com/zingolabs/zaino.git?rev=1391981631e292ea3a294a8962ba28440af33bf2#1391981631e292ea3a294a8962ba28440af33bf2"
 dependencies = [
  "prost",
  "tonic 0.12.3",
@@ -7227,14 +7212,13 @@ dependencies = [
 [[package]]
 name = "zaino-state"
 version = "0.1.2"
-source = "git+https://github.com/Electric-Coin-Company/zaino.git?rev=1004733f3303b1c48b6df6db610c54401554683c#1004733f3303b1c48b6df6db610c54401554683c"
+source = "git+https://github.com/zingolabs/zaino.git?rev=1391981631e292ea3a294a8962ba28440af33bf2#1391981631e292ea3a294a8962ba28440af33bf2"
 dependencies = [
  "arc-swap",
  "async-trait",
  "bitflags 2.9.0",
  "blake2",
  "bs58",
- "byteorder",
  "cargo-lock",
  "chrono",
  "core2 0.4.0",
@@ -7242,10 +7226,7 @@ dependencies = [
  "derive_more",
  "futures",
  "hex",
- "http",
  "indexmap 2.9.0",
- "jsonrpsee-core",
- "lazy-regex",
  "lmdb",
  "lmdb-sys",
  "nonempty 0.11.0",
@@ -7261,8 +7242,8 @@ dependencies = [
  "tonic 0.12.3",
  "tower 0.4.13",
  "tracing",
- "url",
  "whoami",
+ "zaino-common",
  "zaino-fetch",
  "zaino-proto",
  "zcash_address 0.9.0",
@@ -7343,6 +7324,7 @@ dependencies = [
  "uuid",
  "which 8.0.0",
  "xdg",
+ "zaino-common",
  "zaino-fetch",
  "zaino-proto",
  "zaino-state",

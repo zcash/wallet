@@ -139,6 +139,7 @@ transparent.workspace = true
 uuid.workspace = true
 which = { workspace = true, optional = true }
 xdg.workspace = true
+zaino-common.workspace = true
 zaino-fetch.workspace = true
 zaino-proto.workspace = true
 zaino-state.workspace = true

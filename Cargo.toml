@@ -92,6 +92,7 @@ zcash_script = "0.4"
 secp256k1 = "0.29"
 
 # Zcash chain state
+zaino-common = "0.1"
 zaino-fetch = "0.1"
 zaino-proto = "0.1"
 zaino-state = "0.1"
@@ -135,9 +136,10 @@ abscissa_tokio = { git = "https://github.com/iqlusioninc/abscissa.git", rev = "f
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "f84f80612813ba00a0a8a9a5f060bd217fa981cc" }
 zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "9c72d1805c269f88ea5caa4eb33c6d38013b9776" }
 
-zaino-fetch = { git = "https://github.com/Electric-Coin-Company/zaino.git", rev = "1004733f3303b1c48b6df6db610c54401554683c" }
-zaino-proto = { git = "https://github.com/Electric-Coin-Company/zaino.git", rev = "1004733f3303b1c48b6df6db610c54401554683c" }
-zaino-state = { git = "https://github.com/Electric-Coin-Company/zaino.git", rev = "1004733f3303b1c48b6df6db610c54401554683c" }
+zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "1391981631e292ea3a294a8962ba28440af33bf2" }
+zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "1391981631e292ea3a294a8962ba28440af33bf2" }
+zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "1391981631e292ea3a294a8962ba28440af33bf2" }
+zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "1391981631e292ea3a294a8962ba28440af33bf2" }
 
 [profile.release]
 debug = "line-tables-only"

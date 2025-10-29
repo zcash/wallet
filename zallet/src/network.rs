@@ -56,18 +56,16 @@ impl Network {
         }
     }
 
-    pub(crate) fn to_zebra(self) -> zebra_chain::parameters::Network {
+    pub(crate) fn to_zaino(self) -> zaino_common::Network {
         match self {
             Network::Consensus(network) => match network {
-                consensus::Network::MainNetwork => zebra_chain::parameters::Network::Mainnet,
-                consensus::Network::TestNetwork => {
-                    zebra_chain::parameters::Network::new_default_testnet()
-                }
+                consensus::Network::MainNetwork => zaino_common::Network::Mainnet,
+                consensus::Network::TestNetwork => zaino_common::Network::Testnet,
             },
             // TODO: This does not create a compatible regtest network because Zebra does
             // not have the necessary flexibility.
-            Network::RegTest(local_network) => zebra_chain::parameters::Network::new_regtest(
-                zebra_chain::parameters::testnet::ConfiguredActivationHeights {
+            Network::RegTest(local_network) => {
+                zaino_common::Network::Regtest(zaino_common::network::ActivationHeights {
                     before_overwinter: Some(1),
                     overwinter: local_network.overwinter.map(|h| h.into()),
                     sapling: local_network.sapling.map(|h| h.into()),
@@ -78,8 +76,8 @@ impl Network {
                     nu6: local_network.nu6.map(|h| h.into()),
                     nu6_1: None,
                     nu7: None,
-                },
-            ),
+                })
+            }
         }
     }
 }
