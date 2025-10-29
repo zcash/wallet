@@ -15,7 +15,7 @@
 -zcashd = zcashd
 -zebrad = zebrad
 
-{-systemd} = systemd
+-systemd = systemd
 
 -allow-warnings = --allow-warnings
 -allow-alpha-example = --this-is-alpha-code-and-you-will-need-to-recreate-the-example-later
@@ -101,6 +101,11 @@ err-init-zallet-already-running =
 err-init-config-db-mismatch =
     The wallet database was created for network type {$db_network_type}, but the
     config is using network type {$config_network_type}.
+
+## Keystore errors
+
+err-keystore-missing-recipients = The wallet has not been set up to store key material securely.
+rec-keystore-missing-recipients = Have you run '{$init_cmd}'?
 
 # errors in migration of configuration data from the zcashd `zcash.conf` config file format
 
