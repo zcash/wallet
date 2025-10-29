@@ -143,6 +143,9 @@ use {
 
 pub(super) mod db;
 
+mod error;
+pub(crate) use error::KeystoreError;
+
 type RelockTask = (SystemTime, JoinHandle<()>);
 
 #[derive(Clone)]
@@ -395,7 +398,7 @@ impl KeyStore {
     ) -> Result<(), Error> {
         // If the wallet has any existing recipients, fail (we would instead need to
         // re-encrypt the wallet).
-        if !self.recipients().await?.is_empty() {
+        if !self.maybe_recipients().await?.is_empty() {
             return Err(ErrorKind::Generic
                 .context("Keystore age recipients already initialized")
                 .into());
@@ -427,7 +430,23 @@ impl KeyStore {
     }
 
     /// Fetches the age recipients for this wallet from the database.
+    ///
+    /// Returns an error if there are none.
     async fn recipients(&self) -> Result<Vec<Box<dyn age::Recipient + Send>>, Error> {
+        let recipients = self.maybe_recipients().await?;
+        if recipients.is_empty() {
+            Err(ErrorKind::Generic
+                .context(KeystoreError::MissingRecipients)
+                .into())
+        } else {
+            Ok(recipients)
+        }
+    }
+
+    /// Fetches the age recipients for this wallet from the database.
+    ///
+    /// Unlike [`Self::recipients`], this might return an empty vec.
+    async fn maybe_recipients(&self) -> Result<Vec<Box<dyn age::Recipient + Send>>, Error> {
         self.with_db(|conn, _| {
             let mut stmt = conn
                 .prepare(

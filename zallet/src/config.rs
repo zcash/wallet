@@ -72,7 +72,10 @@ pub struct ZalletConfig {
 
 impl ZalletConfig {
     /// Returns the data directory to use.
-    fn datadir(&self) -> &Path {
+    ///
+    /// Only `pub(crate)` so it can be used in recommended commands for error messages. If
+    /// you need to access a file in the datadir, use one of the dedicated path getters.
+    pub(crate) fn datadir(&self) -> &Path {
         self.datadir
             .as_deref()
             .expect("must be set by command before running any code using paths")
