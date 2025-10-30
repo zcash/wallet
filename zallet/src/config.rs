@@ -465,11 +465,10 @@ pub struct IndexerSection {
     /// testnet (as appropriate).
     pub validator_address: Option<String>,
 
-    /// Enable validator RPC cookie authentication.
-    pub validator_cookie_auth: Option<bool>,
-
     /// Path to the validator cookie file.
-    pub validator_cookie_path: Option<String>,
+    ///
+    /// If set, cookie file authorization will be used.
+    pub validator_cookie_path: Option<PathBuf>,
 
     /// Full node / validator Username.
     pub validator_user: Option<String>,
@@ -689,7 +688,6 @@ impl ZalletConfig {
             features("as_of_version", &conf.features.as_of_version),
             features("legacy_pool_seed_fingerprint", None::<String>),
             indexer("validator_address", &conf.indexer.validator_address),
-            indexer("validator_cookie_auth", conf.indexer.validator_cookie_auth),
             indexer("validator_cookie_path", &conf.indexer.validator_cookie_path),
             indexer("validator_user", &conf.indexer.validator_user),
             indexer("validator_password", &conf.indexer.validator_password),
