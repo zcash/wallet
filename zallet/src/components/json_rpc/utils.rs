@@ -177,6 +177,20 @@ pub(super) fn parse_as_of_height(as_of_height: Option<i64>) -> RpcResult<Option<
     }
 }
 
+/// Parses the `minconf` parameter present in many wallet RPCs.
+pub(super) fn parse_minconf(
+    minconf: Option<u32>,
+    default: u32,
+    as_of_height: Option<BlockHeight>,
+) -> RpcResult<u32> {
+    match minconf {
+        None => Ok(default),
+        Some(0) if as_of_height.is_some() => Err(LegacyCode::InvalidParameter
+            .with_static("Require a minimum of 1 confirmation when `asOfHeight` is provided")),
+        Some(d) => Ok(d),
+    }
+}
+
 /// Equivalent of `AmountFromValue` in `zcashd`, permitting the same input formats.
 #[cfg(zallet_build = "wallet")]
 pub(super) fn zatoshis_from_value(value: &JsonValue) -> RpcResult<Zatoshis> {

@@ -347,7 +347,8 @@ pub(crate) trait WalletRpc {
     /// returned, even though they are not immediately spendable.
     ///
     /// # Arguments
-    /// - `minconf`: Select outputs with at least this many confirmations (default = 1)
+    /// - `minconf`: Select outputs with at least this many confirmations (default = 1). Must be at
+    ///   least 1 when `as_of_height` is provided.
     /// - `maxconf`: Select outputs with at most this many confirmations (default = unlimited).
     /// - `include_watchonly`: Include notes/utxos for which the wallet does not provide spending
     ///   capability (default = false).

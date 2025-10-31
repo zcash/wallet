@@ -27,7 +27,7 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{JsonZec, parse_as_of_height, value_from_zatoshis},
+        utils::{JsonZec, parse_as_of_height, parse_minconf, value_from_zatoshis},
     },
 };
 
@@ -117,7 +117,7 @@ pub(crate) fn call(
     as_of_height: Option<i64>,
 ) -> Response {
     let as_of_height = parse_as_of_height(as_of_height)?;
-    let minconf = minconf.unwrap_or(1);
+    let minconf = parse_minconf(minconf, 1, as_of_height)?;
 
     let confirmations_policy = match NonZeroU32::new(minconf) {
         Some(c) => ConfirmationsPolicy::new_symmetrical(c, false),
