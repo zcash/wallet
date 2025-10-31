@@ -20,14 +20,14 @@ use zcash_client_backend::{
     wallet::NoteId,
 };
 use zcash_keys::address::Address;
-use zcash_protocol::{ShieldedProtocol, consensus::BlockHeight};
+use zcash_protocol::ShieldedProtocol;
 use zip32::Scope;
 
 use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{JsonZec, value_from_zatoshis},
+        utils::{JsonZec, parse_as_of_height, value_from_zatoshis},
     },
 };
 
@@ -116,7 +116,9 @@ pub(crate) fn call(
     addresses: Option<Vec<String>>,
     as_of_height: Option<i64>,
 ) -> Response {
+    let as_of_height = parse_as_of_height(as_of_height)?;
     let minconf = minconf.unwrap_or(1);
+
     let confirmations_policy = match NonZeroU32::new(minconf) {
         Some(c) => ConfirmationsPolicy::new_symmetrical(c, false),
         None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::new(1).unwrap(), true),
@@ -139,52 +141,17 @@ pub(crate) fn call(
 
     let target_height = match as_of_height.map_or_else(
         || {
-            wallet
-                .get_target_and_anchor_heights(NonZeroU32::MIN)
-                .map_or_else(
-                    |e| {
-                        Err(RpcError::owned(
-                            LegacyCode::Database.into(),
-                            "WalletDb::get_target_and_anchor_heights failed",
-                            Some(format!("{e}")),
-                        ))
-                    },
-                    |h_opt| Ok(h_opt.map(|(h, _)| h)),
+            wallet.chain_height().map_err(|e| {
+                RpcError::owned(
+                    LegacyCode::Database.into(),
+                    "WalletDb::chain_height failed",
+                    Some(format!("{e}")),
                 )
+            })
         },
-        |h| {
-            if h == -1 {
-                wallet.chain_height().map_or_else(
-                    |e| {
-                        Err(RpcError::owned(
-                            LegacyCode::Database.into(),
-                            "WalletDb::chain_height failed",
-                            Some(format!("{e}")),
-                        ))
-                    },
-                    |h_opt| Ok(h_opt.map(|h| TargetHeight::from(h + 1))),
-                )
-            } else if h > 0 {
-                u32::try_from(h).map_or_else(
-                    |_| {
-                        Err(RpcError::owned::<String>(
-                            LegacyCode::InvalidParameter.into(),
-                            "`as_of_height` parameter out of range",
-                            None,
-                        ))
-                    },
-                    |h| Ok(Some(TargetHeight::from(BlockHeight::from(h + 1)))),
-                )
-            } else {
-                Err(RpcError::owned::<String>(
-                    LegacyCode::InvalidParameter.into(),
-                    "Negative `as_of_height` values other than -1 are not supported",
-                    None,
-                ))
-            }
-        },
+        |h| Ok(Some(h)),
     )? {
-        Some(h) => h,
+        Some(h) => TargetHeight::from(h + 1),
         None => {
             return Ok(ResultType(vec![]));
         }

@@ -10,6 +10,7 @@ use serde::Serialize;
 use zcash_client_sqlite::AccountUuid;
 use zcash_protocol::{
     TxId,
+    consensus::BlockHeight,
     value::{COIN, ZatBalance, Zatoshis},
 };
 use zip32::DiversifierIndex;
@@ -156,6 +157,24 @@ pub(super) fn parse_diversifier_index(diversifier_index: u128) -> RpcResult<Dive
     diversifier_index
         .try_into()
         .map_err(|_| LegacyCode::InvalidParameter.with_static("diversifier index is too large."))
+}
+
+/// Parses the `as_of_height` parameter present in many wallet RPCs.
+pub(super) fn parse_as_of_height(as_of_height: Option<i64>) -> RpcResult<Option<BlockHeight>> {
+    match as_of_height {
+        None | Some(-1) => Ok(None),
+        Some(..0) => Err(LegacyCode::InvalidParameter
+            .with_static("Can not perform the query as of a negative block height")),
+        Some(0) => Err(LegacyCode::InvalidParameter
+            .with_static("Can not perform the query as of the genesis block")),
+        Some(h) => u32::try_from(h).map_or_else(
+            |_| {
+                Err(LegacyCode::InvalidParameter
+                    .with_static("`as_of_height` parameter out of range"))
+            },
+            |h| Ok(Some(BlockHeight::from(h))),
+        ),
+    }
 }
 
 /// Equivalent of `AmountFromValue` in `zcashd`, permitting the same input formats.
