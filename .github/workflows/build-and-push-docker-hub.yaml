@@ -37,10 +37,9 @@ jobs:
   build_push:
     uses: zcash/.github/.github/workflows/build-and-push-docker-hub.yaml@7d26ab8bcae49bed16f4137f8eba5679759888a2 # v1.0.0
     needs: set_env
-
-    # Pass through the same permissions to the called workflow (optional but tidy)
-    permissions: inherit
-
+    permissions:
+      id-token: write
+      contents: read
     with:
       image_name: zallet
       image_tags: ${{ needs.set_env.outputs.tags }}
