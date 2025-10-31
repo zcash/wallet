@@ -16,6 +16,7 @@ use jsonrpsee::{
 };
 use rand::{Rng, rngs::OsRng};
 use secrecy::{ExposeSecret, SecretString};
+#[allow(deprecated)]
 use sha2::{
     Sha256,
     digest::{CtOutput, OutputSizeUser, generic_array::GenericArray},
@@ -63,6 +64,7 @@ pub(crate) struct PasswordHash {
 impl FromStr for PasswordHash {
     type Err = ();
 
+    #[allow(deprecated)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (salt, hash) = s.split_once('$').ok_or(())?;
         let hash = hex::decode(hash).map_err(|_| ())?;

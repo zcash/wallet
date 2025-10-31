@@ -203,10 +203,9 @@ as_of_version = "0.1.0-alpha.1"
 # testnet (as appropriate).
 #validator_address = UNSET
 
-# Enable validator RPC cookie authentication.
-#validator_cookie_auth = UNSET
-
 # Path to the validator cookie file.
+#
+# If set, cookie file authorization will be used.
 #validator_cookie_path = UNSET
 
 # Full node / validator Username.

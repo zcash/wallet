@@ -89,7 +89,6 @@ impl ChainView {
 
         let config = FetchServiceConfig::new(
             resolved_validator_address,
-            config.indexer.validator_cookie_auth.unwrap_or(false),
             config.indexer.validator_cookie_path.clone(),
             config.indexer.validator_user.clone(),
             config.indexer.validator_password.clone(),
@@ -98,16 +97,14 @@ impl ChainView {
                 cache: CacheConfig::default(),
                 database: DatabaseConfig {
                     path: config.indexer_db_path().to_path_buf(),
-                    size: zaino_common::DatabaseSize::default(),
+                    // Setting this to as non-zero value causes start-up to block on
+                    // completely filling the cache. Zaino's DB currently only contains a
+                    // cache of CompactBlocks, so we make do for now with uncached queries.
+                    // TODO: https://github.com/zingolabs/zaino/issues/249
+                    size: zaino_common::DatabaseSize::Gb(0),
                 },
             },
             config.consensus.network().to_zaino(),
-            false,
-            // Setting this to `false` causes start-up to block on completely filling the
-            // cache. Zaino's DB currently only contains a cache of CompactBlocks, so we
-            // make do for now with uncached queries.
-            // TODO: https://github.com/zingolabs/zaino/issues/249
-            true,
         );
 
         info!("Starting Zaino indexer");
