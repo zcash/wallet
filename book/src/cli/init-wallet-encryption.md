@@ -8,7 +8,7 @@ When run, Zallet will use the [age encryption] identity stored in a wallet's dat
 initialize the wallet's encryption keys. The encryption identity file name (or path) can
 be set with the `keystore.encryption_identity` [config option].
 
-> WARNING: For the first Zallet alpha release (0.1.0-alpha.1), `zallet` requires the
+> WARNING: As of the latest Zallet alpha release (0.1.0-alpha.2), `zallet` requires the
 > encryption identity file to already exist. You can generate one with [`rage`].
 
 ## Identity kinds

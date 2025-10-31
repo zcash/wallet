@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 During the alpha period, no Semantic Versioning is followed; all releases should
 be considered breaking changes.
 
-## [0.1.0-alpha.2] - PLANNED
+## [0.1.0-alpha.3] - PLANNED
+
+## [0.1.0-alpha.2] - 2025-10-31
 
 ### Added
 - JSON-RPC authorization mechanisms, matching zcashd:
