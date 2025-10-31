@@ -77,7 +77,7 @@ rust_decimal = { version = "1.37", default-features = false, features = [
     "serde-arbitrary-precision",
     "serde-float",
 ] }
-schemars = "0.9"
+schemars = "1"
 tower = "0.4"
 
 # Tracing
