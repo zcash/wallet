@@ -201,7 +201,11 @@ pub(crate) struct MigrateZcashdWalletCmd {
 #[cfg(zallet_build = "wallet")]
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
-pub(crate) struct InitWalletEncryptionCmd {}
+pub(crate) struct InitWalletEncryptionCmd {
+    /// Creates the encryption identity file if it does not already exist.
+    #[arg(short)]
+    pub(crate) create: bool,
+}
 
 /// `generate-mnemonic` subcommand
 #[cfg(zallet_build = "wallet")]

@@ -1,4 +1,7 @@
 use abscissa_core::Runnable;
+use age::secrecy::ExposeSecret;
+use std::fs::File;
+use std::io::Write;
 
 use crate::{
     cli::InitWalletEncryptionCmd,
@@ -14,6 +17,27 @@ impl AsyncRunnable for InitWalletEncryptionCmd {
         let _lock = config.lock_datadir()?;
 
         let db = Database::open(&config).await?;
+
+        if self.create {
+            let path = config.encryption_identity();
+
+            // Q: is this fine or should we make it more like age::file_io::OutputWriter?
+            let mut out = File::create_new(&path).map_err(|e| {
+                ErrorKind::Init.context(format!("Failed to create encryption identity file: {}", e))
+            })?;
+
+            let sk = age::x25519::Identity::generate();
+            let pk = sk.to_public();
+
+            // Q: should we also include timestamp?
+            writeln!(out, "# public key: {}", pk).map_err(|e| ErrorKind::Init.context(e))?;
+            writeln!(out, "{}", sk.to_string().expose_secret())
+                .map_err(|e| ErrorKind::Init.context(e))?;
+
+            info!("Encryption identity file created at {}", path.display());
+            info!("Public key: {}", pk);
+        }
+
         let keystore = KeyStore::new(&config, db)?;
 
         // TODO: The following logic does not support plugin recipients, which can only be
