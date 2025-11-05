@@ -175,6 +175,14 @@ impl KeyStore {
         //       separate file on disk?
         //       https://github.com/zcash/wallet/issues/253
         let path = config.encryption_identity();
+        if !path.exists() {
+            return Err(ErrorKind::Init
+                .context(format!(
+                    "encryption identity file could not be located at {}",
+                    path.display()
+                ))
+                .into());
+        }
 
         let (encrypted_identities, identities) = {
             let mut identity_data = vec![];

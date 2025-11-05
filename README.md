@@ -26,7 +26,7 @@ contacting us in the `#wallet-dev` channel of the
 
 ## Usage
 
-See the [user guide](book/src/README.md) for information on how to set up a Zallet wallet.
+See the [user guide](https://zcash.github.io/wallet/) for information on how to set up a Zallet wallet.
 
 ## License
 
