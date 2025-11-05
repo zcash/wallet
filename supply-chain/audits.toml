@@ -145,6 +145,11 @@ who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.20.11 -> 0.21.3"
 
+[[audits.deadpool-sqlite]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.9.0 -> 0.12.1"
+
 [[audits.document-features]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
@@ -640,6 +645,12 @@ criteria = "safe-to-deploy"
 user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2024-08-12"
 end = "2026-03-04"
+
+[[trusted.schemerz-rusqlite]]
+criteria = "safe-to-deploy"
+user-id = 6289 # Jack Grigg (str4d)
+start = "2024-10-15"
+end = "2026-11-05"
 
 [[trusted.shardtree]]
 criteria = "safe-to-deploy"

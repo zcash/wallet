@@ -2,10 +2,16 @@ use documented::Documented;
 use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
-use zcash_client_backend::data_api::{InputSource, NoteFilter, WalletRead};
+use zcash_client_backend::data_api::{InputSource, NoteFilter, WalletRead, wallet::TargetHeight};
 use zcash_protocol::{ShieldedProtocol, value::Zatoshis};
 
-use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
+use crate::components::{
+    database::DbConnection,
+    json_rpc::{
+        server::LegacyCode,
+        utils::{parse_as_of_height, parse_minconf},
+    },
+};
 
 /// Response to a `z_getnotescount` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -33,13 +39,17 @@ pub(super) const PARAM_AS_OF_HEIGHT_DESC: &str = "Execute the query as if it wer
 pub(crate) fn call(
     wallet: &DbConnection,
     minconf: Option<u32>,
-    as_of_height: Option<i32>,
+    as_of_height: Option<i64>,
 ) -> Response {
-    // TODO: Switch to an approach that can respect `minconf` and `as_of_height`.
-    if minconf.is_some() || as_of_height.is_some() {
-        return Err(LegacyCode::InvalidParameter
-            .with_static("minconf and as_of_height parameters are not yet supported"));
-    }
+    let as_of_height = parse_as_of_height(as_of_height)?;
+    let minconf = parse_minconf(minconf, 1, as_of_height)?;
+
+    let chain_height = wallet
+        .chain_height()
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+        .ok_or(LegacyCode::InWarmup.with_static("Wallet sync required"))?;
+
+    let target_height = TargetHeight::from(as_of_height.unwrap_or(chain_height) + 1 - minconf);
 
     let selector = NoteFilter::ExceedsMinValue(Zatoshis::ZERO);
 
@@ -50,7 +60,7 @@ pub(crate) fn call(
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
     {
         let account_metadata = wallet
-            .get_account_metadata(account_id, &selector, &[])
+            .get_account_metadata(account_id, &selector, target_height, &[])
             .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
 
         if let Some(note_count) = account_metadata.note_count(ShieldedProtocol::Sapling) {

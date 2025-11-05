@@ -372,11 +372,21 @@ pub(crate) trait WalletRpc {
         as_of_height: Option<i64>,
     ) -> list_unspent::Response;
 
+    /// Returns the number of notes available in the wallet for each shielded value pool.
+    ///
+    /// # Arguments
+    /// - `minconf`: Only include notes in transactions confirmed at least this many times
+    ///   (default = 1). Must be at least 1 when `as_of_height` is provided.
+    /// - `as_of_height`: Execute the query as if it were run when the blockchain was at the height
+    ///   specified by this argument. The default is to use the entire blockchain that the node is
+    ///   aware of. -1 can be used as in other RPC calls to indicate the current height (including
+    ///   the mempool), but this does not support negative values in general. A “future” height will
+    ///   fall back to the current height.
     #[method(name = "z_getnotescount")]
     async fn get_notes_count(
         &self,
         minconf: Option<u32>,
-        as_of_height: Option<i32>,
+        as_of_height: Option<i64>,
     ) -> get_notes_count::Response;
 
     /// Send a transaction with multiple recipients.
@@ -700,7 +710,7 @@ impl WalletRpcServer for WalletRpcImpl {
     async fn get_notes_count(
         &self,
         minconf: Option<u32>,
-        as_of_height: Option<i32>,
+        as_of_height: Option<i64>,
     ) -> get_notes_count::Response {
         get_notes_count::call(self.wallet().await?.as_ref(), minconf, as_of_height)
     }

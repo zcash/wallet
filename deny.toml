@@ -40,6 +40,7 @@ exceptions = [
     { name = "embed-licensing", allow = ["MPL-2.0"] },
     { name = "embed-licensing-core", allow = ["MPL-2.0"] },
     { name = "embed-licensing-macros", allow = ["MPL-2.0"] },
+    { name = "foldhash", allow = ["Zlib"] },
     { name = "human_bytes", allow = ["BSD-2-Clause"] },
     { name = "icu_collections", allow = ["Unicode-3.0"] },
     { name = "icu_locid", allow = ["Unicode-3.0"] },

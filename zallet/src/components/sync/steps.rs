@@ -307,7 +307,7 @@ pub(super) async fn fetch_chain_state(
         .await?
         .into_parts();
 
-    let final_sapling_tree = if params.is_nu_active(NetworkUpgrade::Sapling, height.into()) {
+    let final_sapling_tree = if params.is_nu_active(NetworkUpgrade::Sapling, height.0.into()) {
         read_frontier_v0(
             sapling
                 .ok_or_else(|| IndexerError::InvalidData {
@@ -323,7 +323,7 @@ pub(super) async fn fetch_chain_state(
         Frontier::empty()
     };
 
-    let final_orchard_tree = if params.is_nu_active(NetworkUpgrade::Nu5, height.into()) {
+    let final_orchard_tree = if params.is_nu_active(NetworkUpgrade::Nu5, height.0.into()) {
         read_frontier_v0(
             orchard
                 .ok_or_else(|| IndexerError::InvalidData {
