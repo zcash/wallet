@@ -1,19 +1,19 @@
 use std::collections::HashMap;
-use std::ops::Range;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
+use std::time::SystemTime;
 
 use rand::rngs::OsRng;
 use secrecy::SecretVec;
 use shardtree::{ShardTree, error::ShardTreeError};
-use transparent::{address::TransparentAddress, bundle::OutPoint, keys::NonHardenedChildIndex};
-use zcash_client_backend::data_api::wallet::{ConfirmationsPolicy, TargetHeight};
-use zcash_client_backend::data_api::{AddressInfo, Balance, TargetValue, Zip32Derivation};
+use transparent::{address::TransparentAddress, bundle::OutPoint, keys::TransparentKeyScope};
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
-        AccountBirthday, AccountMeta, InputSource, NoteFilter, ORCHARD_SHARD_HEIGHT, ReceivedNotes,
-        SAPLING_SHARD_HEIGHT, WalletCommitmentTrees, WalletRead, WalletWrite,
+        AccountBirthday, AccountMeta, AddressInfo, Balance, InputSource, NoteFilter,
+        ORCHARD_SHARD_HEIGHT, ReceivedNotes, SAPLING_SHARD_HEIGHT, TargetValue,
+        WalletCommitmentTrees, WalletRead, WalletUtxo, WalletWrite, Zip32Derivation,
+        wallet::{ConfirmationsPolicy, TargetHeight},
     },
     keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
     wallet::{Note, ReceivedNote, TransparentAddressMetadata, WalletTransparentOutput},
@@ -311,9 +311,20 @@ impl WalletRead for DbConnection {
         account: Self::AccountId,
         include_change: bool,
         include_standalone: bool,
-    ) -> Result<HashMap<TransparentAddress, Option<TransparentAddressMetadata>>, Self::Error> {
+    ) -> Result<HashMap<TransparentAddress, TransparentAddressMetadata>, Self::Error> {
         self.with(|db_data| {
             db_data.get_transparent_receivers(account, include_change, include_standalone)
+        })
+    }
+
+    fn get_ephemeral_transparent_receivers(
+        &self,
+        account: Self::AccountId,
+        exposure_depth: u32,
+        exclude_used: bool,
+    ) -> Result<HashMap<TransparentAddress, TransparentAddressMetadata>, Self::Error> {
+        self.with(|db_data| {
+            db_data.get_ephemeral_transparent_receivers(account, exposure_depth, exclude_used)
         })
     }
 
@@ -322,7 +333,7 @@ impl WalletRead for DbConnection {
         account: Self::AccountId,
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
-    ) -> Result<HashMap<TransparentAddress, Balance>, Self::Error> {
+    ) -> Result<HashMap<TransparentAddress, (TransparentKeyScope, Balance)>, Self::Error> {
         self.with(|db_data| {
             db_data.get_transparent_balances(account, target_height, confirmations_policy)
         })
@@ -338,21 +349,6 @@ impl WalletRead for DbConnection {
 
     fn utxo_query_height(&self, account: Self::AccountId) -> Result<BlockHeight, Self::Error> {
         self.with(|db_data| db_data.utxo_query_height(account))
-    }
-
-    fn get_known_ephemeral_addresses(
-        &self,
-        account: Self::AccountId,
-        index_range: Option<Range<NonHardenedChildIndex>>,
-    ) -> Result<Vec<(TransparentAddress, TransparentAddressMetadata)>, Self::Error> {
-        self.with(|db_data| db_data.get_known_ephemeral_addresses(account, index_range))
-    }
-
-    fn find_account_for_ephemeral_address(
-        &self,
-        address: &TransparentAddress,
-    ) -> Result<Option<Self::AccountId>, Self::Error> {
-        self.with(|db_data| db_data.find_account_for_ephemeral_address(address))
     }
 
     fn transaction_data_requests(
@@ -375,8 +371,9 @@ impl InputSource for DbConnection {
         txid: &zcash_protocol::TxId,
         protocol: ShieldedProtocol,
         index: u32,
+        target_height: TargetHeight,
     ) -> Result<Option<ReceivedNote<Self::NoteRef, Note>>, Self::Error> {
-        self.with(|db_data| db_data.get_spendable_note(txid, protocol, index))
+        self.with(|db_data| db_data.get_spendable_note(txid, protocol, index, target_height))
     }
 
     fn select_spendable_notes(
@@ -413,8 +410,9 @@ impl InputSource for DbConnection {
     fn get_unspent_transparent_output(
         &self,
         outpoint: &OutPoint,
-    ) -> Result<Option<WalletTransparentOutput>, Self::Error> {
-        self.with(|db_data| db_data.get_unspent_transparent_output(outpoint))
+        target_height: TargetHeight,
+    ) -> Result<Option<WalletUtxo>, Self::Error> {
+        self.with(|db_data| db_data.get_unspent_transparent_output(outpoint, target_height))
     }
 
     fn get_spendable_transparent_outputs(
@@ -422,7 +420,7 @@ impl InputSource for DbConnection {
         address: &TransparentAddress,
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
-    ) -> Result<Vec<WalletTransparentOutput>, Self::Error> {
+    ) -> Result<Vec<WalletUtxo>, Self::Error> {
         self.with(|db_data| {
             db_data.get_spendable_transparent_outputs(address, target_height, confirmations_policy)
         })
@@ -432,9 +430,10 @@ impl InputSource for DbConnection {
         &self,
         account: Self::AccountId,
         selector: &NoteFilter,
+        target_height: TargetHeight,
         exclude: &[Self::NoteRef],
     ) -> Result<AccountMeta, Self::Error> {
-        self.with(|db_data| db_data.get_account_metadata(account, selector, exclude))
+        self.with(|db_data| db_data.get_account_metadata(account, selector, target_height, exclude))
     }
 }
 
@@ -478,6 +477,10 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| {
             db_data.import_account_ufvk(account_name, unified_key, birthday, purpose, key_source)
         })
+    }
+
+    fn delete_account(&mut self, account: Self::AccountId) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.delete_account(account))
     }
 
     #[cfg(feature = "zcashd-import")]
@@ -534,6 +537,14 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| db_data.store_decrypted_tx(received_tx))
     }
 
+    fn set_tx_trust(
+        &mut self,
+        txid: zcash_protocol::TxId,
+        trusted: bool,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.set_tx_trust(txid, trusted))
+    }
+
     fn store_transactions_to_be_sent(
         &mut self,
         transactions: &[zcash_client_backend::data_api::SentTransaction<'_, Self::AccountId>],
@@ -559,6 +570,14 @@ impl WalletWrite for DbConnection {
         status: zcash_client_backend::data_api::TransactionStatus,
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.set_transaction_status(txid, status))
+    }
+
+    fn schedule_next_check(
+        &mut self,
+        address: &TransparentAddress,
+        offset_seconds: u32,
+    ) -> Result<Option<SystemTime>, Self::Error> {
+        self.with_mut(|mut db_data| db_data.schedule_next_check(address, offset_seconds))
     }
 
     fn notify_address_checked(

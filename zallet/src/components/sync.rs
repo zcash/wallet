@@ -603,7 +603,7 @@ async fn data_requests(
                     // all observations are valid.
                     let as_of_height = match req.block_range_end() {
                         Some(h) => h - 1,
-                        None => chain.chain_height().await?.into(),
+                        None => chain.chain_height().await?.0.into(),
                     };
 
                     let address = req.address().encode(params);
