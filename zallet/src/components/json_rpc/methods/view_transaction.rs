@@ -30,7 +30,7 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{JsonZec, parse_txid, value_from_zatoshis},
+        utils::{JsonZec, value_from_zatoshis},
     },
 };
 
@@ -275,7 +275,7 @@ pub(crate) async fn call(
     chain: FetchServiceSubscriber,
     txid_str: &str,
 ) -> Response {
-    let txid = parse_txid(txid_str)?;
+    let txid = TxId::from_reverse_hex(txid_str)?;
 
     // Fetch this early so we can detect if the wallet is not ready yet.
     // TODO: Replace with Zaino `ChainIndex` so we can operate against a chain snapshot.

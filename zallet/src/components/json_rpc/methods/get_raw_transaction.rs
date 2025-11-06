@@ -5,6 +5,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use transparent::bundle::{TxIn, TxOut};
 use zaino_state::{FetchServiceError, FetchServiceSubscriber, LightWalletIndexer, ZcashIndexer};
+use zcash_encoding::ReverseHex;
 use zcash_protocol::{
     TxId,
     consensus::{self, BlockHeight},
@@ -15,7 +16,7 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{JsonZec, JsonZecBalance, parse_txid, value_from_zat_balance, value_from_zatoshis},
+        utils::{JsonZec, JsonZecBalance, value_from_zat_balance, value_from_zatoshis},
     },
 };
 
@@ -475,7 +476,7 @@ pub(crate) async fn call(
     verbose: Option<u64>,
     blockhash: Option<String>,
 ) -> Response {
-    let _txid = parse_txid(txid_str)?;
+    let _txid = TxId::from_reverse_hex(txid_str)?;
     let verbose = verbose.is_some_and(|v| v != 0);
 
     // TODO: We can't support this via the current Zaino API; wait for `ChainIndex`.
@@ -572,7 +573,7 @@ pub(crate) async fn call(
     let (vjoinsplit, join_split_pub_key, join_split_sig) = match tx.sprout_bundle() {
         Some(bundle) if !bundle.joinsplits.is_empty() => (
             bundle.joinsplits.iter().map(JoinSplit::encode).collect(),
-            Some(TxId::from_bytes(bundle.joinsplit_pubkey).to_string()),
+            Some(ReverseHex::decode(bundle.joinsplit_pubkey)),
             Some(hex::encode(bundle.joinsplit_sig)),
         ),
         _ => (vec![], None, None),
@@ -614,8 +615,7 @@ pub(crate) async fn call(
         in_active_chain: None,
         hex: tx_hex,
         txid: txid_str.to_ascii_lowercase(),
-        authdigest: TxId::from_bytes(tx.auth_commitment().as_bytes().try_into().unwrap())
-            .to_string(),
+        authdigest: ReverseHex::decode(&tx.auth_commitment().as_bytes().try_into().unwrap()),
         size,
         overwintered,
         version: tx.version().header() & 0x7FFFFFFF,
@@ -709,10 +709,10 @@ impl JoinSplit {
 impl SaplingSpend {
     fn encode(spend: &SpendDescription<sapling::bundle::Authorized>) -> Self {
         Self {
-            cv: TxId::from_bytes(spend.cv().to_bytes()).to_string(),
-            anchor: TxId::from_bytes(spend.anchor().to_bytes()).to_string(),
-            nullifier: TxId::from_bytes(spend.nullifier().0).to_string(),
-            rk: TxId::from_bytes(<[u8; 32]>::from(*spend.rk())).to_string(),
+            cv: ReverseHex::decode(&spend.cv().to_bytes()),
+            anchor: ReverseHex::decode(&spend.anchor().to_bytes()),
+            nullifier: ReverseHex::decode(&spend.nullifier().0),
+            rk: ReverseHex::decode(&<[u8; 32]>::from(*spend.rk())),
             proof: hex::encode(spend.zkproof()),
             spend_auth_sig: hex::encode(<[u8; 64]>::from(*spend.spend_auth_sig())),
         }
@@ -722,9 +722,9 @@ impl SaplingSpend {
 impl SaplingOutput {
     fn encode(output: &OutputDescription<sapling::bundle::GrothProofBytes>) -> Self {
         Self {
-            cv: TxId::from_bytes(output.cv().to_bytes()).to_string(),
-            cmu: TxId::from_bytes(output.cmu().to_bytes()).to_string(),
-            ephemeral_key: TxId::from_bytes(output.ephemeral_key().0).to_string(),
+            cv: ReverseHex::decode(&output.cv().to_bytes()),
+            cmu: ReverseHex::decode(&output.cmu().to_bytes()),
+            ephemeral_key: ReverseHex::decode(&output.ephemeral_key().0),
             enc_ciphertext: hex::encode(output.enc_ciphertext()),
             out_ciphertext: hex::encode(output.out_ciphertext()),
             proof: hex::encode(output.zkproof()),

@@ -38,9 +38,7 @@ use super::{
     chain_view::ChainView,
     database::{Database, DbConnection},
 };
-use crate::{
-    components::json_rpc::utils::parse_txid, config::ZalletConfig, error::Error, network::Network,
-};
+use crate::{config::ZalletConfig, error::Error, network::Network};
 
 mod cache;
 
@@ -649,7 +647,7 @@ async fn data_requests(
                     };
 
                     for txid_str in chain.get_address_tx_ids(request).await? {
-                        let txid = parse_txid(&txid_str)
+                        let txid = TxId::from_reverse_hex(&txid_str)
                             .expect("TODO: Zaino's API should have caught this error for us");
 
                         let tx = match chain.get_raw_transaction(txid_str, Some(1)).await? {
