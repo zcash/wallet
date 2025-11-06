@@ -197,14 +197,25 @@ pub(crate) struct MigrateZcashdWalletCmd {
     pub(crate) this_is_alpha_code_and_you_will_need_to_redo_the_migration_later: bool,
 }
 
+#[derive(clap::ValueEnum, Debug, Clone, Copy, Default)]
+pub enum IdentityFileMode {
+    #[default]
+    /// Uses an existing identity file from the datadir.
+    UseExisting,
+    /// Generates a new unencrypted identity file.
+    CreateBasic,
+    /// Generates a new passphrase-protected identity file.
+    CreateWithPassphrase,
+}
+
 /// `init-wallet-encryption` subcommand
 #[cfg(zallet_build = "wallet")]
 #[derive(Debug, Parser)]
 #[cfg_attr(outside_buildscript, derive(Command))]
 pub(crate) struct InitWalletEncryptionCmd {
-    /// Creates the encryption identity file if it does not already exist.
-    #[arg(short)]
-    pub(crate) create: bool,
+    /// Determines how to initialize the wallet encryption identity file.
+    #[arg(short, long, default_value = "use-existing")]
+    pub(crate) mode: IdentityFileMode,
 }
 
 /// `generate-mnemonic` subcommand
