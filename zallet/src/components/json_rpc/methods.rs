@@ -6,7 +6,7 @@ use jsonrpsee::{
 use zaino_state::FetchServiceSubscriber;
 
 use crate::components::{
-    chain::ChainView,
+    chain::Chain,
     database::{Database, DbHandle},
 };
 
@@ -463,7 +463,7 @@ pub(crate) struct RpcImpl {
     wallet: Database,
     #[cfg(zallet_build = "wallet")]
     keystore: KeyStore,
-    chain_view: ChainView,
+    chain: Chain,
 }
 
 impl RpcImpl {
@@ -471,13 +471,13 @@ impl RpcImpl {
     pub(crate) fn new(
         wallet: Database,
         #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-        chain_view: ChainView,
+        chain: Chain,
     ) -> Self {
         Self {
             wallet,
             #[cfg(zallet_build = "wallet")]
             keystore,
-            chain_view,
+            chain,
         }
     }
 
@@ -489,7 +489,7 @@ impl RpcImpl {
     }
 
     async fn chain(&self) -> RpcResult<FetchServiceSubscriber> {
-        self.chain_view
+        self.chain
             .subscribe()
             .await
             .map(|s| s.inner())
@@ -507,7 +507,7 @@ pub(crate) struct WalletRpcImpl {
 #[cfg(zallet_build = "wallet")]
 impl WalletRpcImpl {
     /// Creates a new instance of the wallet-specific RPC handler.
-    pub(crate) fn new(wallet: Database, keystore: KeyStore, chain_view: ChainView) -> Self {
+    pub(crate) fn new(wallet: Database, keystore: KeyStore, chain_view: Chain) -> Self {
         Self {
             general: RpcImpl::new(wallet, keystore.clone(), chain_view),
             keystore,

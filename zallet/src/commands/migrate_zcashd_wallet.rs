@@ -31,7 +31,7 @@ use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
     cli::MigrateZcashdWalletCmd,
-    components::{chain::ChainView, database::Database, keystore::KeyStore},
+    components::{chain::Chain, database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
     fl,
     prelude::*,
@@ -60,7 +60,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
         }
 
         // Start monitoring the chain.
-        let (chain_view, _chain_indexer_task_handle) = ChainView::new(&config).await?;
+        let (chain, _chain_indexer_task_handle) = Chain::new(&config).await?;
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db.clone())?;
 
@@ -69,7 +69,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
         Self::migrate_zcashd_wallet(
             db,
             keystore,
-            chain_view,
+            chain,
             wallet,
             self.buffer_wallet_transactions,
             self.allow_multiple_wallet_imports,
@@ -211,7 +211,7 @@ impl MigrateZcashdWalletCmd {
     async fn migrate_zcashd_wallet(
         db: Database,
         keystore: KeyStore,
-        chain_view: ChainView,
+        chain: Chain,
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
@@ -265,7 +265,7 @@ impl MigrateZcashdWalletCmd {
 
         // Obtain information about the current state of the chain, so that we can set the recovery
         // height properly.
-        let chain_subscriber = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let chain_tip = Self::chain_tip(&chain_subscriber).await?;
         let sapling_activation = network_params
             .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)

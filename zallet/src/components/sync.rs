@@ -35,7 +35,7 @@ use zebra_rpc::methods::{AddressStrings, GetAddressTxIdsRequest};
 
 use super::{
     TaskHandle,
-    chain::ChainView,
+    chain::Chain,
     database::{Database, DbConnection},
 };
 use crate::{
@@ -57,14 +57,14 @@ impl WalletSync {
     pub(crate) async fn spawn(
         config: &ZalletConfig,
         db: Database,
-        chain_view: ChainView,
+        chain: Chain,
     ) -> Result<(TaskHandle, TaskHandle, TaskHandle, TaskHandle), Error> {
         let params = config.consensus.network();
 
         // Ensure the wallet is in a state that the sync tasks can work with.
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
-        let starting_tip = initialize(chain, &params, db_data.as_mut()).await?;
+        let starting_tip = initialize(chain_subscriber, &params, db_data.as_mut()).await?;
         // TODO: Zaino should provide us an API that allows us to be notified when the chain tip
         // changes; here, we produce our own signal via the "mempool stream closing" side effect
         // that occurs in the light client API when the chain tip changes.
@@ -73,10 +73,10 @@ impl WalletSync {
         let req_tip_change_signal_receiver = tip_change_signal_source.clone();
 
         // Spawn the ongoing sync tasks.
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let steady_state_task = crate::spawn!("Steady state sync", async move {
             steady_state(
-                &chain,
+                &chain_subscriber,
                 &params,
                 db_data.as_mut(),
                 starting_tip,
@@ -86,18 +86,18 @@ impl WalletSync {
             Ok(())
         });
 
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let recover_history_task = crate::spawn!("Recover history", async move {
-            recover_history(chain, &params, db_data.as_mut(), 1000).await?;
+            recover_history(chain_subscriber, &params, db_data.as_mut(), 1000).await?;
             Ok(())
         });
 
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let poll_transparent_task = crate::spawn!("Poll transparent", async move {
             poll_transparent(
-                chain,
+                chain_subscriber,
                 &params,
                 db_data.as_mut(),
                 poll_tip_change_signal_receiver,
@@ -106,11 +106,11 @@ impl WalletSync {
             Ok(())
         });
 
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let data_requests_task = crate::spawn!("Data requests", async move {
             data_requests(
-                chain,
+                chain_subscriber,
                 &params,
                 db_data.as_mut(),
                 req_tip_change_signal_receiver,
