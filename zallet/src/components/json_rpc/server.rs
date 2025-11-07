@@ -7,7 +7,7 @@ use jsonrpsee::{
 use tokio::task::JoinHandle;
 
 use crate::{
-    components::{chain_view::ChainView, database::Database},
+    components::{chain::ChainView, database::Database},
     config::RpcSection,
     error::{Error, ErrorKind},
 };

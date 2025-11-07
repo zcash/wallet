@@ -35,7 +35,7 @@ use zebra_rpc::methods::{AddressStrings, GetAddressTxIdsRequest};
 
 use super::{
     TaskHandle,
-    chain_view::ChainView,
+    chain::ChainView,
     database::{Database, DbConnection},
 };
 use crate::{

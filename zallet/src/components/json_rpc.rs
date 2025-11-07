@@ -14,7 +14,7 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-use super::{TaskHandle, chain_view::ChainView, database::Database};
+use super::{TaskHandle, chain::ChainView, database::Database};
 
 #[cfg(zallet_build = "wallet")]
 use super::keystore::KeyStore;

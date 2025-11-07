@@ -31,7 +31,7 @@ use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
     cli::MigrateZcashdWalletCmd,
-    components::{chain_view::ChainView, database::Database, keystore::KeyStore},
+    components::{chain::ChainView, database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
     fl,
     prelude::*,

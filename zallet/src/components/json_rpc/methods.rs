@@ -6,7 +6,7 @@ use jsonrpsee::{
 use zaino_state::FetchServiceSubscriber;
 
 use crate::components::{
-    chain_view::ChainView,
+    chain::ChainView,
     database::{Database, DbHandle},
 };
 
