@@ -476,7 +476,7 @@ pub(crate) async fn call(
     verbose: Option<u64>,
     blockhash: Option<String>,
 ) -> Response {
-    let _txid = TxId::from_reverse_hex(txid_str)?;
+    let _txid = TxId::from_bytes(ReverseHex::decode(txid_str).expect("valid txid"));
     let verbose = verbose.is_some_and(|v| v != 0);
 
     // TODO: We can't support this via the current Zaino API; wait for `ChainIndex`.
@@ -615,7 +615,7 @@ pub(crate) async fn call(
         in_active_chain: None,
         hex: tx_hex,
         txid: txid_str.to_ascii_lowercase(),
-        authdigest: ReverseHex::decode(&tx.auth_commitment().as_bytes().try_into().unwrap()),
+        authdigest: ReverseHex::encode(&tx.auth_commitment().as_bytes().try_into().unwrap()),
         size,
         overwintered,
         version: tx.version().header() & 0x7FFFFFFF,
@@ -709,10 +709,10 @@ impl JoinSplit {
 impl SaplingSpend {
     fn encode(spend: &SpendDescription<sapling::bundle::Authorized>) -> Self {
         Self {
-            cv: ReverseHex::decode(&spend.cv().to_bytes()),
-            anchor: ReverseHex::decode(&spend.anchor().to_bytes()),
-            nullifier: ReverseHex::decode(&spend.nullifier().0),
-            rk: ReverseHex::decode(&<[u8; 32]>::from(*spend.rk())),
+            cv: ReverseHex::encode(&spend.cv().to_bytes()),
+            anchor: ReverseHex::encode(&spend.anchor().to_bytes()),
+            nullifier: ReverseHex::encode(&spend.nullifier().0),
+            rk: ReverseHex::encode(&<[u8; 32]>::from(*spend.rk())),
             proof: hex::encode(spend.zkproof()),
             spend_auth_sig: hex::encode(<[u8; 64]>::from(*spend.spend_auth_sig())),
         }
@@ -722,9 +722,9 @@ impl SaplingSpend {
 impl SaplingOutput {
     fn encode(output: &OutputDescription<sapling::bundle::GrothProofBytes>) -> Self {
         Self {
-            cv: ReverseHex::decode(&output.cv().to_bytes()),
-            cmu: ReverseHex::decode(&output.cmu().to_bytes()),
-            ephemeral_key: ReverseHex::decode(&output.ephemeral_key().0),
+            cv: ReverseHex::encode(&output.cv().to_bytes()),
+            cmu: ReverseHex::encode(&output.cmu().to_bytes()),
+            ephemeral_key: ReverseHex::encode(&output.ephemeral_key().0),
             enc_ciphertext: hex::encode(output.enc_ciphertext()),
             out_ciphertext: hex::encode(output.out_ciphertext()),
             proof: hex::encode(output.zkproof()),

@@ -9,7 +9,6 @@ use schemars::{JsonSchema, json_schema};
 use serde::Serialize;
 use zcash_client_sqlite::AccountUuid;
 use zcash_protocol::{
-    TxId,
     consensus::BlockHeight,
     value::{COIN, ZatBalance, Zatoshis},
 };
