@@ -1,20 +1,14 @@
 use std::collections::HashMap;
 
 use documented::Documented;
-use jsonrpsee::{
-    core::RpcResult,
-    types::{ErrorCode as RpcErrorCode, ErrorObjectOwned},
-};
+use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use zaino_state::FetchServiceSubscriber;
-use zcash_client_backend::{
-    data_api::{Account as _, AccountBirthday, WalletRead, WalletWrite},
-    proto::service::TreeState,
-};
-use zcash_protocol::consensus::{BlockHeight, NetworkType, Parameters};
+use zcash_client_backend::data_api::{Account as _, AccountBirthday, WalletRead, WalletWrite};
+use zcash_protocol::consensus::BlockHeight;
 
 use crate::components::{
+    chain::Chain,
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
@@ -59,12 +53,14 @@ pub(super) const PARAM_ACCOUNTS_REQUIRED: bool = true;
 pub(crate) async fn call(
     wallet: &mut DbConnection,
     keystore: &KeyStore,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     accounts: Vec<AccountParameter<'_>>,
 ) -> Response {
     ensure_wallet_is_unlocked(keystore).await?;
     // TODO: Ensure wallet is backed up.
     //       https://github.com/zcash/wallet/issues/201
+
+    let chain_view = chain.snapshot();
 
     let recover_until = wallet
         .chain_height()
@@ -85,45 +81,21 @@ pub(crate) async fn call(
         let birthday_height = BlockHeight::from_u32(account.birthday_height);
         let treestate_height = birthday_height.saturating_sub(1);
 
-        let treestate = {
-            let treestate = chain
-                .fetcher
-                .get_treestate(treestate_height.to_string())
-                .await
-                .map_err(|e| {
-                    LegacyCode::InvalidParameter.with_message(format!(
-                        "Failed to get treestate at height {treestate_height}: {e}"
-                    ))
-                })?;
+        let chain_state = chain_view
+            .tree_state_as_of(treestate_height)
+            .await
+            .map_err(|e| {
+                LegacyCode::InvalidParameter.with_message(format!(
+                    "Failed to get treestate at height {treestate_height}: {e}"
+                ))
+            })?
+            .ok_or_else(|| {
+                LegacyCode::InvalidParameter.with_message(format!(
+                    "Account birthday height {birthday_height} does not exist in the chain"
+                ))
+            })?;
 
-            TreeState {
-                network: match wallet.params().network_type() {
-                    NetworkType::Main => "main".into(),
-                    NetworkType::Test => "test".into(),
-                    NetworkType::Regtest => "regtest".into(),
-                },
-                height: u64::try_from(treestate.height).map_err(|_| RpcErrorCode::InternalError)?,
-                hash: treestate.hash,
-                time: treestate.time,
-                sapling_tree: treestate
-                    .sapling
-                    .commitments()
-                    .final_state()
-                    .as_ref()
-                    .map(hex::encode)
-                    .unwrap_or_default(),
-                orchard_tree: treestate
-                    .orchard
-                    .commitments()
-                    .final_state()
-                    .as_ref()
-                    .map(hex::encode)
-                    .unwrap_or_default(),
-            }
-        };
-
-        let birthday = AccountBirthday::from_treestate(treestate, Some(recover_until))
-            .map_err(|_| RpcErrorCode::InternalError)?;
+        let birthday = AccountBirthday::from_parts(chain_state, Some(recover_until));
 
         account_args.push((account.name, seed_fp, account_index, birthday));
     }

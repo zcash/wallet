@@ -1,15 +1,11 @@
 use documented::Documented;
-use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
+use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
-use zaino_state::FetchServiceSubscriber;
-use zcash_client_backend::{
-    data_api::{AccountBirthday, WalletRead, WalletWrite},
-    proto::service::TreeState,
-};
-use zcash_protocol::consensus::{NetworkType, Parameters};
+use zcash_client_backend::data_api::{AccountBirthday, WalletRead, WalletWrite};
 
 use crate::components::{
+    chain::Chain,
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
@@ -40,7 +36,7 @@ pub(super) const PARAM_SEEDFP_DESC: &str =
 pub(crate) async fn call(
     wallet: &mut DbConnection,
     keystore: &KeyStore,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     account_name: &str,
     seedfp: Option<&str>,
 ) -> Response {
@@ -50,46 +46,27 @@ pub(crate) async fn call(
 
     let seedfp = seedfp.map(parse_seedfp_parameter).transpose()?;
 
-    let birthday_height = wallet
+    let chain_view = chain.snapshot();
+
+    let chain_height = wallet
         .chain_height()
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
-        .ok_or(LegacyCode::InWarmup.with_static("Wallet sync required"))?;
+        .ok_or(LegacyCode::InWarmup.with_static("Wallet sync required"))?
+        // Tolerate race conditions between this RPC and the sync engine.
+        .min(chain_view.tip().height);
+    let treestate_height = chain_height.saturating_sub(1);
 
-    let treestate = {
-        let treestate = chain
-            .fetcher
-            .get_treestate(birthday_height.saturating_sub(1).to_string())
-            .await
-            .map_err(|_| RpcErrorCode::InternalError)?;
+    let chain_state = chain_view
+        .tree_state_as_of(treestate_height)
+        .await
+        .map_err(|e| {
+            LegacyCode::InvalidParameter.with_message(format!(
+                "Failed to get treestate at height {treestate_height}: {e}"
+            ))
+        })?
+        .expect("always in range");
 
-        TreeState {
-            network: match wallet.params().network_type() {
-                NetworkType::Main => "main".into(),
-                NetworkType::Test => "test".into(),
-                NetworkType::Regtest => "regtest".into(),
-            },
-            height: u64::try_from(treestate.height).map_err(|_| RpcErrorCode::InternalError)?,
-            hash: treestate.hash,
-            time: treestate.time,
-            sapling_tree: treestate
-                .sapling
-                .commitments()
-                .final_state()
-                .as_ref()
-                .map(hex::encode)
-                .unwrap_or_default(),
-            orchard_tree: treestate
-                .orchard
-                .commitments()
-                .final_state()
-                .as_ref()
-                .map(hex::encode)
-                .unwrap_or_default(),
-        }
-    };
-
-    let birthday = AccountBirthday::from_treestate(treestate, None)
-        .map_err(|_| RpcErrorCode::InternalError)?;
+    let birthday = AccountBirthday::from_parts(chain_state, None);
 
     let seed_fps = keystore
         .list_seed_fingerprints()
