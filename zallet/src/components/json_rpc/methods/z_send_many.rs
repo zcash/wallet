@@ -8,7 +8,6 @@ use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use zaino_state::FetchServiceSubscriber;
 use zcash_address::{ZcashAddress, unified};
 use zcash_client_backend::data_api::wallet::SpendingKeys;
 use zcash_client_backend::proposal::Proposal;
@@ -34,6 +33,7 @@ use zcash_protocol::{
 
 use crate::{
     components::{
+        chain::Chain,
         database::DbHandle,
         json_rpc::{
             asyncop::{ContextInfo, OperationId},
@@ -86,7 +86,7 @@ pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
 pub(crate) async fn call(
     mut wallet: DbHandle,
     keystore: KeyStore,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     fromaddress: String,
     amounts: Vec<AmountParameter>,
     minconf: Option<u32>,
@@ -416,7 +416,7 @@ pub(crate) async fn call(
 ///    could also try to use them.
 async fn run(
     mut wallet: DbHandle,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     proposal: Proposal<StandardFeeRule, ReceivedNoteId>,
     spending_keys: SpendingKeys,
 ) -> RpcResult<SendResult> {

@@ -4,32 +4,7 @@ use incrementalmerkletree::frontier::CommitmentTree;
 use orchard::tree::MerkleHashOrchard;
 use sapling::Node;
 use std::io;
-use zcash_client_backend::data_api::chain::ChainState;
-use zcash_primitives::{block::BlockHash, merkle_tree::read_commitment_tree};
-
-pub(crate) fn to_chainstate(
-    ts: zaino_proto::proto::service::TreeState,
-) -> Result<ChainState, io::Error> {
-    let mut hash_bytes = hex::decode(&ts.hash).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Block hash is not valid hex: {:?}", e),
-        )
-    })?;
-    // Zcashd hex strings for block hashes are byte-reversed.
-    hash_bytes.reverse();
-
-    Ok(ChainState::new(
-        ts.height
-            .try_into()
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid block height"))?,
-        BlockHash::try_from_slice(&hash_bytes).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "Invalid block hash length.")
-        })?,
-        sapling_tree(&ts.sapling_tree)?.to_frontier(),
-        orchard_tree(&ts.orchard_tree)?.to_frontier(),
-    ))
-}
+use zcash_primitives::merkle_tree::read_commitment_tree;
 
 /// Deserializes and returns the Sapling note commitment tree field of the tree state.
 pub(crate) fn sapling_tree(
