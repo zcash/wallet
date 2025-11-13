@@ -1,43 +1,15 @@
 use std::fmt;
 
 use shardtree::error::ShardTreeError;
-use zaino_state::FetchServiceError;
 use zcash_client_backend::scanning::ScanError;
 use zcash_client_sqlite::error::SqliteClientError;
 
-#[derive(Debug)]
-pub(crate) enum IndexerError {
-    Fetch(FetchServiceError),
-    InvalidData { message: String },
-}
-
-impl fmt::Display for IndexerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            IndexerError::Fetch(e) => write!(f, "{e}"),
-            IndexerError::InvalidData { message } => write!(f, "{message}"),
-        }
-    }
-}
-
-impl std::error::Error for IndexerError {
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        match self {
-            IndexerError::Fetch(fetch_service_error) => Some(fetch_service_error),
-            IndexerError::InvalidData { .. } => None,
-        }
-    }
-}
-
-impl From<FetchServiceError> for IndexerError {
-    fn from(value: FetchServiceError) -> Self {
-        IndexerError::Fetch(value)
-    }
-}
+use crate::error::Error;
 
 #[derive(Debug)]
 pub(crate) enum SyncError {
-    Indexer(Box<IndexerError>),
+    BatchDecryptorUnavailable,
+    Chain(Error),
     Scan(ScanError),
     Tree(Box<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>>),
     Other(Box<SqliteClientError>),
@@ -46,7 +18,8 @@ pub(crate) enum SyncError {
 impl fmt::Display for SyncError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SyncError::Indexer(e) => write!(f, "{e:?}"),
+            SyncError::BatchDecryptorUnavailable => write!(f, "The batch decryptor has shut down"),
+            SyncError::Chain(e) => write!(f, "{e:?}"),
             SyncError::Scan(e) => write!(f, "{e}"),
             SyncError::Tree(e) => write!(f, "{e}"),
             SyncError::Other(e) => write!(f, "{e}"),
@@ -55,12 +28,6 @@ impl fmt::Display for SyncError {
 }
 
 impl std::error::Error for SyncError {}
-
-impl From<IndexerError> for SyncError {
-    fn from(value: IndexerError) -> Self {
-        SyncError::Indexer(Box::new(value))
-    }
-}
 
 impl From<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>> for SyncError {
     fn from(e: ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>) -> Self {
@@ -71,12 +38,6 @@ impl From<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>> f
 impl From<SqliteClientError> for SyncError {
     fn from(e: SqliteClientError) -> Self {
         Self::Other(Box::new(e))
-    }
-}
-
-impl From<FetchServiceError> for SyncError {
-    fn from(e: FetchServiceError) -> Self {
-        Self::Indexer(Box::new(IndexerError::from(e)))
     }
 }
 

@@ -64,6 +64,7 @@ serde = { version = "1", features = ["serde_derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "raw_value"] }
 toml = "0.8"
 zcash_address = "0.10"
+zcash_encoding = "0.3"
 
 # Randomness
 rand = "0.8"
@@ -109,7 +110,6 @@ zcash_protocol = "0.7"
 orchard = "0.12"
 sapling = { package = "sapling-crypto", version = "0.6" }
 transparent = { package = "zcash_transparent", version = "0.6" }
-zcash_encoding = "0.3.0"
 zcash_keys = { version = "0.12", features = ["transparent-inputs", "sapling", "orchard", "transparent-key-encoding"] }
 zcash_primitives = "0.26"
 zcash_proofs = "0.26"
@@ -136,7 +136,7 @@ schemerz-rusqlite = "0.370.0"
 shardtree = "0.6"
 time = "0.3"
 uuid = "1"
-zcash_client_backend = "0.21"
+zcash_client_backend = { version = "0.21", features = ["sync-decryptor"] }
 zcash_client_sqlite = "0.19"
 zcash_note_encryption = "0.4"
 zip32 = "0.2"
@@ -152,28 +152,28 @@ anyhow = "1.0"
 tonic = "0.14"
 
 [patch.crates-io]
-equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd" }
+equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "b51a4c83b9cb1856609407aee4f8561cdaf310a5" }
 
 age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633bb70c91eef91142fd4" }
 
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "f84f80612813ba00a0a8a9a5f060bd217fa981cc" }
 zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "9c72d1805c269f88ea5caa4eb33c6d38013b9776" }
 
-zaino-common = { git = "https://github.com/str4d/zaino.git", rev = "1803c0007eef05b4b99907044886eb3c1e3d1d2e" }
-zaino-fetch = { git = "https://github.com/str4d/zaino.git", rev = "1803c0007eef05b4b99907044886eb3c1e3d1d2e" }
-zaino-proto = { git = "https://github.com/str4d/zaino.git", rev = "1803c0007eef05b4b99907044886eb3c1e3d1d2e" }
-zaino-state = { git = "https://github.com/str4d/zaino.git", rev = "1803c0007eef05b4b99907044886eb3c1e3d1d2e" }
+zaino-common = { git = "https://github.com/str4d/zaino.git", rev = "d873c795a700dddd3058a5fe4b1ce1dc1dfb3901" }
+zaino-fetch = { git = "https://github.com/str4d/zaino.git", rev = "d873c795a700dddd3058a5fe4b1ce1dc1dfb3901" }
+zaino-proto = { git = "https://github.com/str4d/zaino.git", rev = "d873c795a700dddd3058a5fe4b1ce1dc1dfb3901" }
+zaino-state = { git = "https://github.com/str4d/zaino.git", rev = "d873c795a700dddd3058a5fe4b1ce1dc1dfb3901" }
 
 zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "7200eaa2b9255c39ac422e59344c5225f317ccb9" }
 zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "7200eaa2b9255c39ac422e59344c5225f317ccb9" }

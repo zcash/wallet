@@ -11,8 +11,7 @@ use bip0039::{English, Mnemonic};
 use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
-use zaino_fetch::jsonrpsee::response::block_header::GetBlockHeader;
-use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
+use zaino_state::FetchServiceError;
 use zcash_client_backend::{
     data_api::{
         Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
@@ -36,7 +35,6 @@ use crate::{
     error::{Error, ErrorKind},
     fl,
     prelude::*,
-    rosetta::to_chainstate,
 };
 
 use super::{AsyncRunnable, migrate_zcash_conf};
@@ -144,50 +142,6 @@ impl MigrateZcashdWalletCmd {
         }
     }
 
-    async fn chain_tip<C: LightWalletIndexer>(
-        chain: &C,
-    ) -> Result<Option<BlockHeight>, MigrateError>
-    where
-        MigrateError: From<C::Error>,
-    {
-        let tip_height = chain.get_latest_block().await?.height;
-        let chain_tip = if tip_height == 0 {
-            None
-        } else {
-            // TODO: this error should go away when we have a better chain data API
-            Some(BlockHeight::try_from(tip_height).map_err(|e| {
-                ErrorKind::Generic.context(fl!(
-                    "err-migrate-wallet-invalid-chain-data",
-                    err = e.to_string()
-                ))
-            })?)
-        };
-
-        Ok(chain_tip)
-    }
-
-    async fn get_birthday<C: LightWalletIndexer>(
-        chain: &C,
-        birthday_height: BlockHeight,
-        recover_until: Option<BlockHeight>,
-    ) -> Result<AccountBirthday, MigrateError>
-    where
-        MigrateError: From<C::Error>,
-    {
-        // Fetch the tree state corresponding to the last block prior to the wallet's
-        // birthday height.
-        let chain_state = to_chainstate(
-            chain
-                .get_tree_state(zaino_proto::proto::service::BlockId {
-                    height: u64::from(birthday_height.saturating_sub(1)),
-                    hash: vec![],
-                })
-                .await?,
-        )?;
-
-        Ok(AccountBirthday::from_parts(chain_state, recover_until))
-    }
-
     fn check_network(
         zewif_network: zewif::Network,
         network_type: NetworkType,
@@ -268,8 +222,8 @@ impl MigrateZcashdWalletCmd {
 
         // Obtain information about the current state of the chain, so that we can set the recovery
         // height properly.
-        let chain_subscriber = chain.subscribe().await?.inner();
-        let chain_tip = Self::chain_tip(&chain_subscriber).await?;
+        let chain_view = chain.snapshot();
+        let chain_tip = Some(chain_view.tip().await?.height);
         let sapling_activation = network_params
             .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)
             .expect("Sapling activation height is defined.");
@@ -286,12 +240,9 @@ impl MigrateZcashdWalletCmd {
             // Skip transactions that were unmined when the zcashd wallet was last written.
             if block_hash.0 != [0; 32] {
                 if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
-                    match chain_subscriber
-                        .get_block_header(block_hash.to_string(), true)
-                        .await?
-                    {
-                        GetBlockHeader::Verbose(header) => {
-                            entry.insert(BlockHeight::from_u32(header.height));
+                    match chain_view.find_fork_point(&block_hash).await {
+                        Ok(Some(block)) if block.hash == block_hash => {
+                            entry.insert(block.height);
                         }
                         // Ignore any blocks that are not in the main chain.
                         _ => (),
@@ -320,21 +271,26 @@ impl MigrateZcashdWalletCmd {
         // range. We don't have a good source of individual per-account birthday information at
         // this point; once we've imported all of the transaction data into the wallet then we'll
         // be able to choose per-account birthdays without difficulty.
-        let wallet_birthday = Self::get_birthday(
-            &chain_subscriber,
-            // Fall back to the chain tip height, and then Sapling activation as a last resort. If
-            // we have a birthday height, max() that with sapling activation; that will be the
-            // minimum possible wallet birthday that is relevant to future recovery scenarios.
-            tx_heights
-                .values()
-                .flat_map(|(h, _)| h)
-                .min()
-                .copied()
-                .or(chain_tip)
-                .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation)),
-            chain_tip,
-        )
-        .await?;
+        //
+        // Fall back to the chain tip height, and then Sapling activation as a last resort. If
+        // we have a birthday height, `max()` that with Sapling activation; that will be the
+        // minimum possible wallet birthday that is relevant to future recovery scenarios.
+        let birthday_height = tx_heights
+            .values()
+            .flat_map(|(h, _)| h)
+            .min()
+            .copied()
+            .or(chain_tip)
+            .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation));
+
+        // Fetch the tree state corresponding to the last block prior to the wallet's
+        // birthday height.
+        let chain_state = chain_view
+            .tree_state_as_of(birthday_height.saturating_sub(1))
+            .await?
+            .expect("birthday_height was sourced from chain_view");
+
+        let wallet_birthday = AccountBirthday::from_parts(chain_state, chain_tip);
         info!(
             "Setting the wallet birthday to height {}",
             wallet_birthday.height(),
