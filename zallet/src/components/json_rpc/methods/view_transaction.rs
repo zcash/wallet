@@ -6,9 +6,7 @@ use orchard::note_encryption::OrchardDomain;
 use rusqlite::{OptionalExtension, named_params};
 use schemars::JsonSchema;
 use serde::Serialize;
-use transparent::{address::TransparentAddress, keys::TransparentKeyScope};
-use zaino_proto::proto::service::BlockId;
-use zaino_state::{FetchServiceSubscriber, LightWalletIndexer, ZcashIndexer};
+use transparent::keys::TransparentKeyScope;
 use zcash_address::{
     ToAddress, ZcashAddress,
     unified::{self, Encoding},
@@ -23,10 +21,9 @@ use zcash_protocol::{
     memo::Memo,
     value::{BalanceError, Zatoshis},
 };
-use zcash_script::script;
-use zebra_rpc::methods::GetRawTransaction;
 
 use crate::components::{
+    chain::{Chain, ChainView},
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
@@ -270,20 +267,10 @@ struct AccountEffect {
 
 pub(super) const PARAM_TXID_DESC: &str = "The ID of the transaction to view.";
 
-pub(crate) async fn call(
-    wallet: &DbConnection,
-    chain: FetchServiceSubscriber,
-    txid_str: &str,
-) -> Response {
+pub(crate) async fn call(wallet: &DbConnection, chain: Chain, txid_str: &str) -> Response {
     let txid = parse_txid(txid_str)?;
 
-    // Fetch this early so we can detect if the wallet is not ready yet.
-    // TODO: Replace with Zaino `ChainIndex` so we can operate against a chain snapshot.
-    //       https://github.com/zcash/wallet/issues/237
-    let chain_height = wallet
-        .chain_height()
-        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
-        .ok_or_else(|| LegacyCode::InWarmup.with_static("Wait for the wallet to start up"))?;
+    let chain_view = chain.snapshot();
 
     let tx = wallet
         .get_transaction(txid)
@@ -433,18 +420,18 @@ pub(crate) async fn call(
                 // TODO: Migrate to a hopefully much nicer Rust API once we migrate to the new Zaino ChainIndex trait.
                 //       https://github.com/zcash/wallet/issues/237
                 let (account_uuid, address, value) =
-                    match chain.get_raw_transaction(txid_prev.clone(), Some(1)).await {
-                        Ok(GetRawTransaction::Object(tx)) => {
-                            let output = tx
-                                .outputs()
-                                .get(usize::try_from(input.prevout().n()).expect("should fit"))
+                    match chain_view.get_transaction(*input.prevout().txid()).await {
+                        Ok(Some(prev_tx)) => {
+                            let output = prev_tx
+                                .inner
+                                .transparent_bundle()
+                                .and_then(|b| {
+                                    b.vout.get(
+                                        usize::try_from(input.prevout().n()).expect("should fit"),
+                                    )
+                                })
                                 .expect("Zaino should have rejected this earlier");
-                            let address = script::FromChain::parse(&script::Code(
-                                output.script_pub_key().hex().as_raw_bytes().to_vec(),
-                            ))
-                            .ok()
-                            .as_ref()
-                            .and_then(TransparentAddress::from_script_from_chain);
+                            let address = output.recipient_address();
 
                             let account_id = address.as_ref().and_then(|address| {
                                 account_ids.iter().find(|account| {
@@ -458,8 +445,7 @@ pub(crate) async fn call(
                             (
                                 account_id.map(|account| account.expose_uuid().to_string()),
                                 address.map(|addr| addr.encode(wallet.params())),
-                                Zatoshis::from_nonnegative_i64(output.value_zat())
-                                    .expect("Zaino should have rejected this earlier"),
+                                output.value(),
                             )
                         }
                         Ok(_) => unreachable!(),
@@ -796,7 +782,7 @@ pub(crate) async fn call(
         }
     }
 
-    let wallet_tx_info = WalletTxInfo::fetch(wallet, &chain, &tx, chain_height)
+    let wallet_tx_info = WalletTxInfo::fetch(wallet, &chain_view, &tx, chain_view.tip().height)
         .await
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
 
@@ -876,7 +862,7 @@ impl WalletTxInfo {
     /// Logic adapted from `WalletTxToJSON` in `zcashd`, to match the semantics of the `gettransaction` fields.
     async fn fetch(
         wallet: &DbConnection,
-        chain: &FetchServiceSubscriber,
+        chain_view: &ChainView,
         tx: &zcash_primitives::transaction::Transaction,
         chain_height: BlockHeight,
     ) -> Result<Self, SqliteClientError> {
@@ -907,35 +893,23 @@ impl WalletTxInfo {
         let (blockhash, blockindex, blocktime) = if let Some(height) = mined_height {
             status = "mined";
 
-            // TODO: Once Zaino updates its API to support atomic queries, it should not
-            //       be possible to fail to fetch the block that a transaction was
-            //       observed mined in.
-            //       https://github.com/zcash/wallet/issues/237
-            // TODO: Block data optional until we migrate to `ChainIndex`.
-            //       https://github.com/zcash/wallet/issues/237
-            if let Some(block_metadata) = wallet.block_metadata(height)? {
-                let block = chain
-                    .get_block(BlockId {
-                        height: 0,
-                        hash: block_metadata.block_hash().0.to_vec(),
-                    })
-                    .await
-                    .map_err(|_| SqliteClientError::ChainHeightUnknown)?;
+            let block = chain_view
+                .get_block(height)
+                .await
+                .map_err(|_| SqliteClientError::ChainHeightUnknown)?
+                .unwrap();
 
-                let tx_index = block
-                    .vtx
-                    .iter()
-                    .find(|ctx| ctx.hash == tx.txid().as_ref())
-                    .map(|ctx| u32::try_from(ctx.index).expect("Zaino should provide valid data"));
+            let tx_index = block
+                .vtx
+                .iter()
+                .zip(0..)
+                .find_map(|(ctx, index)| (ctx.txid() == tx.txid()).then(|| index));
 
-                (
-                    Some(block_metadata.block_hash().to_string()),
-                    tx_index,
-                    Some(block.time.into()),
-                )
-            } else {
-                (None, None, None)
-            }
+            (
+                Some(block.header.hash().to_string()),
+                tx_index,
+                Some(block.header.time.into()),
+            )
         } else {
             match (
                 is_expired_tx(tx, chain_height),
