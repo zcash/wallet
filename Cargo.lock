@@ -7506,6 +7506,7 @@ dependencies = [
  "zcash_address 0.10.1",
  "zcash_client_backend",
  "zcash_client_sqlite",
+ "zcash_encoding 0.3.0",
  "zcash_keys 0.12.0",
  "zcash_note_encryption",
  "zcash_primitives 0.26.3",

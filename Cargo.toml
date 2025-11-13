@@ -63,6 +63,7 @@ serde = { version = "1", features = ["serde_derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "raw_value"] }
 toml = "0.8"
 zcash_address = "0.10"
+zcash_encoding = "0.3"
 
 # Randomness
 rand = "0.8"

@@ -3,7 +3,6 @@ use jsonrpsee::{
     core::{JsonValue, RpcResult},
     proc_macros::rpc,
 };
-use zaino_state::FetchServiceSubscriber;
 
 use crate::components::{
     chain::Chain,
@@ -501,12 +500,8 @@ impl RpcImpl {
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
 
-    async fn chain(&self) -> RpcResult<FetchServiceSubscriber> {
-        self.chain
-            .subscribe()
-            .await
-            .map(|s| s.inner())
-            .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
+    async fn chain(&self) -> RpcResult<Chain> {
+        Ok(self.chain.clone())
     }
 }
 
@@ -532,7 +527,7 @@ impl WalletRpcImpl {
         self.general.wallet().await
     }
 
-    async fn chain(&self) -> RpcResult<FetchServiceSubscriber> {
+    async fn chain(&self) -> RpcResult<Chain> {
         self.general.chain().await
     }
 

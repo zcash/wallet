@@ -6,14 +6,10 @@ use sapling::bundle::{OutputDescription, SpendDescription};
 use schemars::JsonSchema;
 use serde::Serialize;
 use transparent::bundle::{TxIn, TxOut};
-use zaino_state::{FetchServiceError, FetchServiceSubscriber, LightWalletIndexer, ZcashIndexer};
-use zcash_protocol::{
-    TxId,
-    consensus::{self, BlockHeight},
-    value::ZatBalance,
-};
+use zcash_protocol::{TxId, value::ZatBalance};
 
 use crate::components::{
+    chain::Chain,
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
@@ -472,12 +468,12 @@ pub(super) const PARAM_BLOCKHASH_DESC: &str = "The block in which to look for th
 
 pub(crate) async fn call(
     wallet: &DbConnection,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     txid_str: &str,
     verbose: Option<u64>,
     blockhash: Option<String>,
 ) -> Response {
-    let _txid = parse_txid(txid_str)?;
+    let txid = parse_txid(txid_str)?;
     let verbose = verbose.is_some_and(|v| v != 0);
 
     // TODO: We can't support this via the current Zaino API; wait for `ChainIndex`.
@@ -488,68 +484,32 @@ pub(crate) async fn call(
         );
     }
 
-    let tx = match chain.get_raw_transaction(txid_str.into(), Some(1)).await {
-        // TODO: Zaino should have a Rust API for fetching tx details, instead of
-        //       requiring us to specify a verbosity and then deal with an enum variant
-        //       that should never occur.
-        //       https://github.com/zcash/wallet/issues/237
-        Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => unreachable!(),
-        Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => Ok(tx),
-        // TODO: Zaino is not correctly parsing the error response, so we
-        // can't look for `LegacyCode::InvalidAddressOrKey`. Instead match
-        // on these three possible error messages:
-        // - "No such mempool or blockchain transaction" (zcashd -txindex)
-        // - "No such mempool transaction." (zcashd)
-        // - "No such mempool or main chain transaction" (zebrad)
-        Err(FetchServiceError::RpcError(e)) if e.message.contains("No such mempool") => {
-            Err(LegacyCode::InvalidAddressOrKey
-                .with_static("No such mempool or blockchain transaction"))
-        }
+    let chain_view = chain.snapshot();
+
+    let tx = match chain_view.get_transaction(txid).await {
+        Ok(Some(tx)) => Ok(tx),
+        Ok(None) => Err(LegacyCode::InvalidAddressOrKey
+            .with_static("No such mempool or blockchain transaction")),
         Err(e) => Err(LegacyCode::Database.with_message(e.to_string())),
     }?;
 
-    // TODO: Once we migrate to `ChainIndex`, fetch these via the snapshot.
-    //       https://github.com/zcash/wallet/issues/237
-    // TODO: Zebra implements its Rust `getrawtransaction` type incorrectly and treats
-    //       `height` as a `u32`, when `-1` is a valid response (for "not in main chain").
-    //       This might be fine for server usage (if it never returns a `-1`, though that
-    //       would imply Zebra stores every block from every chain indefinitely), but is
-    //       incorrect for client usage (like in Zaino). For now, cast to `i32` as either
-    //       Zebra is not generating `-1`, or it is representing it using two's complement
-    //       as `u32::MAX` (which will cast correctly).
-    //       https://github.com/ZcashFoundation/zebra/issues/9671
-    let blockhash = tx.block_hash().map(|hash| hash.to_string());
-    let height = tx.height().map(|h| h as i32);
-    let confirmations = tx.confirmations();
-    let time = tx.time();
-    let blocktime = tx.block_time();
+    let blockhash = tx.block_hash.map(|hash| hash.to_string());
+    let height = if tx.block_hash.is_some() {
+        Some(tx.mined_height.map(|h| u32::from(h) as i32).unwrap_or(-1))
+    } else {
+        tx.mined_height.map(|h| u32::from(h) as i32)
+    };
+    // TODO: Get semantics right.
+    let confirmations = tx.mined_height.map(|h| chain_view.tip().height + 1 - h);
+    let blocktime = tx.block_time.map(i64::from);
 
-    let tx_hex = hex::encode(tx.hex());
+    let tx_hex = hex::encode(&tx.raw);
     if !verbose {
         return Ok(ResultType::Concise(tx_hex));
     }
 
-    let mempool_height = BlockHeight::from_u32(
-        chain
-            .get_latest_block()
-            .await
-            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
-            .height
-            .try_into()
-            .expect("not our problem"),
-    ) + 1;
-
-    let consensus_branch_id = consensus::BranchId::for_height(
-        wallet.params(),
-        tx.height()
-            .and_then(|h| u32::try_from(h).ok().map(BlockHeight::from_u32))
-            .unwrap_or(mempool_height),
-    );
-    let tx =
-        zcash_primitives::transaction::Transaction::read(tx.hex().as_ref(), consensus_branch_id)
-            .expect("guaranteed to be parseable by Zaino");
-
-    let size = (tx_hex.len() / 2) as u64;
+    let size = tx.raw.len() as u64;
+    let tx = tx.inner;
 
     let overwintered = tx.version().has_overwinter();
 
@@ -641,7 +601,7 @@ pub(crate) async fn call(
         blockhash,
         height,
         confirmations,
-        time,
+        time: blocktime,
         blocktime,
     })))
 }

@@ -12,8 +12,7 @@ use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
 use transparent::address::TransparentAddress;
-use zaino_proto::proto::service::TxFilter;
-use zaino_state::{FetchServiceError, LightWalletIndexer};
+use zaino_state::FetchServiceError;
 use zcash_client_backend::data_api::{
     Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
     Zip32Derivation, wallet::decrypt_and_store_transaction,
@@ -26,8 +25,10 @@ use zcash_keys::{
         zcashd::{PathParseError, ZcashdHdDerivation},
     },
 };
-use zcash_primitives::transaction::Transaction;
-use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
+use zcash_protocol::{
+    TxId,
+    consensus::{NetworkType, Parameters},
+};
 use zewif_zcashd::{BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet};
 use zip32::{AccountId, fingerprint::SeedFingerprint};
 
@@ -37,7 +38,6 @@ use crate::{
     error::{Error, ErrorKind},
     fl,
     prelude::*,
-    rosetta::to_chainstate,
 };
 
 use super::{AsyncRunnable, migrate_zcash_conf};
@@ -143,50 +143,6 @@ impl MigrateZcashdWalletCmd {
         }
     }
 
-    async fn chain_tip<C: LightWalletIndexer>(
-        chain: &C,
-    ) -> Result<Option<BlockHeight>, MigrateError>
-    where
-        MigrateError: From<C::Error>,
-    {
-        let tip_height = chain.get_latest_block().await?.height;
-        let chain_tip = if tip_height == 0 {
-            None
-        } else {
-            // TODO: this error should go away when we have a better chain data API
-            Some(BlockHeight::try_from(tip_height).map_err(|e| {
-                ErrorKind::Generic.context(fl!(
-                    "err-migrate-wallet-invalid-chain-data",
-                    err = e.to_string()
-                ))
-            })?)
-        };
-
-        Ok(chain_tip)
-    }
-
-    async fn get_birthday<C: LightWalletIndexer>(
-        chain: &C,
-        birthday_height: BlockHeight,
-        recover_until: Option<BlockHeight>,
-    ) -> Result<AccountBirthday, MigrateError>
-    where
-        MigrateError: From<C::Error>,
-    {
-        // Fetch the tree state corresponding to the last block prior to the wallet's
-        // birthday height.
-        let chain_state = to_chainstate(
-            chain
-                .get_tree_state(zaino_proto::proto::service::BlockId {
-                    height: u64::from(birthday_height.saturating_sub(1)),
-                    hash: vec![],
-                })
-                .await?,
-        )?;
-
-        Ok(AccountBirthday::from_parts(chain_state, recover_until))
-    }
-
     fn check_network(
         zewif_network: zewif::Network,
         network_type: NetworkType,
@@ -267,8 +223,8 @@ impl MigrateZcashdWalletCmd {
 
         // Obtain information about the current state of the chain, so that we can set the recovery
         // height properly.
-        let chain_subscriber = chain.subscribe().await?.inner();
-        let chain_tip = Self::chain_tip(&chain_subscriber).await?;
+        let chain_view = chain.snapshot();
+        let chain_tip = Some(chain_view.tip().height);
         let sapling_activation = network_params
             .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)
             .expect("Sapling activation height is defined.");
@@ -277,35 +233,24 @@ impl MigrateZcashdWalletCmd {
         // appear in the main chain.
         let mut tx_heights = HashMap::new();
         for (txid, _) in wallet.transactions().iter() {
-            let tx_filter = TxFilter {
-                hash: txid.as_ref().to_vec(),
-                ..Default::default()
-            };
             #[allow(unused_must_use)]
-            match chain_subscriber.get_transaction(tx_filter).await {
-                Ok(raw_tx) => {
-                    let tx_height =
-                        BlockHeight::from(u32::try_from(raw_tx.height).map_err(|e| {
-                            // TODO: this error should go away when we have a better chain data API
-                            ErrorKind::Generic.context(fl!(
-                                "err-migrate-wallet-invalid-chain-data",
-                                err = e.to_string()
-                            ))
-                        })?);
+            match chain_view
+                .get_transaction(TxId::from_bytes(*txid.as_ref()))
+                .await
+            {
+                Ok(Some(tx)) => {
                     tx_heights.insert(
                         txid,
-                        (tx_height, buffer_wallet_transactions.then_some(raw_tx)),
+                        (tx.mined_height, buffer_wallet_transactions.then_some(tx)),
                     );
                 }
-                Err(FetchServiceError::TonicStatusError(status))
-                    if (status.code() as isize) == (tonic::Code::NotFound as isize) =>
-                {
+                Ok(None) => {
                     // Ignore any transactions that are not in the main chain.
                 }
-                other => {
+                Err(e) => {
                     // FIXME: we should be able to propagate this error, but at present Zaino is
                     // returning all sorts of errors as 500s.
-                    dbg!(other);
+                    dbg!(e);
                 }
             }
         }
@@ -316,21 +261,26 @@ impl MigrateZcashdWalletCmd {
         // range. We don't have a good source of individual per-account birthday information at
         // this point; once we've imported all of the transaction data into the wallet then we'll
         // be able to choose per-account birthdays without difficulty.
-        let wallet_birthday = Self::get_birthday(
-            &chain_subscriber,
-            // Fall back to the chain tip height, and then Sapling activation as a last resort. If
-            // we have a birthday height, max() that with sapling activation; that will be the
-            // minimum possible wallet birthday that is relevant to future recovery scenarios.
-            tx_heights
-                .values()
-                .map(|(h, _)| h)
-                .min()
-                .copied()
-                .or(chain_tip)
-                .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation)),
-            chain_tip,
-        )
-        .await?;
+        //
+        // Fall back to the chain tip height, and then Sapling activation as a last resort. If
+        // we have a birthday height, `max()` that with Sapling activation; that will be the
+        // minimum possible wallet birthday that is relevant to future recovery scenarios.
+        let birthday_height = tx_heights
+            .values()
+            .flat_map(|(h, _)| h)
+            .min()
+            .copied()
+            .or(chain_tip)
+            .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation));
+
+        // Fetch the tree state corresponding to the last block prior to the wallet's
+        // birthday height.
+        let chain_state = chain_view
+            .tree_state_as_of(birthday_height.saturating_sub(1))
+            .await?
+            .expect("birthday_height was sourced from chain_view");
+
+        let wallet_birthday = AccountBirthday::from_parts(chain_state, chain_tip);
         info!(
             "Setting the wallet birthday to height {}",
             wallet_birthday.height(),
@@ -573,12 +523,10 @@ impl MigrateZcashdWalletCmd {
         // access to balance & to set priorities in the scan queue.
         if buffer_wallet_transactions {
             info!("Importing transactions");
-            for (h, raw_tx) in tx_heights.values() {
-                let branch_id = BranchId::for_height(&network_params, *h);
-                if let Some(raw_tx) = raw_tx {
-                    let tx = Transaction::read(&raw_tx.data[..], branch_id)?;
+            for (h, tx) in tx_heights.values() {
+                if let Some(tx) = tx {
                     db_data.with_mut(|mut db| {
-                        decrypt_and_store_transaction(&network_params, &mut db, &tx, Some(*h))
+                        decrypt_and_store_transaction(&network_params, &mut db, &tx.inner, *h)
                     })?;
                 }
             }
