@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 
 use crate::error::Error;
 
-pub(crate) mod chain_view;
+pub(crate) mod chain;
 pub(crate) mod database;
 pub(crate) mod json_rpc;
 pub(crate) mod sync;

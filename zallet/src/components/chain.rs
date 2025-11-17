@@ -18,18 +18,18 @@ use crate::{
 use super::TaskHandle;
 
 #[derive(Clone)]
-pub(crate) struct ChainView {
+pub(crate) struct Chain {
     // TODO: Migrate to `StateService`.
     indexer: Arc<RwLock<Option<IndexerService<FetchService>>>>,
 }
 
-impl fmt::Debug for ChainView {
+impl fmt::Debug for Chain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ChainView").finish_non_exhaustive()
+        f.debug_struct("Chain").finish_non_exhaustive()
     }
 }
 
-impl ChainView {
+impl Chain {
     pub(crate) async fn new(config: &ZalletConfig) -> Result<(Self, TaskHandle), Error> {
         let resolved_validator_address = match config.indexer.validator_address.as_deref() {
             Some(addr_str) => match lookup_host(addr_str).await {
@@ -114,7 +114,7 @@ impl ChainView {
                 .map_err(|e| ErrorKind::Init.context(e))?,
         )));
 
-        let chain_view = Self {
+        let chain = Self {
             indexer: indexer.clone(),
         };
 
@@ -148,7 +148,7 @@ impl ChainView {
             }
         });
 
-        Ok((chain_view, task))
+        Ok((chain, task))
     }
 
     pub(crate) async fn subscribe(

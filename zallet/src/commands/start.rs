@@ -6,7 +6,7 @@ use tokio::{pin, select};
 use crate::{
     cli::StartCmd,
     commands::AsyncRunnable,
-    components::{chain_view::ChainView, database::Database, json_rpc::JsonRpc, sync::WalletSync},
+    components::{chain::Chain, database::Database, json_rpc::JsonRpc, sync::WalletSync},
     config::ZalletConfig,
     error::Error,
     prelude::*,
@@ -48,7 +48,7 @@ impl AsyncRunnable for StartCmd {
         let keystore = KeyStore::new(&config, db.clone())?;
 
         // Start monitoring the chain.
-        let (chain_view, chain_indexer_task_handle) = ChainView::new(&config).await?;
+        let (chain, chain_indexer_task_handle) = Chain::new(&config).await?;
 
         // Launch RPC server.
         let rpc_task_handle = JsonRpc::spawn(
@@ -56,7 +56,7 @@ impl AsyncRunnable for StartCmd {
             db.clone(),
             #[cfg(zallet_build = "wallet")]
             keystore,
-            chain_view.clone(),
+            chain.clone(),
         )
         .await?;
 
@@ -66,7 +66,7 @@ impl AsyncRunnable for StartCmd {
             wallet_sync_recover_history_task_handle,
             wallet_sync_poll_transparent_task_handle,
             wallet_sync_data_requests_task_handle,
-        ) = WalletSync::spawn(&config, db, chain_view).await?;
+        ) = WalletSync::spawn(&config, db, chain).await?;
 
         info!("Spawned Zallet tasks");
 

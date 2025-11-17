@@ -37,7 +37,7 @@ Once you have installed Rust, the following command can be used to build and ins
 Zallet:
 
 ```
-cargo install zallet
+cargo install --locked zallet
 ```
 
 This will automatically download Zallet from [crates.io], build it, and install it in
@@ -59,5 +59,5 @@ If you want to run the latest unpublished changes, then you can instead install 
 directly from the main branch of its code repository:
 
 ```
-cargo install --git https://github.com/zcash/wallet.git
+cargo install --locked --git https://github.com/zcash/wallet.git
 ```

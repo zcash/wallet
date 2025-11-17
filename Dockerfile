@@ -3,9 +3,6 @@
 FROM stagex/pallet-rust@sha256:9c38bf1066dd9ad1b6a6b584974dd798c2bf798985bf82e58024fbe0515592ca AS pallet-rust
 FROM stagex/user-protobuf@sha256:5e67b3d3a7e7e9db9aa8ab516ffa13e54acde5f0b3d4e8638f79880ab16da72c AS protobuf 
 FROM stagex/user-abseil-cpp@sha256:3dca99adfda0cb631bd3a948a99c2d5f89fab517bda034ce417f222721115aa2 AS abseil-cpp
-FROM stagex/core-gcc@sha256:964ffd3793c5a38ca581e9faefd19918c259f1611c4cbf5dc8be612e3a8b72f5 AS gcc 
-FROM stagex/core-musl@sha256:d9af23284cca2e1002cd53159ada469dfe6d6791814e72d6163c7de18d4ae701 AS musl
-FROM stagex/core-libunwind@sha256:eb66122d8fc543f5e2f335bb1616f8c3a471604383e2c0a9df4a8e278505d3bc AS libunwind 
 FROM stagex/core-user-runtime@sha256:055ae534e1e01259449fb4e0226f035a7474674c7371a136298e8bdac65d90bb AS user-runtime
 
 # --- Stage 1: Build with Rust --- (amd64)
@@ -62,22 +59,34 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
       --bin zallet \
       --target ${TARGET_ARCH} \
       --features rpc-cli,zcashd-import \
-      && install -D -m 0755 /usr/src/app/target/${TARGET_ARCH}/release/zallet /usr/local/bin/zallet
-
+    && OUT="/usr/src/app/target/${TARGET_ARCH}/release" \
+    \
+    # Install main binary
+    && install -D -m 0755 \
+         "${OUT}/zallet" \
+         /usr/local/bin/zallet \
+    \
+    # Copy whole trees for completions, manpages and metadata
+    && install -d /usr/local/share/zallet \
+    && cp -a "${OUT}/completions" /usr/local/share/zallet/completions \
+    && cp -a "${OUT}/manpages"  /usr/local/share/zallet/manpages \
+    && install -D -m 0644 \
+         "${OUT}/debian-copyright" \
+         /usr/local/share/zallet/debian-copyright
 
 # --- Stage 2: layer for local binary extraction ---
 FROM scratch AS export
 
+# Binary at the root for easy extraction
 COPY --from=builder /usr/local/bin/zallet /zallet
+
+# Export the whole zallet share tree (completions, manpages, metadata, etc.)
+COPY --from=builder /usr/local/share/zallet /usr/local/share/zallet
 
 # --- Stage 3: Minimal runtime with stagex ---
 # `stagex/core-user-runtime` sets the user to non-root by default
 FROM user-runtime AS runtime
-COPY --from=gcc  /usr/lib/libgcc_s.so.1 /usr/lib/
-COPY --from=gcc  /usr/lib/libstdc++.so.6 /usr/lib/
-COPY --from=musl /lib/ld-musl-x86_64.so.1 /lib/
-COPY --from=libunwind /lib/libunwind.so.8 /lib/
-COPY --from=builder /usr/local/bin/zallet /usr/local/bin/zallet
+COPY --from=export /zallet /usr/local/bin/zallet
 
 WORKDIR /var/lib/zallet
 

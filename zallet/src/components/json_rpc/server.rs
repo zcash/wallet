@@ -7,7 +7,7 @@ use jsonrpsee::{
 use tokio::task::JoinHandle;
 
 use crate::{
-    components::{chain_view::ChainView, database::Database},
+    components::{chain::Chain, database::Database},
     config::RpcSection,
     error::{Error, ErrorKind},
 };
@@ -33,7 +33,7 @@ pub(crate) async fn spawn(
     config: RpcSection,
     wallet: Database,
     #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-    chain_view: ChainView,
+    chain: Chain,
 ) -> Result<ServerTask, Error> {
     // Caller should make sure `bind` only contains a single address (for now).
     assert_eq!(config.bind.len(), 1);
@@ -41,12 +41,12 @@ pub(crate) async fn spawn(
 
     // Initialize the RPC methods.
     #[cfg(zallet_build = "wallet")]
-    let wallet_rpc_impl = WalletRpcImpl::new(wallet.clone(), keystore.clone(), chain_view.clone());
+    let wallet_rpc_impl = WalletRpcImpl::new(wallet.clone(), keystore.clone(), chain.clone());
     let rpc_impl = RpcImpl::new(
         wallet,
         #[cfg(zallet_build = "wallet")]
         keystore,
-        chain_view,
+        chain,
     );
 
     let timeout = config.timeout();
