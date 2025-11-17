@@ -12,11 +12,11 @@ jobs:
     name: Clippy (MSRV)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
       - name: Run clippy
-        uses: actions-rs/clippy-check@v1
+        uses: actions-rs/clippy-check@b5b5f21f4797c02da247df37026fcd0a5024aa4d # v1.0.7
         with:
           name: Clippy (MSRV)
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -30,10 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@beta
+      - uses: dtolnay/rust-toolchain@4a46ea8263312b0fbcb4c73539e4b66ef8d8474f # beta
         id: toolchain
         with:
           components: clippy
@@ -41,7 +41,7 @@ jobs:
         env:
           TOOLCHAIN: ${{steps.toolchain.outputs.name}}
       - name: Run Clippy (beta)
-        uses: actions-rs/clippy-check@v1
+        uses: actions-rs/clippy-check@b5b5f21f4797c02da247df37026fcd0a5024aa4d # v1.0.7
         continue-on-error: true
         with:
           name: Clippy (beta)
@@ -55,7 +55,7 @@ jobs:
     name: Intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
       - run: cargo fetch
@@ -70,7 +70,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
       - name: Check formatting
