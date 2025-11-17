@@ -1,52 +1,341 @@
-name: Build and Push Docker Image to Docker Hub
+name: Build, Attest, Sign and publish Docker Image
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_call:
+    outputs:
+      image-ref:
+        description: "Full image reference that was pushed"
+        value: ${{ jobs.build-and-push.outputs.image-ref }}
+      image-digest:
+        description: "Content digest of the pushed image"
+        value: ${{ jobs.build-and-push.outputs.image-digest }}
+      oci-artifact-name:
+        description: "Name of the exported runtime OCI artifact"
+        value: ${{ jobs.build-and-push.outputs.oci-artifact-name }}
+      platforms:
+        description: "Resolved platform list used for the build"
+        value: ${{ jobs.build-and-push.outputs.platforms }}
+    inputs:
+      image-name:
+        description: "Docker image name (e.g. user/repo)"
+        required: true
+        type: string
+      image-tags:
+        description: "Comma-separated list of tags"
+        required: true
+        type: string
+      platforms:
+        description: "Comma- or newline-separated list of target platforms"
+        required: true
+        type: string
+      oci-artifact-name:
+        description: "Artifact name for the exported binaries bundle"
+        required: true
+        type: string
+      dockerhub-namespace:
+        description: "Docker Hub namespace/organization (e.g. electriccoinco)"
+        required: true
+        type: string
+    secrets:
+      dockerhub_username:
+        required: true
+        description: "Docker Hub username"
+      dockerhub_password:
+        required: true
+        description: "Docker Hub password"
   workflow_dispatch:
+    inputs:
+      image-name:
+        description: "Docker image name (e.g. user/repo)"
+        required: true
+        type: string
+      image-tags:
+        description: "Comma-separated list of tags"
+        required: true
+        type: string
+      platforms:
+        description: "Comma- or newline-separated list of target platforms"
+        required: false
+        default: linux/amd64
+        type: string
+      oci-artifact-name:
+        description: "Artifact name for the exported binaries bundle"
+        required: true
+        type: string
 
-# Grant OIDC + read so the called workflow can do keyless signing
 permissions:
-  id-token: write
+  id-token: write        # Needed for keyless signing with Cosign and checkout
   contents: read
+  attestations: write
 
 jobs:
-  set_env:
-    name: Create version tag
+  build-and-push:
     runs-on: ubuntu-latest
-    outputs:
-      tags: ${{ steps.version_step.outputs.tags }}
     env:
-      VERSION: ${{ github.ref_name }}
-      SHA: ${{ github.sha }}
+      REGISTRY_HOST: docker.io
+      IMAGE_NAMESPACE: ${{ inputs.dockerhub-namespace }}
+      IMAGE_NAME: ${{ inputs.image-name }}
+      OCI_ARTIFACT_NAME: ${{ inputs.oci-artifact-name }}
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-ref: ${{ steps.emit.outputs.image_ref }}
+      oci-artifact-name: ${{ steps.emit.outputs.artifact_name }}
+      platforms: ${{ steps.platforms.outputs.platforms }}
     steps:
-    - id: version_step
-      run: |
-        set -Eeuo pipefail
-        IFS=$'\n\t'
+      - name: Determine image repository
+        run: |
+          set -euo pipefail
+          NAMESPACE="${IMAGE_NAMESPACE:-}"
+          IMAGE="${IMAGE_NAME}"
+          if [[ -z "$IMAGE" ]]; then
+            echo "image-name input is required" >&2
+            exit 1
+          fi
+          if [[ -z "$NAMESPACE" ]]; then
+            echo "dockerhub-namespace input is required" >&2
+            exit 1
+          fi
+          NAMESPACE="${NAMESPACE#/}"
+          NAMESPACE="${NAMESPACE%/}"
+          IMAGE_REPO="${NAMESPACE}/${IMAGE}"
+          echo "IMAGE_REPOSITORY=$IMAGE_REPO" >> "$GITHUB_ENV"
+          echo "IMAGE_FULL_NAME=${REGISTRY_HOST}/${IMAGE_REPO}" >> "$GITHUB_ENV"
 
-        if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$ ]]; then
-          echo "Valid version: $VERSION"
-          echo "tags=latest,$VERSION,$SHA" >> "$GITHUB_OUTPUT"
-        else
-          echo "Invalid ref_name format: $VERSION" >&2
-          exit 1
-        fi
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
 
-  build_push:
-    uses: zcash/.github/.github/workflows/build-and-push-docker-hub.yaml@7d26ab8bcae49bed16f4137f8eba5679759888a2 # v1.0.0
-    needs: set_env
-    permissions:
-      id-token: write
-      contents: read
-    with:
-      image_name: zallet
-      image_tags: ${{ needs.set_env.outputs.tags }}
-      dockerfile: Dockerfile
-      context: .
-      build-args: ""
-    secrets:
-      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-      dockerhub_password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      dockerhub_registry: ${{ secrets.DOCKERHUB_REGISTRY }}
+      - name: Compute Docker image tags
+        id: set-tags
+        env:
+          INPUT_IMAGE_TAGS: ${{ inputs.image-tags }}
+        run: |
+          set -euo pipefail
+          TAGS="$INPUT_IMAGE_TAGS"
+          IFS=',' read -ra ELEMENTS <<< "$TAGS"
+          TAGS_FIXED=""
+          for ELEMENT in "${ELEMENTS[@]}"; do
+            ELEMENT_TRIMMED="$(echo "$ELEMENT" | xargs)"
+            [[ -z "$ELEMENT_TRIMMED" ]] && continue
+            TAGS_FIXED+="${IMAGE_FULL_NAME}:$ELEMENT_TRIMMED,"
+          done
+          TAGS_FIXED=${TAGS_FIXED%,}
+          if [[ -z "$TAGS_FIXED" ]]; then
+            echo "No valid tags were computed" >&2
+            exit 1
+          fi
+          echo "tags_fixed=$TAGS_FIXED" >> "$GITHUB_ENV"
+
+      - name: Determine target platforms
+        id: platforms
+        env:
+          RAW_PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+          RAW="${RAW_PLATFORMS}"
+          RAW="${RAW//$'\r'/}"
+          RAW="${RAW//$'\n'/,}"
+          RAW="${RAW// /}"
+          PRIMARY=""
+          NORMALIZED=""
+          IFS=',' read -ra CANDIDATES <<< "$RAW"
+          for TOKEN in "${CANDIDATES[@]}"; do
+            TOKEN="${TOKEN//[$'\t\r\n ']}"
+            [[ -z "$TOKEN" ]] && continue
+            NORMALIZED+="${TOKEN},"
+            if [[ -z "$PRIMARY" ]]; then
+              PRIMARY="$TOKEN"
+            fi
+          done
+          NORMALIZED="${NORMALIZED%,}"
+          if [[ -z "$NORMALIZED" ]]; then
+            echo "No valid platforms were provided" >&2
+            exit 1
+          fi
+          echo "platforms=$NORMALIZED" >> "$GITHUB_OUTPUT"
+          echo "primary=$PRIMARY" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare export directory
+        run: mkdir -p build/runtime
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Enable containerd image store
+        uses: depot/use-containerd-snapshotter-action@2e6f905d28e7ca519b216e2219d00545537e9f46 # v1.0.0
+
+      - name: Log in to Docker registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ${{ env.REGISTRY_HOST }}
+          username: ${{ secrets.dockerhub_username }}
+          password: ${{ secrets.dockerhub_password }}
+
+      - name: Build & Push (SBOM + provenance)
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          file: Dockerfile
+          context: .
+          push: true
+          platforms: ${{ steps.platforms.outputs.platforms }}
+          tags: ${{ env.tags_fixed }}
+          sbom: true
+          provenance: mode=max
+          outputs: |
+            type=registry,rewrite-timestamp=true,force-compression=true
+
+      - name: Extract artifacts from export stage
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          file: Dockerfile
+          context: .
+          push: false
+          platforms: ${{ steps.platforms.outputs.platforms }}
+          tags: ${{ env.tags_fixed }}
+          target: export
+          outputs: |
+            type=local,dest=./out,rewrite-timestamp=true,force-compression=true
+
+      - name: Collect runtime artifacts per platform
+        env:
+          PRIMARY_PLATFORM: ${{ steps.platforms.outputs.primary }}
+        run: |
+          set -euo pipefail
+
+          # Primary platform detected by the earlier normalization step
+          PRIMARY="$PRIMARY_PLATFORM"
+
+          # Map platform → suffix (adjust to match your arch_map if needed)
+          map_suffix() {
+            local plat="$1"
+            case "$plat" in
+              linux/amd64|linux_amd64) echo "linux-amd64" ;;
+              linux/arm64|linux_arm64) echo "linux-arm64" ;;
+              *)
+                # Default fallback: replace slashes with dashes
+                echo "${plat//\//-}"
+                ;;
+            esac
+          }
+
+          # Create final output root directory
+          mkdir -p build/runtime
+
+          # Check if the output directory contains multi-platform subdirectories
+          if ls out/*_* >/dev/null 2>&1; then
+            echo "Detected multi-platform output under ./out"
+
+            # Iterate through subdirectories such as out/linux_amd64, out/linux_arm64, etc.
+            for dir in out/*; do
+              [ -d "$dir" ] || continue
+
+              # Extract platform directory name (e.g. linux_amd64)
+              plat_dir="${dir#out/}"
+              # Convert platform into normalized suffix (e.g. linux-amd64)
+              suffix="$(map_suffix "$plat_dir")"
+              echo "Collecting artifacts for platform '$plat_dir' → suffix '$suffix'"
+              # Create target directory inside build/runtime/
+              mkdir -p "build/runtime/$suffix"
+              # Copy all artifacts from this platform directory
+              cp -a "$dir/." "build/runtime/$suffix/"
+            done
+
+          else
+            echo "Detected single-platform output under ./out"
+            # Use the primary platform reported by the 'platforms' step (e.g. linux/amd64)
+            plat="$PRIMARY"
+            # Convert it to the normalized suffix
+            suffix="$(map_suffix "$plat")"
+            echo "Collecting artifacts for platform '$plat' → suffix '$suffix'"
+            # Create platform-specific directory
+            mkdir -p "build/runtime/$suffix"
+            # Copy everything from the flat ./out/ export directory
+            cp -a out/. "build/runtime/$suffix/"
+          fi
+
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
+
+      - name: Cosign sign image by digest (keyless OIDC)
+        env:
+          IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          echo "Signing $IMAGE_REF@$DIGEST"
+          cosign sign --yes "$IMAGE_REF@$DIGEST"
+
+      - name: Generate per-platform SPDX SBOMs
+        id: sbom
+        env:
+          IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORMS: ${{ steps.platforms.outputs.platforms }}
+        run: |
+          set -euo pipefail
+          mkdir -p sbom
+          IFS=',' read -ra plats <<< "${PLATFORMS}"
+          for platform in "${plats[@]}"; do
+            plat="$(echo "$platform" | xargs)"
+            [[ -z "$plat" ]] && continue
+            safe="${plat//\//-}"
+            out="sbom/zallet-${safe}.sbom.spdx.json"
+            echo "Generating SBOM for $plat -> $out"
+            syft "$IMAGE_REF@$DIGEST" --platform "$plat" -o spdx-json > "$out"
+            echo "sbom_${safe}=$out" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Attach SBOM attestations
+        env:
+          IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORMS: ${{ steps.platforms.outputs.platforms }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra plats <<< "${PLATFORMS}"
+          for platform in "${plats[@]}"; do
+            plat="$(echo "$platform" | xargs)"
+            [[ -z "$plat" ]] && continue
+            safe="${plat//\//-}"
+            predicate="sbom/zallet-${safe}.sbom.spdx.json"
+            if [[ ! -s "$predicate" ]]; then
+              echo "Missing SBOM artifact for $plat" >&2
+              exit 1
+            fi
+            echo "Attesting SBOM for $plat"
+            cosign attest --yes \
+              --type spdxjson \
+              --predicate "$predicate" \
+              "$IMAGE_REF@$DIGEST"
+          done
+
+      - name: Generate SLSA provenance attestation (GitHub)
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: ${{ env.IMAGE_FULL_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Upload exported binaries artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: ${{ env.OCI_ARTIFACT_NAME }}
+          path: build/runtime
+          if-no-files-found: error
+
+      - name: Emit workflow outputs
+        id: emit
+        run: |
+          echo "image_ref=${IMAGE_FULL_NAME}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${OCI_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "platforms=${RESOLVED_PLATFORMS}" >> "$GITHUB_OUTPUT"
+        env:
+          IMAGE_FULL_NAME: ${{ env.IMAGE_FULL_NAME }}
+          OCI_ARTIFACT_NAME: ${{ env.OCI_ARTIFACT_NAME }}
+          RESOLVED_PLATFORMS: ${{ steps.platforms.outputs.platforms }}
