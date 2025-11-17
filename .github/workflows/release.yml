@@ -1,0 +1,98 @@
+name: Release (Container + Debian)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  set_env:
+    name: Prepare release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.version_step.outputs.tags }}
+      should_run: ${{ steps.version_step.outputs.should_run }}
+      platforms: ${{ steps.version_step.outputs.platforms }}
+      smoke_distro: ${{ steps.version_step.outputs.smoke_distro }}
+      apt_distributions: ${{ steps.version_step.outputs.apt_distributions }}
+    env:
+      VERSION: ${{ github.ref_name }}
+      SHA: ${{ github.sha }}
+      PLATFORM_LIST: linux/amd64 #TODO: linux/amd64,linux/arm64
+      SMOKE_TEST_DISTRO: bullseye
+      APT_DISTRIBUTIONS: bullseye,bookworm # TODO bullseye,bookworm,trixie
+    steps:
+      - id: version_step
+        run: |
+          set -Eeuo pipefail
+          IFS=$'\n\t'
+
+          PLATFORM_STRING="${PLATFORM_LIST//$'\n'/,}"
+          PLATFORM_STRING="${PLATFORM_STRING// /}"
+          if [[ -z "$PLATFORM_STRING" ]]; then
+            echo "Platform list cannot be empty" >&2
+            exit 1
+          fi
+          echo "platforms=${PLATFORM_STRING}" >> "$GITHUB_OUTPUT"
+          echo "smoke_distro=${SMOKE_TEST_DISTRO}" >> "$GITHUB_OUTPUT"
+          APT_LIST_NORMALIZED="${APT_DISTRIBUTIONS//$'\r'/}"
+          APT_LIST_NORMALIZED="${APT_LIST_NORMALIZED//$'\n'/,}"
+          APT_LIST_NORMALIZED="${APT_LIST_NORMALIZED// /}"
+          if [[ -z "$APT_LIST_NORMALIZED" ]]; then
+            echo "APT distribution list cannot be empty" >&2
+            exit 1
+          fi
+          echo "apt_distributions=${APT_LIST_NORMALIZED}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$ ]]; then
+            echo "Valid version: $VERSION"
+            echo "tags=latest,$VERSION,$SHA" >> "$GITHUB_OUTPUT"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning ::Skipping release workflow because ref '$VERSION' is not a semantic version (vX.Y.Z)"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  container:
+    name: Build, attest & push container
+    needs: set_env
+    if: needs.set_env.outputs.should_run == 'true'
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build-and-push-docker-hub.yaml
+    with:
+      image-name: zallet
+      image-tags: ${{ needs.set_env.outputs.tags }}
+      platforms: ${{ needs.set_env.outputs.platforms }}
+      oci-artifact-name: ${{ format('zallet-runtime-oci-{0}', github.run_id) }}
+      dockerhub-namespace: electriccoinco
+    secrets:
+      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+      dockerhub_password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+  binaries_release:
+    name: Build standalone binaries and Debian packages
+    needs: [set_env, container]
+    if: needs.set_env.outputs.should_run == 'true'
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/binaries-and-deb-release.yml
+    with:
+      version: ${{ github.ref_name }}
+      git-sha: ${{ github.sha }}
+      oci-artifact-name: ${{ needs.container.outputs.oci-artifact-name }}
+      source-image-ref: ${{ needs.container.outputs.image-ref }}
+      source-image-digest: ${{ needs.container.outputs.image-digest }}
+      platforms: ${{ needs.container.outputs.platforms }}
+      smoke-distro: ${{ needs.set_env.outputs.smoke_distro }}
+      apt-distributions: ${{ needs.set_env.outputs.apt_distributions }}
+    secrets:
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      GCP_PROJECT_ID_PROD: ${{ secrets.GCP_PROJECT_ID_PROD }}
