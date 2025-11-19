@@ -1,0 +1,522 @@
+name: Build, attest, and sign standalone binaries plus Debian packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Release version tag (e.g. v1.2.3)"
+        required: true
+        type: string
+      git-sha:
+        description: "Source commit SHA"
+        required: true
+        type: string
+      oci-artifact-name:
+        description: "Name of the exported binaries artifact to consume"
+        required: true
+        type: string
+      platforms:
+        description: "Comma- or newline-separated list of linux/ARCH platforms to package"
+        required: false
+        default: linux/amd64
+        type: string
+      smoke-distro:
+        description: "Debian release used for binary/package smoke tests"
+        required: false
+        default: bullseye
+        type: string
+      apt-distributions:
+        description: "Comma- or newline-separated Debian distributions to mirror/publish to apt.z.cash"
+        required: false
+        default: bullseye,bookworm,trixie
+        type: string
+    secrets:
+      GCP_SA_KEY:
+        required: true
+      GCP_PROJECT_ID_PROD:
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag (e.g. v1.2.3)"
+        required: true
+        type: string
+      git-sha:
+        description: "Source commit SHA"
+        required: true
+        type: string
+      oci-artifact-name:
+        description: "Name of the exported binaries artifact to consume"
+        required: true
+        type: string
+      platforms:
+        description: "Comma- or newline-separated list of linux/ARCH platforms to package"
+        required: false
+        default: linux/amd64
+        type: string
+      smoke-distro:
+        description: "Debian release used for binary/package smoke tests"
+        required: false
+        default: bullseye
+        type: string
+      apt-distributions:
+        description: "Comma- or newline-separated Debian distributions to mirror/publish to apt.z.cash"
+        required: false
+        default: bullseye,bookworm,trixie
+        type: string
+
+permissions:
+  contents: read
+
+# Prevent concurrent runs for the same tag from racing (e.g., re-runs)
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  platform_matrix:
+    name: Determine platform matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.compute.outputs.matrix }}
+    steps:
+      - id: compute
+        env:
+          PLATFORM_SPEC: ${{ inputs.platforms || 'linux/amd64' }}
+          MATRIX_DEBIAN: ${{ inputs['smoke-distro'] || 'bullseye' }}
+        run: |
+          set -euo pipefail
+          MATRIX_JSON=$(
+          python3 << 'PY'
+          import json
+          import os
+
+          raw = os.environ.get("PLATFORM_SPEC", "").replace("\r", "")
+          debian_fallback = os.environ.get("MATRIX_DEBIAN", "bullseye").strip() or "bullseye"
+
+          tokens = [tok.strip() for tok in raw.replace("\n", ",").split(",") if tok.strip()]
+          if not tokens:
+              raise SystemExit("Platform list cannot be empty")
+
+          arch_map = {
+              "amd64": {
+                  "arch": "amd64",
+                  "target": "x86_64-unknown-linux-musl",
+                  "suffix": "linux-amd64",
+              },
+              "arm64": {
+                  "arch": "arm64",
+                  "target": "aarch64-unknown-linux-musl",
+                  "suffix": "linux-arm64",
+              },
+          }
+
+          entries = []
+          for platform in tokens:
+              parts = platform.split("/")
+              if len(parts) != 2 or parts[0] != "linux":
+                  raise SystemExit(f"Unsupported platform '{platform}'")
+              arch = parts[1]
+              if arch not in arch_map:
+                  raise SystemExit(f"Unsupported architecture '{arch}' in platform '{platform}'")
+              mapping = arch_map[arch]
+              entries.append({
+                  "platform": platform,
+                  "platform_key": platform.replace("/", "-"),
+                  "arch": mapping["arch"],
+                  "target": mapping["target"],
+                  "binary_suffix": mapping["suffix"],
+                  "debian": debian_fallback,
+              })
+
+          print(json.dumps(entries))
+          PY
+          )
+          echo "matrix=${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
+
+  binaries_deb_release:
+    name: Build and deploy Zallet ${{ matrix.platform_key }} binaries and packages
+    runs-on: ubuntu-latest
+    needs: platform_matrix
+
+    # Required permissions for Release upload + OIDC/Sigstore attestation
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.platform_matrix.outputs.matrix) }}
+
+    env:
+      RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+      RELEASE_SHA: ${{ inputs.git-sha || github.sha }}
+      OCI_ARTIFACT_NAME: ${{ inputs.oci-artifact-name }}
+      SMOKE_TEST_DISTRO: ${{ inputs['smoke-distro'] || 'bullseye' }}
+      APT_DISTRIBUTIONS: ${{ inputs['apt-distributions'] || 'bullseye,bookworm,trixie' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+
+      - name: Install build tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libclang-dev \
+            aptly \
+            make \
+            python3 \
+            lsb-release \
+            apt-transport-https \
+            ca-certificates \
+            gnupg \
+            curl \
+            wget
+
+      - name: Install gcloud SDK
+        run: |
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+            | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+            | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          sudo apt-get update
+          sudo apt-get install -y google-cloud-sdk
+
+      - name: Authenticate with gcloud using process substitution
+        run: |
+          gcloud auth activate-service-account --key-file=<(echo "${{ secrets.GCP_SA_KEY }}" | base64 -d)
+
+      - name: Download encrypted signing key
+        run: gsutil -q cp gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-packages/encrypted_gpg.kms encrypted_gpg.kms
+
+      - name: Decrypt signing key via KMS
+        run: |
+          gcloud kms decrypt \
+            --key gpg \
+            --project ${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --keyring gpg \
+            --location global \
+            --plaintext-file private.pgp \
+            --ciphertext-file encrypted_gpg.kms
+
+      - name: Import GPG keys
+        run: |
+          gpg --import private.pgp
+          wget -qO - https://apt.z.cash/zcash.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Download exported binaries artifact
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: ${{ env.OCI_ARTIFACT_NAME }}
+          path: build/runtime-artifact
+
+      - name: Prepare Debian distribution list
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          python3 <<'PY' > build/apt-dists.txt
+          import os
+
+          raw = os.environ.get("APT_DISTRIBUTIONS", "")
+          parts = [p.strip() for p in raw.replace("\r", "").replace("\n", ",").split(",") if p.strip()]
+          if not parts:
+              raise SystemExit("APT_DISTRIBUTIONS cannot be empty")
+          for part in parts:
+              print(part)
+          PY
+          echo "Will operate on distributions:"
+          cat build/apt-dists.txt
+
+      - name: Stage exported binaries
+        run: |
+          set -euo pipefail
+
+          PLATFORM_KEY="${{ matrix.platform_key }}"
+          ARTIFACT_ROOT="build/runtime-artifact/${PLATFORM_KEY}"
+
+          # Basic sanity check: ensure the exported binary exists at the root (as /zallet in the export image)
+          if [[ ! -s "${ARTIFACT_ROOT}/zallet" ]]; then
+            echo "Missing zallet binary under ${ARTIFACT_ROOT}" >&2
+            find "${ARTIFACT_ROOT}" -maxdepth 5 || true
+            exit 1
+          fi
+
+          # Prepare per-platform staging directory (including /usr/local for rsync)
+          mkdir -p "build/${PLATFORM_KEY}/usr/local"
+
+          # Store the binary in a stable place for later steps, and force executable perms
+          install -m 0755 "${ARTIFACT_ROOT}/zallet" "build/${PLATFORM_KEY}/zallet"
+
+          # Copy the usr/local tree as-is (completions, manpages, docs, etc.)
+          # If there is no usr/local in the artifact, this won't fail because of '|| true'
+          rsync -a "${ARTIFACT_ROOT}/usr/local/" "build/${PLATFORM_KEY}/usr/local/" 2>/dev/null || true
+
+      - name: Smoke test exported binary
+        run: |
+          set -euo pipefail
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "$PWD/build/${{ matrix.platform_key }}/zallet":/usr/local/bin/zallet:ro \
+            "debian:${SMOKE_TEST_DISTRO}-slim" \
+            /usr/local/bin/zallet -h
+
+      - name: Prepare standalone binary artifact
+        env:
+          PLATFORM_KEY: ${{ matrix.platform_key }}
+          BINARY_SUFFIX: ${{ matrix.binary_suffix }}
+        run: |
+          set -euo pipefail
+          mkdir -p standalone
+          cp "build/${PLATFORM_KEY}/zallet" "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
+
+      - name: GPG sign standalone binary
+        env:
+          BINARY_SUFFIX: ${{ matrix.binary_suffix }}
+        run: |
+          gpg -u sysadmin@z.cash --armor --digest-algo SHA256 --detach-sign "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
+
+      - name: Generate SPDX SBOM for standalone binary
+        env:
+          BINARY_SUFFIX: ${{ matrix.binary_suffix }}
+        run: |
+          python3 <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+
+          binary_path = Path(f"standalone/zallet-{os.environ['RELEASE_VERSION']}-{os.environ['BINARY_SUFFIX']}")
+          if not binary_path.exists():
+              raise SystemExit(f"Missing binary at {binary_path}")
+          checksum = hashlib.sha256(binary_path.read_bytes()).hexdigest()
+          output = binary_path.parent / f"{binary_path.name}.sbom.spdx"
+          doc = f"""SPDXVersion: SPDX-2.3
+          DataLicense: CC0-1.0
+          SPDXID: SPDXRef-DOCUMENT
+          DocumentName: {binary_path.name}
+          DocumentNamespace: https://github.com/{os.environ['GITHUB_REPOSITORY']}/sbom/{binary_path.name}-{checksum}
+          Creator: Tool: zallet-ci-spdx-1.0
+          Created: 1970-01-01T00:00:00Z
+          PackageName: {binary_path.name}
+          PackageSPDXID: SPDXRef-Package-{checksum[:12]}
+          PackageDownloadLocation: NOASSERTION
+          FilesAnalyzed: false
+          PackageChecksum: SHA256: {checksum}
+          """
+          output.write_text(doc, encoding="utf-8")
+          PY
+
+      - name: Generate build provenance attestation for binary
+        id: binary-attest
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: standalone/zallet-${{ env.RELEASE_VERSION }}-${{ matrix.binary_suffix }}
+
+      - name: Save binary attestation bundle
+        env:
+          BUNDLE_PATH: ${{ steps.binary-attest.outputs['bundle-path'] }}
+        run: |
+          cp -- "$BUNDLE_PATH" "standalone/zallet-${RELEASE_VERSION}-${{ matrix.binary_suffix }}.intoto.jsonl"
+
+      - name: Seed cargo target tree with the imported artifacts
+        run: |
+          set -euo pipefail
+
+          PLATFORM_KEY="${{ matrix.platform_key }}"
+          TARGET_TRIPLE="${{ matrix.target }}"
+
+          # Root where the export stage stored all Zallet assets under /usr/local/share/zallet
+          ROOT="build/${PLATFORM_KEY}/usr/local/share/zallet"
+
+          TARGET_DIR="target/${TARGET_TRIPLE}/release"
+          COMPLETIONS_DIR="${TARGET_DIR}/completions"
+          MANPAGES_DIR="${TARGET_DIR}/manpages"
+
+          mkdir -p "${TARGET_DIR}" "${COMPLETIONS_DIR}" "${MANPAGES_DIR}"
+
+          # Seed binary for cargo-deb --no-build
+          install -m 0755 "build/${PLATFORM_KEY}/zallet" "${TARGET_DIR}/zallet"
+
+          # Copy the whole completions tree (whatever is inside)
+          cp -a "${ROOT}/completions/." "${COMPLETIONS_DIR}/" 2>/dev/null || true
+
+          # Copy the whole manpages tree
+          cp -a "${ROOT}/manpages/." "${MANPAGES_DIR}/" 2>/dev/null || true
+
+          # Copy Debian copyright metadata
+          install -m 0644 "${ROOT}/debian-copyright" \
+            "${TARGET_DIR}/debian-copyright" 2>/dev/null || true
+
+
+      - name: Build package (cargo deb --no-build)
+        run: |
+          cargo deb --no-build --target ${{ matrix.target }}
+
+      - name: Rename package to not collide across the matrix
+        run: |
+          mv target/debian/zallet_*.deb ./
+          mv zallet_*.deb "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
+
+      - name: Smoke test Debian package
+        run: |
+          set -euo pipefail
+          mkdir -p smoke
+          cp "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb" smoke/package.deb
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "$PWD/smoke":/release:ro \
+            "debian:${SMOKE_TEST_DISTRO}-slim" \
+            bash -euo pipefail -c "\
+              apt-get update >/dev/null && \
+              apt-get install -y --no-install-recommends ca-certificates >/dev/null && \
+              dpkg -i /release/package.deb || apt-get -f install -y >/dev/null && \
+              zallet -h >/dev/null"
+
+      - name: Mirror apt.z.cash
+        run: |
+          set -euo pipefail
+          mapfile -t dists < build/apt-dists.txt
+          for dist in "${dists[@]}"; do
+            mirror="zcash-${dist}"
+            aptly mirror drop -force "$mirror" >/dev/null 2>&1 || true
+            aptly mirror create "$mirror" https://apt.z.cash "$dist"
+            aptly mirror update "$mirror"
+          done
+
+      - name: Create local snapshot of apt.z.cash with zallet
+        run: |
+          set -euo pipefail
+          mapfile -t dists < build/apt-dists.txt
+          for dist in "${dists[@]}"; do
+            mirror="zcash-${dist}"
+            repo="zcash_local_${dist}"
+            snap_mirror="snapshot_zcash_${dist}"
+            snap_local="snapshot_local_${dist}"
+            snap_combined="snapshot_combined_${dist}"
+
+            aptly repo drop -force "$repo" >/dev/null 2>&1 || true
+            aptly repo create --distribution "$dist" --component main "$repo"
+            aptly repo add "$repo" zallet_*.deb
+
+            aptly snapshot drop -force "$snap_mirror" >/dev/null 2>&1 || true
+            aptly snapshot drop -force "$snap_local" >/dev/null 2>&1 || true
+            aptly snapshot drop -force "$snap_combined" >/dev/null 2>&1 || true
+
+            aptly snapshot create "$snap_mirror" from mirror "$mirror"
+            aptly snapshot create "$snap_local" from repo "$repo"
+            aptly snapshot merge "$snap_combined" "$snap_mirror" "$snap_local"
+          done
+
+      - name: Sign & publish snapshot of local apt repository
+        run: |
+          set -euo pipefail
+          export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@z.cash | head -n 2 | grep -v sec)
+          mapfile -t dists < build/apt-dists.txt
+          for dist in "${dists[@]}"; do
+            snap_combined="snapshot_combined_${dist}"
+            aptly publish snapshot -architectures=${{ matrix.arch }} -gpg-key="$key" "$snap_combined"
+          done
+
+      - name: Upload snapshot to the apt.z.cash bucket for approval
+        run: |
+          #test gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
+          #test gsutil -q -m rsync -r $HOME/.aptly/public/dists/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
+
+      - name: GPG sign Debian package
+        run: |
+          gpg -u sysadmin@z.cash --armor --digest-algo SHA256 --detach-sign "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
+
+      - name: Generate SPDX SBOM for Debian package
+        env:
+          PACKAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          python3 <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+
+          package_path = Path(f"zallet_{os.environ['RELEASE_VERSION']}_{os.environ['PACKAGE_ARCH']}.deb")
+          if not package_path.exists():
+              raise SystemExit(f"Missing package at {package_path}")
+          checksum = hashlib.sha256(package_path.read_bytes()).hexdigest()
+          output = package_path.parent / f"{package_path.name}.sbom.spdx"
+          doc = f"""SPDXVersion: SPDX-2.3
+          DataLicense: CC0-1.0
+          SPDXID: SPDXRef-DOCUMENT
+          DocumentName: {package_path.name}
+          DocumentNamespace: https://github.com/{os.environ['GITHUB_REPOSITORY']}/sbom/{package_path.name}-{checksum}
+          Creator: Tool: zallet-ci-spdx-1.0
+          Created: 1970-01-01T00:00:00Z
+          PackageName: {package_path.name}
+          PackageSPDXID: SPDXRef-Package-{checksum[:12]}
+          PackageDownloadLocation: NOASSERTION
+          FilesAnalyzed: false
+          PackageChecksum: SHA256: {checksum}
+          """
+          output.write_text(doc, encoding="utf-8")
+          PY
+
+      - name: Generate build provenance attestation for .deb
+        id: attest
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: zallet_${{ env.RELEASE_VERSION }}_${{ matrix.arch }}.deb
+
+      - name: Save .deb attestation bundle
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs['bundle-path'] }}
+        run: |
+          cp -- "$BUNDLE_PATH" "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb.intoto.jsonl"
+
+      - name: Collect release deliverables
+        run: |
+          set -euo pipefail
+          DEST="release/${{ matrix.platform_key }}"
+          mkdir -p "$DEST"
+          cp standalone/* "$DEST"/
+          cp zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb "$DEST/"
+          cp zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb.asc "$DEST/"
+          cp zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb.sbom.spdx "$DEST/"
+          cp zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb.intoto.jsonl "$DEST/"
+
+      - name: Upload artifacts for publish job
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: release-${{ matrix.platform_key }}
+          path: release/${{ matrix.platform_key }}/*
+
+  publish:
+    name: Create/Update GitHub Release (aggregate)
+    needs: binaries_deb_release
+    if: ${{ github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          path: artifacts
+          merge-multiple: true
+          pattern: release-*
+
+      - name: Publish/Update GitHub Release (incremental)
+        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          generate_release_notes: true
+          append_body: true
+          overwrite_files: true
+          files: artifacts/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
