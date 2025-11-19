@@ -6,9 +6,7 @@ on:
       - "v*.*.*"
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
   set_env:
@@ -62,6 +60,10 @@ jobs:
     name: Build, attest & push container
     needs: set_env
     if: needs.set_env.outputs.should_run == 'true'
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/build-and-push-docker-hub.yaml
     with:
       image_name: zallet-test
@@ -80,6 +82,10 @@ jobs:
     name: Build standalone binaries and Debian packages
     needs: [set_env, container]
     if: needs.set_env.outputs.should_run == 'true'
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/binaries-and-deb-release.yml
     with:
       version: ${{ github.ref_name }}

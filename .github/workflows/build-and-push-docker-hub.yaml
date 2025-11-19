@@ -128,11 +128,107 @@ jobs:
           echo "IMAGE_REPOSITORY=$IMAGE_REPO" >> "$GITHUB_ENV"
           echo "IMAGE_FULL_NAME=${HOST}/${IMAGE_REPO}" >> "$GITHUB_ENV"
 
-      - name: Compute Docker image tags
-        id: set-tags
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate Docker build inputs
+        id: validate-docker-inputs
+        env:
+          RAW_DOCKERFILE: ${{ inputs.dockerfile }}
+          RAW_CONTEXT: ${{ inputs.context }}
+          RAW_BUILD_ARGS: ${{ inputs['build-args'] }}
         run: |
           set -euo pipefail
-          TAGS="${{ inputs.image_tags }}"
+          : "${GITHUB_OUTPUT:?GITHUB_OUTPUT must be set}"
+          : "${RUNNER_TEMP:?RUNNER_TEMP must be set}"
+          WORKSPACE_DIR="${GITHUB_WORKSPACE:-$PWD}"
+          SAFE_ROOT_REAL="${RUNNER_TEMP}/validated-docker-inputs"
+          SAFE_ROOT_LINK="${WORKSPACE_DIR}/.safe-docker-inputs"
+          SAFE_BUILD_CONTEXT_PATH="${SAFE_ROOT_REAL}/context"
+
+          rm -rf "$SAFE_ROOT_REAL" "$SAFE_ROOT_LINK"
+          mkdir -p "$SAFE_ROOT_REAL"
+
+          sanitize_relpath() {
+            local label="$1"
+            local value="$2"
+            if [[ -z "$value" ]]; then
+              echo "$label cannot be empty" >&2
+              exit 1
+            fi
+            if [[ "$value" == /* ]]; then
+              echo "$label must be relative to the repository workspace" >&2
+              exit 1
+            fi
+            if [[ "$value" =~ (^|/)\.\.(\/|$) ]]; then
+              echo "$label cannot contain parent directory traversal: $value" >&2
+              exit 1
+            fi
+            if [[ "$value" =~ [^A-Za-z0-9._/\-] ]]; then
+              echo "$label contains unsupported characters: $value" >&2
+              exit 1
+            fi
+            printf '%s' "$value"
+          }
+
+          prepare_context() {
+            local rel_path
+            rel_path="$(sanitize_relpath "context" "$RAW_CONTEXT")"
+            local abs_path="${WORKSPACE_DIR}/${rel_path}"
+            if [[ ! -d "$abs_path" ]]; then
+              echo "Build context must be a directory: $rel_path" >&2
+              exit 1
+            fi
+            mkdir -p "$SAFE_BUILD_CONTEXT_PATH"
+            if command -v rsync >/dev/null 2>&1; then
+              rsync -a --delete "$abs_path"/ "$SAFE_BUILD_CONTEXT_PATH"/
+            else
+              rm -rf "$SAFE_BUILD_CONTEXT_PATH"
+              mkdir -p "$SAFE_BUILD_CONTEXT_PATH"
+              cp -a "$abs_path"/. "$SAFE_BUILD_CONTEXT_PATH"/
+            fi
+          }
+
+          prepare_dockerfile() {
+            local rel_path
+            rel_path="$(sanitize_relpath "dockerfile" "$RAW_DOCKERFILE")"
+            local abs_path="${WORKSPACE_DIR}/${rel_path}"
+            if [[ ! -f "$abs_path" ]]; then
+              echo "Dockerfile path does not point to a file: $rel_path" >&2
+              exit 1
+            fi
+            cp "$abs_path" "${SAFE_BUILD_CONTEXT_PATH}/Dockerfile"
+          }
+
+          sanitize_build_args() {
+            local value="$1"
+            local filtered="${value//$'\r'/}"
+            if [[ -n "$filtered" && "$filtered" =~ [^A-Za-z0-9._:/=[:space:]-] ]]; then
+              echo "build-args contains unsupported characters" >&2
+              exit 1
+            fi
+            {
+              echo "SAFE_BUILD_ARGS<<EOF"
+              printf '%s\n' "$filtered"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          prepare_context
+          prepare_dockerfile
+          sanitize_build_args "$RAW_BUILD_ARGS"
+
+          ln -sfn "$SAFE_ROOT_REAL" "$SAFE_ROOT_LINK"
+
+      - name: Compute Docker image tags
+        id: set-tags
+        env:
+          INPUT_IMAGE_TAGS: ${{ inputs.image_tags }}
+        run: |
+          set -euo pipefail
+          TAGS="$INPUT_IMAGE_TAGS"
           IFS=',' read -ra ELEMENTS <<< "$TAGS"
           TAGS_FIXED=""
           for ELEMENT in "${ELEMENTS[@]}"; do
@@ -176,11 +272,6 @@ jobs:
           echo "platforms=$NORMALIZED" >> "$GITHUB_OUTPUT"
           echo "primary=$PRIMARY" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          persist-credentials: false
-
       - name: Prepare export directory
         run: mkdir -p build/runtime
 
@@ -201,12 +292,12 @@ jobs:
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
-          file: ${{ inputs.dockerfile }}
-          context: ${{ inputs.context }}
+          file: .safe-docker-inputs/context/Dockerfile
+          context: .safe-docker-inputs/context
           push: true
           platforms: ${{ steps.platforms.outputs.platforms }}
           tags: ${{ env.tags_fixed }}
-          build-args: ${{ inputs['build-args'] }}
+          build-args: ${{ steps.validate-docker-inputs.outputs.SAFE_BUILD_ARGS }}
           sbom: true
           provenance: mode=max
           outputs: |
@@ -216,22 +307,24 @@ jobs:
         id: build_export
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
-          file: ${{ inputs.dockerfile }}
-          context: ${{ inputs.context }}
+          file: .safe-docker-inputs/context/Dockerfile
+          context: .safe-docker-inputs/context
           push: false
           platforms: ${{ steps.platforms.outputs.platforms }}
           tags: ${{ env.tags_fixed }}
-          build-args: ${{ inputs['build-args'] }}
+          build-args: ${{ steps.validate-docker-inputs.outputs.SAFE_BUILD_ARGS }}
           target: export
           outputs: |
             type=local,dest=./out,rewrite-timestamp=true,force-compression=true
 
       - name: Collect runtime artifacts per platform
+        env:
+          PRIMARY_PLATFORM: ${{ steps.platforms.outputs.primary }}
         run: |
           set -euo pipefail
 
           # Primary platform detected by the earlier normalization step
-          PRIMARY="${{ steps.platforms.outputs.primary }}"
+          PRIMARY="$PRIMARY_PLATFORM"
 
           # Map platform → suffix (adjust to match your arch_map if needed)
           map_suffix() {
