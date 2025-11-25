@@ -1,4 +1,42 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
+//! The Zallet sync engine.
+//!
+//! # Design
+//!
+//! Zallet uses `zcash_client_sqlite` for its wallet, which stores its own view of the
+//! chain. The goal of this engine is to keep the wallet's chain view as closely synced to
+//! the network's chain as possible. This means handling environmental events such as:
+//!
+//! - A new block being mined.
+//! - A reorg to a different chain.
+//! - A transaction being added to the mempool.
+//! - A new viewing capability being added to the wallet.
+//! - The wallet starting up after being offline for some time.
+//!
+//! To handle this, we split the chain into two "regions of responsibility":
+//!
+//! - The [`steady_state`] task handles the region of the chain within 100 blocks of the
+//!   network chain tip (corresponding to Zebra's "non-finalized state"). This task is
+//!   started once when Zallet starts, and any error will cause Zallet to shut down.
+//! - The [`recover_history`] task handles the region of the chain farther than 100 blocks
+//!   from the network chain tip (corresponding to Zebra's "finalized state"). This task
+//!   is active whenever there are unscanned blocks in this region.
+//!
+//! Note the boundary between these regions may be less than 100 blocks from the network
+//! chain tip at times, due to how reorgs are implemented in Zebra; the boundary ratchets
+//! forward as the chain tip height increases, but never backwards.
+//!
+//! TODO: Integrate or remove these other notes:
+//!
+//! - Zebra discards the non-finalized chain tip on restart, so Zallet needs to tolerate
+//!   the `ChainView` being up to 100 blocks behind the wallet's view of the chain tip at
+//!   process start.
+
+use std::collections::HashSet;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
+};
+use std::time::Duration;
 
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
@@ -35,7 +73,7 @@ use zebra_rpc::methods::{AddressStrings, GetAddressTxIdsRequest};
 
 use super::{
     TaskHandle,
-    chain_view::ChainView,
+    chain::Chain,
     database::{Database, DbConnection},
 };
 use crate::{
@@ -57,14 +95,20 @@ impl WalletSync {
     pub(crate) async fn spawn(
         config: &ZalletConfig,
         db: Database,
-        chain_view: ChainView,
+        chain: Chain,
     ) -> Result<(TaskHandle, TaskHandle, TaskHandle, TaskHandle), Error> {
         let params = config.consensus.network();
 
         // Ensure the wallet is in a state that the sync tasks can work with.
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
-        let starting_tip = initialize(chain, &params, db_data.as_mut()).await?;
+        let (starting_tip, starting_boundary) =
+            initialize(chain_subscriber, &params, db_data.as_mut()).await?;
+
+        // Manage the boundary between the `steady_state` and `recover_history` tasks with
+        // an atomic.
+        let current_boundary = Arc::new(AtomicU32::new(starting_boundary.into()));
+
         // TODO: Zaino should provide us an API that allows us to be notified when the chain tip
         // changes; here, we produce our own signal via the "mempool stream closing" side effect
         // that occurs in the light client API when the chain tip changes.
@@ -73,31 +117,41 @@ impl WalletSync {
         let req_tip_change_signal_receiver = tip_change_signal_source.clone();
 
         // Spawn the ongoing sync tasks.
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
+        let lower_boundary = current_boundary.clone();
         let steady_state_task = crate::spawn!("Steady state sync", async move {
             steady_state(
-                &chain,
+                &chain_subscriber,
                 &params,
                 db_data.as_mut(),
                 starting_tip,
+                lower_boundary,
                 tip_change_signal_source,
             )
             .await?;
             Ok(())
         });
 
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
+        let upper_boundary = current_boundary.clone();
         let recover_history_task = crate::spawn!("Recover history", async move {
-            recover_history(chain, &params, db_data.as_mut(), 1000).await?;
+            recover_history(
+                chain_subscriber,
+                &params,
+                db_data.as_mut(),
+                upper_boundary,
+                1000,
+            )
+            .await?;
             Ok(())
         });
 
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let poll_transparent_task = crate::spawn!("Poll transparent", async move {
             poll_transparent(
-                chain,
+                chain_subscriber,
                 &params,
                 db_data.as_mut(),
                 poll_tip_change_signal_receiver,
@@ -106,11 +160,11 @@ impl WalletSync {
             Ok(())
         });
 
-        let chain = chain_view.subscribe().await?.inner();
+        let chain_subscriber = chain.subscribe().await?.inner();
         let mut db_data = db.handle().await?;
         let data_requests_task = crate::spawn!("Data requests", async move {
             data_requests(
-                chain,
+                chain_subscriber,
                 &params,
                 db_data.as_mut(),
                 req_tip_change_signal_receiver,
@@ -128,6 +182,10 @@ impl WalletSync {
     }
 }
 
+fn update_boundary(current_boundary: BlockHeight, tip_height: BlockHeight) -> BlockHeight {
+    current_boundary.max(tip_height - 100)
+}
+
 /// Prepares the wallet state for syncing.
 ///
 /// Returns the boundary block between [`steady_state`] and [`recover_history`] syncing.
@@ -136,7 +194,7 @@ async fn initialize(
     chain: FetchServiceSubscriber,
     params: &Network,
     db_data: &mut DbConnection,
-) -> Result<ChainBlock, SyncError> {
+) -> Result<(ChainBlock, BlockHeight), SyncError> {
     info!("Initializing wallet for syncing");
 
     // Notify the wallet of the current subtree roots.
@@ -147,20 +205,39 @@ async fn initialize(
     info!("Latest block height is {}", current_tip.height);
     db_data.update_chain_tip(current_tip.height)?;
 
+    // Set the starting boundary between the `steady_state` and `recover_history` tasks.
+    let starting_boundary = update_boundary(BlockHeight::from_u32(0), current_tip.height);
+
     // TODO: Remove this once we've made `zcash_client_sqlite` changes to support scanning
     // regular blocks.
     let db_cache = cache::MemoryCache::new();
 
-    // Detect reorgs that might have occurred while the wallet was offline, by explicitly
-    // syncing any `ScanPriority::Verify` ranges. This ensures that `recover_history` only
-    // operates over the finalized chain state and doesn't attempt to handle reorgs (which
-    // are the responsibility of `steady_state`).
+    // Perform initial scanning prior to firing off the main tasks:
+    // - Detect reorgs that might have occurred while the wallet was offline, by
+    //   explicitly syncing any `ScanPriority::Verify` ranges.
+    // - Ensure that the `steady_state` task starts from the wallet's view of the chain
+    //   tip, by explicitly syncing any unscanned ranges from the boundary onward.
+    //
+    // This ensures that the `recover_history` task only operates over the finalized chain
+    // state and doesn't attempt to handle reorgs (which are the responsibility of the
+    // `steady_state` task).
     loop {
-        // If there is a range of blocks that needs to be verified, it will always be
-        // returned as the first element of the vector of suggested ranges.
-        let scan_range = match db_data.suggest_scan_ranges()?.into_iter().next() {
-            Some(r) if r.priority() == ScanPriority::Verify => r,
-            _ => break,
+        let scan_range = match db_data
+            .suggest_scan_ranges()?
+            .into_iter()
+            .filter_map(|r| {
+                if r.priority() == ScanPriority::Verify {
+                    Some(r)
+                } else if r.priority() >= ScanPriority::Historic {
+                    r.truncate_start(starting_boundary)
+                } else {
+                    None
+                }
+            })
+            .next()
+        {
+            Some(r) => r,
+            None => break,
         };
 
         db_cache
@@ -197,10 +274,10 @@ async fn initialize(
     }
 
     info!(
-        "Initial boundary between recovery and steady-state sync is {} {}",
-        current_tip.height, current_tip.hash
+        "Initial boundary between recovery and steady-state sync is {}",
+        starting_boundary,
     );
-    Ok(current_tip)
+    Ok((current_tip, starting_boundary))
 }
 
 /// Keeps the wallet state up-to-date with the chain tip, and handles the mempool.
@@ -210,6 +287,7 @@ async fn steady_state(
     params: &Network,
     db_data: &mut DbConnection,
     mut prev_tip: ChainBlock,
+    lower_boundary: Arc<AtomicU32>,
     tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
     info!("Steady-state sync task started");
@@ -221,6 +299,14 @@ async fn steady_state(
 
     loop {
         info!("New chain tip: {} {}", current_tip.height, current_tip.hash);
+        lower_boundary
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current_boundary| {
+                Some(
+                    update_boundary(BlockHeight::from_u32(current_boundary), current_tip.height)
+                        .into(),
+                )
+            })
+            .expect("closure always returns Some");
         tip_change_signal.notify_one();
 
         // Figure out the diff between the previous and current chain tips.
@@ -330,6 +416,7 @@ async fn recover_history(
     chain: FetchServiceSubscriber,
     params: &Network,
     db_data: &mut DbConnection,
+    upper_boundary: Arc<AtomicU32>,
     batch_size: u32,
 ) -> Result<(), SyncError> {
     info!("History recovery sync task started");
@@ -346,7 +433,13 @@ async fn recover_history(
     loop {
         // Get the next suggested scan range. We drop the rest because we re-fetch the
         // entire list regularly.
-        let scan_range = match db_data.suggest_scan_ranges()?.into_iter().next() {
+        let upper_boundary = BlockHeight::from_u32(upper_boundary.load(Ordering::Acquire));
+        let scan_range = match db_data
+            .suggest_scan_ranges()?
+            .into_iter()
+            .filter_map(|r| r.truncate_end(upper_boundary))
+            .next()
+        {
             Some(r) => r,
             None => {
                 // Wait for scan ranges to become available.
