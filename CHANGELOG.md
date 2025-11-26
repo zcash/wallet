@@ -8,6 +8,10 @@ be considered breaking changes.
 
 ## [0.1.0-alpha.3] - PLANNED
 
+### Fixed
+- `zallet rpc` can communicate with Zallet again, by using a username and
+  password from `zallet.toml` if any are present.
+
 ## [0.1.0-alpha.2] - 2025-10-31
 
 ### Added
