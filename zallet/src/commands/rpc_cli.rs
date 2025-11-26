@@ -6,6 +6,7 @@ use std::time::Duration;
 use abscissa_core::Runnable;
 use jsonrpsee::core::{client::ClientT, params::ArrayParams};
 use jsonrpsee_http_client::HttpClientBuilder;
+use secrecy::{ExposeSecret, SecretString};
 
 use crate::{cli::RpcCliCmd, commands::AsyncRunnable, error::Error, prelude::*};
 
@@ -42,19 +43,31 @@ impl AsyncRunnable for RpcCliCmd {
             None => DEFAULT_HTTP_CLIENT_TIMEOUT,
         });
 
+        // Find a password we can use. If none are configured, we assume none is needed.
+        let auth_prefix = config
+            .rpc
+            .auth
+            .iter()
+            .find_map(|auth| {
+                auth.password
+                    .as_ref()
+                    .map(|pw| SecretString::new(format!("{}:{}@", auth.user, pw.expose_secret())))
+            })
+            .unwrap_or_else(|| SecretString::new(String::new()));
+
         // Connect to the Zallet wallet.
         let client = match config.rpc.bind.as_slice() {
             &[] => Err(RpcCliError::WalletHasNoRpcServer),
             &[bind] => HttpClientBuilder::default()
                 .request_timeout(timeout)
-                .build(format!("http://{bind}"))
+                .build(format!("http://{}{bind}", auth_prefix.expose_secret()))
                 .map_err(|_| RpcCliError::FailedToConnect),
             addrs => addrs
                 .iter()
                 .find_map(|bind| {
                     HttpClientBuilder::default()
                         .request_timeout(timeout)
-                        .build(format!("http://{bind}"))
+                        .build(format!("http://{}{bind}", auth_prefix.expose_secret()))
                         .ok()
                 })
                 .ok_or(RpcCliError::FailedToConnect),
