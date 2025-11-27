@@ -60,6 +60,7 @@ use zcash_client_backend::{
     scanning::ScanError,
     wallet::WalletTransparentOutput,
 };
+use zcash_encoding::ReverseHex;
 use zcash_keys::encoding::AddressCodec;
 use zcash_primitives::transaction::Transaction;
 use zcash_protocol::{
@@ -76,9 +77,7 @@ use super::{
     chain::Chain,
     database::{Database, DbConnection},
 };
-use crate::{
-    components::json_rpc::utils::parse_txid, config::ZalletConfig, error::Error, network::Network,
-};
+use crate::{config::ZalletConfig, error::Error, network::Network};
 
 mod cache;
 
@@ -742,8 +741,10 @@ async fn data_requests(
                     };
 
                     for txid_str in chain.get_address_tx_ids(request).await? {
-                        let txid = parse_txid(&txid_str)
-                            .expect("TODO: Zaino's API should have caught this error for us");
+                        let txid = TxId::from_bytes(
+                            ReverseHex::decode(&txid_str)
+                                .expect("TODO: Zaino's API should have caught this error for us"),
+                        );
 
                         let tx = match chain.get_raw_transaction(txid_str, Some(1)).await? {
                             // TODO: Zaino should have a Rust API for fetching tx details,
