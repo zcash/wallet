@@ -56,8 +56,13 @@ mod z_send_many;
 /// The general JSON-RPC interface, containing the methods provided in all Zallet builds.
 #[rpc(server)]
 pub(crate) trait Rpc {
+    /// Returns the list of accounts created with `z_getnewaccount` or `z_recoveraccounts`.
+    ///
+    /// # Arguments
+    /// - `include_addresses` (bool, optional, default=true) Also include the addresses
+    ///   known to the wallet for this account.
     #[method(name = "z_listaccounts")]
-    async fn list_accounts(&self) -> list_accounts::Response;
+    async fn list_accounts(&self, include_addresses: Option<bool>) -> list_accounts::Response;
 
     /// For the given account, derives a Unified Address in accordance with the remaining
     /// arguments:
@@ -538,8 +543,8 @@ impl WalletRpcImpl {
 
 #[async_trait]
 impl RpcServer for RpcImpl {
-    async fn list_accounts(&self) -> list_accounts::Response {
-        list_accounts::call(self.wallet().await?.as_ref())
+    async fn list_accounts(&self, include_addresses: Option<bool>) -> list_accounts::Response {
+        list_accounts::call(self.wallet().await?.as_ref(), include_addresses)
     }
 
     async fn get_address_for_account(

@@ -8,6 +8,10 @@ be considered breaking changes.
 
 ## [0.1.0-alpha.3] - PLANNED
 
+### Changed
+- Finished implementing the following stubbed-out JSON-RPC methods:
+  - `z_listaccounts`
+
 ### Fixed
 - `zallet rpc` can communicate with Zallet again, by using a username and
   password from `zallet.toml` if any are present.
