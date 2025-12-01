@@ -1,3 +1,4 @@
+//! Contains general and wallet-specific RPC trait methods.
 use async_trait::async_trait;
 use jsonrpsee::{
     core::{JsonValue, RpcResult},
@@ -52,6 +53,8 @@ mod view_transaction;
 mod z_get_total_balance;
 #[cfg(zallet_build = "wallet")]
 mod z_send_many;
+#[cfg(zallet_build = "wallet")]
+mod z_shieldcoinbase;
 
 /// The general JSON-RPC interface, containing the methods provided in all Zallet builds.
 #[rpc(server)]
@@ -457,6 +460,38 @@ pub(crate) trait WalletRpc {
         fee: Option<JsonValue>,
         privacy_policy: Option<String>,
     ) -> z_send_many::Response;
+
+    /// Shields coinbase UTXOs by sending them from a transparent address (or all
+    /// wallet taddrs) to a shielded address.
+    ///
+    /// This is an asynchronous operation; it returns an operation ID that can
+    /// be used with `z_getoperationstatus` or `z_getoperationresult`.
+    ///                                                                                                                     
+    /// # Arguments                                                                                                         
+    /// - `fromaddress` (string, required): The transparent address to sweep
+    ///   from, or `"*"` to sweep from all wallet taddrs.
+    /// - `toaddress` (string, required): The shielded address to receive the funds.                                        
+    /// - `fee` (numeric, optional): The fee amount in ZEC to attach to this
+    ///   transaction. If not provided, the default ZIP-317 fee is used.                                                                                                            
+    /// - `limit` (numeric, optional): Limit on the maximum number of UTXOs to
+    ///   shield. Set to 0 to use as many as will fit in the transaction.                                                                                                         
+    /// - `memo` (string, optional): Encoded as hex. This will be stored in the
+    ///   memo field of the new note.
+    /// - `privacy_policy` (string, optional): Policy for what information
+    ///   leakage is acceptable.                           
+    ///                                                                                                                     
+    /// # Returns                                                                                                           
+    /// - An operation ID for tracking the async operation.                                                                 
+    #[method(name = "z_shieldcoinbase")]
+    async fn z_shieldcoinbase(
+        &self,
+        fromaddress: String,
+        toaddress: String,
+        fee: Option<JsonValue>,
+        limit: Option<u32>,
+        memo: Option<String>,
+        privacy_policy: Option<String>,
+    ) -> z_shieldcoinbase::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -465,7 +500,6 @@ pub(crate) struct RpcImpl {
     keystore: KeyStore,
     chain: Chain,
 }
-
 impl RpcImpl {
     /// Creates a new instance of the general RPC handler.
     pub(crate) fn new(
