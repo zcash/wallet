@@ -773,4 +773,31 @@ impl WalletRpcServer for WalletRpcImpl {
             )
             .await)
     }
+
+    async fn z_shieldcoinbase(
+        &self,
+        fromaddress: String,
+        toaddress: String,
+        fee: Option<JsonValue>,
+        limit: Option<u32>,
+        memo: Option<String>,
+        privacy_policy: Option<String>,
+    ) -> z_shieldcoinbase::Response {
+        Ok(self
+            .start_async(
+                z_shieldcoinbase::call(
+                    self.wallet().await?,
+                    self.keystore.clone(),
+                    self.chain().await?,
+                    fromaddress,
+                    toaddress,
+                    fee,
+                    limit,
+                    memo,
+                    privacy_policy,
+                )
+                .await?,
+            )
+            .await)
+    }
 }
