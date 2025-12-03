@@ -36,6 +36,12 @@ pub(crate) struct Account {
     ///
     /// Omitted if the account has no known derivation information.
     #[serde(skip_serializing_if = "Option::is_none")]
+    zip32_account_index: Option<u32>,
+
+    /// The account's ZIP 32 account index.
+    ///
+    /// Omitted if the account has no known derivation information.
+    #[serde(skip_serializing_if = "Option::is_none")]
     account: Option<u32>,
 
     /// The addresses known to the wallet for this account.
@@ -85,11 +91,12 @@ pub(crate) fn call(wallet: &DbConnection, include_addresses: Option<bool>) -> Re
                 wallet,
                 account_id,
                 include_addresses,
-                |name, seedfp, account, addresses| Account {
+                |name, seedfp, zip32_account_index, addresses| Account {
                     account_uuid: account_id.expose_uuid().to_string(),
                     name,
                     seedfp,
-                    account,
+                    zip32_account_index,
+                    account: zip32_account_index,
                     addresses,
                 },
             )

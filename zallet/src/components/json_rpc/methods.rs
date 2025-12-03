@@ -18,6 +18,7 @@ use {
     tokio::sync::RwLock,
 };
 
+mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
 mod get_new_account;
@@ -63,6 +64,13 @@ pub(crate) trait Rpc {
     ///   known to the wallet for this account.
     #[method(name = "z_listaccounts")]
     async fn list_accounts(&self, include_addresses: Option<bool>) -> list_accounts::Response;
+
+    /// Returns details about the given account.
+    ///
+    /// # Arguments
+    /// - `account_uuid` (string, required): The UUID of the wallet account.
+    #[method(name = "z_getaccount")]
+    async fn get_accounts(&self, account_uuid: String) -> get_account::Response;
 
     /// For the given account, derives a Unified Address in accordance with the remaining
     /// arguments:
@@ -545,6 +553,10 @@ impl WalletRpcImpl {
 impl RpcServer for RpcImpl {
     async fn list_accounts(&self, include_addresses: Option<bool>) -> list_accounts::Response {
         list_accounts::call(self.wallet().await?.as_ref(), include_addresses)
+    }
+
+    async fn get_accounts(&self, account_uuid: String) -> get_account::Response {
+        get_account::call(self.wallet().await?.as_ref(), account_uuid)
     }
 
     async fn get_address_for_account(
