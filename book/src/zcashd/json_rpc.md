@@ -10,8 +10,21 @@ wallet architecture. This page documents the semantic differences between the
 
 ### `z_listaccounts`
 
+Changes to parameters:
+- New `include_addresses` optional parameter.
+
 Changes to response:
 - New `account_uuid` field.
+- New `name` field.
+- New `seedfp` field, if the account has a known derivation.
+- The `account` field is now only present if the account has a known derivation.
+- Changes to the struct within the `addresses` field:
+  - All addresses known to the wallet within the account are now included.
+  - The `diversifier_index` field is now only present if the address has known
+    derivation information.
+  - The `ua` field is now only present for Unified Addresses.
+  - New `sapling` field if the address is a Sapling address.
+  - New `transparent` field if the address is a transparent address.
 
 ### `z_getnewaccount`
 
