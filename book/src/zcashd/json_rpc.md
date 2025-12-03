@@ -17,6 +17,7 @@ Changes to response:
 - New `account_uuid` field.
 - New `name` field.
 - New `seedfp` field, if the account has a known derivation.
+- New `zip32_account_index` field, if the account has a known derivation.
 - The `account` field is now only present if the account has a known derivation.
 - Changes to the struct within the `addresses` field:
   - All addresses known to the wallet within the account are now included.
