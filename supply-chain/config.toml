@@ -737,10 +737,6 @@ criteria = "safe-to-deploy"
 version = "0.1.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.halo2_proofs]]
-version = "0.3.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.hashbrown]]
 version = "0.14.5"
 criteria = "safe-to-deploy"
