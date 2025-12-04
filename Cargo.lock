@@ -3989,6 +3989,7 @@ checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
 dependencies = [
  "phf_macros 0.12.1",
  "phf_shared 0.12.1",
+ "serde",
 ]
 
 [[package]]
@@ -7432,7 +7433,7 @@ dependencies = [
  "nix",
  "once_cell",
  "orchard 0.11.0",
- "phf 0.11.3",
+ "phf 0.12.1",
  "quote",
  "rand 0.8.5",
  "regex",

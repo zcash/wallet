@@ -26,7 +26,7 @@ shadow-rs = { version = "1.2", default-features = false }
 
 # Documentation
 documented = "0.9"
-phf = { version = "0.11", features = ["macros"] }
+phf = { version = "0.12", features = ["macros"] }
 quote = "1"
 syn = "2"
 
