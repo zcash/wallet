@@ -59,13 +59,29 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
       --bin zallet \
       --target ${TARGET_ARCH} \
       --features rpc-cli,zcashd-import \
-      && install -D -m 0755 /usr/src/app/target/${TARGET_ARCH}/release/zallet /usr/local/bin/zallet
-
+    && OUT="/usr/src/app/target/${TARGET_ARCH}/release" \
+    \
+    # Install main binary
+    && install -D -m 0755 \
+         "${OUT}/zallet" \
+         /usr/local/bin/zallet \
+    \
+    # Copy whole trees for completions, manpages and metadata
+    && install -d /usr/local/share/zallet \
+    && cp -a "${OUT}/completions" /usr/local/share/zallet/completions \
+    && cp -a "${OUT}/manpages"  /usr/local/share/zallet/manpages \
+    && install -D -m 0644 \
+         "${OUT}/debian-copyright" \
+         /usr/local/share/zallet/debian-copyright
 
 # --- Stage 2: layer for local binary extraction ---
 FROM scratch AS export
 
+# Binary at the root for easy extraction
 COPY --from=builder /usr/local/bin/zallet /zallet
+
+# Export the whole zallet share tree (completions, manpages, metadata, etc.)
+COPY --from=builder /usr/local/share/zallet /usr/local/share/zallet
 
 # --- Stage 3: Minimal runtime with stagex ---
 # `stagex/core-user-runtime` sets the user to non-root by default
