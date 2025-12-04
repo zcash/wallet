@@ -22,15 +22,6 @@ url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 [imports.zcash]
 url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
 
-[policy.abscissa_core]
-audit-as-crates-io = true
-
-[policy.abscissa_derive]
-audit-as-crates-io = true
-
-[policy.abscissa_tokio]
-audit-as-crates-io = true
-
 [policy.age]
 audit-as-crates-io = true
 
@@ -99,15 +90,11 @@ audit-as-crates-io = true
 [policy.zip321]
 
 [[exemptions.abscissa_core]]
-version = "0.8.2@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
+version = "0.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.abscissa_derive]]
-version = "0.8.2@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
-criteria = "safe-to-deploy"
-
-[[exemptions.abscissa_tokio]]
-version = "0.8.0@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
+version = "0.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.addr2line]]
@@ -683,7 +670,7 @@ version = "0.6.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.fs-err]]
-version = "2.11.0"
+version = "3.2.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.funty]]
@@ -1724,6 +1711,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.toml]]
 version = "0.8.19"
+criteria = "safe-to-deploy"
+
+[[exemptions.toml]]
+version = "0.9.8"
 criteria = "safe-to-deploy"
 
 [[exemptions.toml_datetime]]

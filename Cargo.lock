@@ -4,8 +4,9 @@ version = 4
 
 [[package]]
 name = "abscissa_core"
-version = "0.8.2"
-source = "git+https://github.com/iqlusioninc/abscissa.git?rev=fdb60678fb3a883decf63d6d3ebc512abd20406f#fdb60678fb3a883decf63d6d3ebc512abd20406f"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cd87587023faadfc7f6e93b1ad45074b72f1f6d22c1e0f19333a952446ab1c1"
 dependencies = [
  "abscissa_derive",
  "arc-swap",
@@ -20,7 +21,7 @@ dependencies = [
  "semver",
  "serde",
  "termcolor",
- "toml 0.8.20",
+ "toml 0.9.8",
  "tracing",
  "tracing-log",
  "tracing-subscriber",
@@ -29,20 +30,22 @@ dependencies = [
 
 [[package]]
 name = "abscissa_derive"
-version = "0.8.2"
-source = "git+https://github.com/iqlusioninc/abscissa.git?rev=fdb60678fb3a883decf63d6d3ebc512abd20406f#fdb60678fb3a883decf63d6d3ebc512abd20406f"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3da54f552dccbdec19736d713720dd88af932a82eb02ca0f22410de5d31ad726"
 dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
- "synstructure 0.12.6",
+ "syn 2.0.108",
+ "synstructure",
 ]
 
 [[package]]
 name = "abscissa_tokio"
-version = "0.8.0"
-source = "git+https://github.com/iqlusioninc/abscissa.git?rev=fdb60678fb3a883decf63d6d3ebc512abd20406f#fdb60678fb3a883decf63d6d3ebc512abd20406f"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06466251d77b85dae0e3012ca60bc0e2d856b2aa03446f264e9ab9fe838e891b"
 dependencies = [
  "abscissa_core",
  "tokio",
@@ -2073,9 +2076,9 @@ dependencies = [
 
 [[package]]
 name = "fs-err"
-version = "2.11.0"
+version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88a41f105fe1d5b6b34b2055e3dc59bb79b46b48b2040b9e6c7b4b5de097aa41"
+checksum = "62d91fd049c123429b018c47887d3f75a265540dd3c30ba9cb7bae9197edb03a"
 dependencies = [
  "autocfg",
 ]
@@ -5853,18 +5856,6 @@ dependencies = [
 
 [[package]]
 name = "synstructure"
-version = "0.12.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f36bdaa60a83aca3921b5259d5400cbf5e90fc51931376a9bd4a0eb79aa7210f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
- "unicode-xid",
-]
-
-[[package]]
-name = "synstructure"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "728a70f3dbaf5bab7f0c4b1ac8d7ae5ea60a4b5549c8a5914361c99147a709d2"
@@ -6114,6 +6105,20 @@ dependencies = [
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.8",
  "toml_edit 0.22.24",
+]
+
+[[package]]
+name = "toml"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0dc8b1fb61449e27716ec0e1bdf0f6b8f3e8f6b05391e8497b8b6d7804ea6d8"
+dependencies = [
+ "serde_core",
+ "serde_spanned 1.0.3",
+ "toml_datetime 0.7.3",
+ "toml_parser",
+ "toml_writer",
+ "winnow",
 ]
 
 [[package]]
@@ -7291,7 +7296,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.108",
- "synstructure 0.13.2",
+ "synstructure",
 ]
 
 [[package]]
@@ -8364,7 +8369,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.108",
- "synstructure 0.13.2",
+ "synstructure",
 ]
 
 [[package]]
