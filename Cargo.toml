@@ -96,7 +96,7 @@ tempfile = "3"
 trycmd = "0.15"
 
 # Tracing
-console-subscriber = "0.4"
+console-subscriber = "0.5"
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-log = "0.2"
 tracing-subscriber = "0.3"

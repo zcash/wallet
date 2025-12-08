@@ -197,6 +197,13 @@ user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
 
+[[publisher.windows-sys]]
+version = "0.61.2"
+when = "2025-10-06"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
 [[publisher.windows-targets]]
 version = "0.52.6"
 when = "2024-07-03"
@@ -948,6 +955,12 @@ This crate, while it implements collections, does so without `std::*` APIs and
 without `unsafe`. Skimming the crate everything looks reasonable and what one
 would expect from idiomatic safe collections in Rust.
 """
+
+[[audits.bytecode-alliance.audits.tokio-macros]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "2.5.0 -> 2.6.0"
+notes = "Rust-related changes as well as minor new features, all reasonable."
 
 [[audits.bytecode-alliance.audits.tracing-attributes]]
 who = "Alex Crichton <alex@alexcrichton.com>"
