@@ -1946,15 +1946,15 @@ version = "2.5.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-fetch]]
-version = "0.1.2@git:aa40900e3311896941953dd2425eb3ab0553e651"
+version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-proto]]
-version = "0.1.2@git:aa40900e3311896941953dd2425eb3ab0553e651"
+version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-state]]
-version = "0.1.2@git:aa40900e3311896941953dd2425eb3ab0553e651"
+version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_encoding]]

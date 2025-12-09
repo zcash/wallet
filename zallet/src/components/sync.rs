@@ -31,6 +31,8 @@
 //!   the `ChainView` being up to 100 blocks behind the wallet's view of the chain tip at
 //!   process start.
 
+#![allow(deprecated)] // For zaino
+
 use std::collections::HashSet;
 use std::sync::{
     Arc,

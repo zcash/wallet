@@ -1,3 +1,5 @@
+#![allow(deprecated)] // For zaino
+
 use documented::Documented;
 use jsonrpsee::core::RpcResult;
 use sapling::bundle::{OutputDescription, SpendDescription};

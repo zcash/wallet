@@ -7313,7 +7313,7 @@ dependencies = [
 [[package]]
 name = "zaino-common"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=aa40900e3311896941953dd2425eb3ab0553e651#aa40900e3311896941953dd2425eb3ab0553e651"
+source = "git+https://github.com/zingolabs/zaino.git?rev=15b81f110349b34090341b3ab8b7cd58c7b9aeef#15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
@@ -7323,7 +7323,7 @@ dependencies = [
 [[package]]
 name = "zaino-fetch"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=aa40900e3311896941953dd2425eb3ab0553e651#aa40900e3311896941953dd2425eb3ab0553e651"
+source = "git+https://github.com/zingolabs/zaino.git?rev=15b81f110349b34090341b3ab8b7cd58c7b9aeef#15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 dependencies = [
  "base64 0.22.1",
  "byteorder",
@@ -7350,7 +7350,7 @@ dependencies = [
 [[package]]
 name = "zaino-proto"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=aa40900e3311896941953dd2425eb3ab0553e651#aa40900e3311896941953dd2425eb3ab0553e651"
+source = "git+https://github.com/zingolabs/zaino.git?rev=15b81f110349b34090341b3ab8b7cd58c7b9aeef#15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 dependencies = [
  "prost 0.13.5",
  "tonic 0.12.3",
@@ -7361,7 +7361,7 @@ dependencies = [
 [[package]]
 name = "zaino-state"
 version = "0.1.2"
-source = "git+https://github.com/zingolabs/zaino.git?rev=aa40900e3311896941953dd2425eb3ab0553e651#aa40900e3311896941953dd2425eb3ab0553e651"
+source = "git+https://github.com/zingolabs/zaino.git?rev=15b81f110349b34090341b3ab8b7cd58c7b9aeef#15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 dependencies = [
  "arc-swap",
  "async-trait",
