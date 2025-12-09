@@ -1,3 +1,5 @@
+#![allow(deprecated)] // For zaino
+
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,

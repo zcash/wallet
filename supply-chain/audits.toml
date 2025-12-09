@@ -17,6 +17,17 @@ who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.8.0 -> 0.8.2"
 
+[[audits.abscissa_tokio]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+version = "0.9.0"
+notes = """
+This crate uses `#![forbid(unsafe_code)]`, so there are no `unsafe` blocks. The code is a
+straightforward combination of `abscissa_core` and `tokio`, with very little of its own
+logic. No ambient capabilities are used directly, and the `tokio` runtime APIs appear to
+be correctly used.
+"""
+
 [[audits.aho-corasick]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
@@ -134,6 +145,18 @@ notes = "Does not generate Rust code. Changes to generated roff output look plau
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "1.0.3 -> 1.0.4"
+
+[[audits.console-api]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.8.1 -> 0.9.0"
+notes = "Only changes are to generated code as a result of dependency and protobuf updates."
+
+[[audits.console-subscriber]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.4.1 -> 0.5.0"
+notes = "Adds support for Vsock addresses. Usages of `tokio-vsock` for I/O look correct."
 
 [[audits.const_format]]
 who = "Jack Grigg <jack@electriccoin.co>"
@@ -615,6 +638,12 @@ criteria = "safe-to-deploy"
 user-id = 6289 # Jack Grigg (str4d)
 start = "2021-09-22"
 end = "2026-03-04"
+
+[[trusted.halo2_proofs]]
+criteria = "safe-to-deploy"
+user-id = 6289 # Jack Grigg (str4d)
+start = "2022-01-20"
+end = "2026-12-04"
 
 [[trusted.incrementalmerkletree]]
 criteria = "safe-to-deploy"

@@ -22,15 +22,6 @@ url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 [imports.zcash]
 url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
 
-[policy.abscissa_core]
-audit-as-crates-io = true
-
-[policy.abscissa_derive]
-audit-as-crates-io = true
-
-[policy.abscissa_tokio]
-audit-as-crates-io = true
-
 [policy.age]
 audit-as-crates-io = true
 
@@ -99,15 +90,11 @@ audit-as-crates-io = true
 [policy.zip321]
 
 [[exemptions.abscissa_core]]
-version = "0.8.2@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
+version = "0.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.abscissa_derive]]
-version = "0.8.2@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
-criteria = "safe-to-deploy"
-
-[[exemptions.abscissa_tokio]]
-version = "0.8.0@git:fdb60678fb3a883decf63d6d3ebc512abd20406f"
+version = "0.9.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.addr2line]]
@@ -683,7 +670,7 @@ version = "0.6.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.fs-err]]
-version = "2.11.0"
+version = "3.2.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.funty]]
@@ -748,10 +735,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.halo2_poseidon]]
 version = "0.1.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.halo2_proofs]]
-version = "0.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.hashbrown]]
@@ -1703,7 +1686,7 @@ version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.tokio]]
-version = "1.44.2"
+version = "1.48.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.tokio-macros]]
@@ -1724,6 +1707,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.toml]]
 version = "0.8.19"
+criteria = "safe-to-deploy"
+
+[[exemptions.toml]]
+version = "0.9.8"
 criteria = "safe-to-deploy"
 
 [[exemptions.toml_datetime]]
@@ -1959,15 +1946,15 @@ version = "2.5.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-fetch]]
-version = "0.1.2@git:aa40900e3311896941953dd2425eb3ab0553e651"
+version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-proto]]
-version = "0.1.2@git:aa40900e3311896941953dd2425eb3ab0553e651"
+version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-state]]
-version = "0.1.2@git:aa40900e3311896941953dd2425eb3ab0553e651"
+version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_encoding]]

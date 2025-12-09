@@ -1,3 +1,5 @@
+#![allow(deprecated)] // For zaino
+
 use std::fmt;
 use std::sync::Arc;
 

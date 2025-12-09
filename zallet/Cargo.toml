@@ -176,25 +176,25 @@ jsonrpsee-http-client = { workspace = true, optional = true }
 
 [build-dependencies]
 clap = { workspace = true, features = ["string", "unstable-styles"] }
-clap_complete = "4"
-clap_mangen = "0.2"
-embed-licensing = "0.3"
-flate2 = "1"
+clap_complete.workspace = true
+clap_mangen.workspace = true
+embed-licensing.workspace = true
+flate2.workspace = true
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
-quote = "1"
+quote.workspace = true
 rust-embed.workspace = true
 shadow-rs = { workspace = true, default-features = true }
-spdx = "0.10"
-syn = "2"
+spdx.workspace = true
+syn.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
 abscissa_core = { workspace = true, features = ["testing"] }
-once_cell = "1.2"
-regex = "1.4"
-tempfile = "3"
-trycmd = "0.15"
+once_cell.workspace = true
+regex.workspace = true
+tempfile.workspace = true
+trycmd.workspace = true
 
 [features]
 ## `zallet rpc` CLI support
