@@ -17,8 +17,7 @@ on:
         type: string
       platforms:
         description: "Comma- or newline-separated list of linux/ARCH platforms to package"
-        required: false
-        default: linux/amd64
+        required: true
         type: string
       smoke-distro:
         description: "Debian release used for binary/package smoke tests"
