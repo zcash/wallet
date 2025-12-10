@@ -3712,6 +3712,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
+name = "openrpsee"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faeb689cfe5fad5e7285f87b00c903366b307d97f41de53e894ec608968ca3a1"
+dependencies = [
+ "documented",
+ "jsonrpsee",
+ "quote",
+ "schemars",
+ "serde",
+ "serde_json",
+ "syn 2.0.108",
+]
+
+[[package]]
 name = "optfield"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7534,6 +7549,7 @@ dependencies = [
  "known-folders",
  "nix",
  "once_cell",
+ "openrpsee",
  "orchard 0.12.0",
  "phf 0.12.1",
  "quote",
