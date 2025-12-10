@@ -7282,6 +7282,7 @@ dependencies = [
  "known-folders",
  "nix 0.29.0",
  "once_cell",
+ "openrpsee",
  "orchard",
  "phf 0.12.1",
  "quote",
