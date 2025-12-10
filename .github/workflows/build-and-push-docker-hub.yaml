@@ -16,11 +16,11 @@ on:
         description: "Resolved platform list used for the build"
         value: ${{ jobs.build-and-push.outputs.platforms }}
     inputs:
-      image_name:
+      image-name:
         description: "Docker image name (e.g. user/repo)"
         required: true
         type: string
-      image_tags:
+      image-tags:
         description: "Comma-separated list of tags"
         required: true
         type: string
@@ -58,11 +58,11 @@ on:
         description: "Docker Hub password"
   workflow_dispatch:
     inputs:
-      image_name:
+      image-name:
         description: "Docker image name (e.g. user/repo)"
         required: true
         type: string
-      image_tags:
+      image-tags:
         description: "Comma-separated list of tags"
         required: true
         type: string
@@ -99,7 +99,7 @@ jobs:
     env:
       REGISTRY_HOST: docker.io
       IMAGE_NAMESPACE: ${{ secrets.dockerhub_registry }}
-      IMAGE_NAME: ${{ inputs.image_name }}
+      IMAGE_NAME: ${{ inputs.image-name }}
       BUILD_ARGS_RAW: ${{ inputs['build-args'] }}
       OCI_ARTIFACT_NAME: ${{ inputs.oci-artifact-name }}
     outputs:
@@ -111,11 +111,10 @@ jobs:
       - name: Determine image repository
         run: |
           set -euo pipefail
-          HOST="${REGISTRY_HOST:-docker.io}"
           NAMESPACE="${IMAGE_NAMESPACE:-}"
           IMAGE="${IMAGE_NAME}"
           if [[ -z "$IMAGE" ]]; then
-            echo "image_name input is required" >&2
+            echo "image-name input is required" >&2
             exit 1
           fi
           if [[ -z "$NAMESPACE" ]]; then
@@ -126,7 +125,7 @@ jobs:
           NAMESPACE="${NAMESPACE%/}"
           IMAGE_REPO="${NAMESPACE}/${IMAGE}"
           echo "IMAGE_REPOSITORY=$IMAGE_REPO" >> "$GITHUB_ENV"
-          echo "IMAGE_FULL_NAME=${HOST}/${IMAGE_REPO}" >> "$GITHUB_ENV"
+          echo "IMAGE_FULL_NAME=${REGISTRY_HOST}/${IMAGE_REPO}" >> "$GITHUB_ENV"
 
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -225,7 +224,7 @@ jobs:
       - name: Compute Docker image tags
         id: set-tags
         env:
-          INPUT_IMAGE_TAGS: ${{ inputs.image_tags }}
+          INPUT_IMAGE_TAGS: ${{ inputs.image-tags }}
         run: |
           set -euo pipefail
           TAGS="$INPUT_IMAGE_TAGS"

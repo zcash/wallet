@@ -66,8 +66,8 @@ jobs:
       attestations: write
     uses: ./.github/workflows/build-and-push-docker-hub.yaml
     with:
-      image_name: zallet-test
-      image_tags: ${{ needs.set_env.outputs.tags }}
+      image-name: zallet-test
+      image-tags: ${{ needs.set_env.outputs.tags }}
       dockerfile: Dockerfile
       context: .
       build-args: ""

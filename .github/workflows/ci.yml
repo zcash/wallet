@@ -98,7 +98,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+      - uses: dtolnay/rust-toolchain@stable
         id: toolchain
       - run: rustup override set ${RUST_TOOLCHAIN}
         shell: bash

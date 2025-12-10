@@ -21,13 +21,13 @@ on:
         type: string
       smoke-distro:
         description: "Debian release used for binary/package smoke tests"
-        required: false
+        required: true
         default: bullseye
         type: string
       apt-distributions:
         description: "Comma- or newline-separated Debian distributions to mirror/publish to apt.z.cash"
-        required: false
-        default: bullseye,bookworm,trixie
+        required: true
+        default: bullseye,bookworm
         type: string
     secrets:
       GCP_SA_KEY:
@@ -162,7 +162,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust stable toolchain
-        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install build tooling
         run: |
