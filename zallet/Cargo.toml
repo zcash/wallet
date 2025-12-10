@@ -112,6 +112,7 @@ incrementalmerkletree = { workspace = true, features = ["legacy-api"] }
 jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 nix = { workspace = true, features = ["signal"] }
+openrpsee = { path = "/home/alfredo/zebra/openrpc-zebra/openrpsee" }
 orchard.workspace = true
 phf.workspace = true
 rand.workspace = true
@@ -182,6 +183,7 @@ embed-licensing = "0.3"
 flate2 = "1"
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
+openrpsee = { path = "/home/alfredo/zebra/openrpc-zebra/openrpsee" }
 quote = "1"
 rust-embed.workspace = true
 shadow-rs = { workspace = true, default-features = true }
