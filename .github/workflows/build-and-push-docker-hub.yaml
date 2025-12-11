@@ -24,10 +24,6 @@ on:
         description: "Comma-separated list of tags"
         required: true
         type: string
-      dockerfile:
-        description: "Path to the Dockerfile"
-        required: true
-        type: string
       context:
         description: "Build context"
         required: true
