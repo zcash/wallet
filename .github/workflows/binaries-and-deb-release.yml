@@ -298,10 +298,15 @@ jobs:
       - name: Generate provenance chain metadata
         env:
           BINARY_SUFFIX: ${{ matrix.binary_suffix }}
+          GH_WORKFLOW: ${{ github.workflow }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_RUNNER_OS: ${{ runner.os }}
         run: |
           set -euo pipefail
           BINARY_PATH="standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
           BINARY_SHA256=$(sha256sum "$BINARY_PATH" | cut -d' ' -f1)
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           cat > "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}.provenance.json" <<EOF
           {
             "version": "1.0",
@@ -316,11 +321,11 @@ jobs:
               "git_ref": "${RELEASE_VERSION}"
             },
             "extraction": {
-              "workflow": "${{ github.workflow }}",
-              "run_id": "${{ github.run_id }}",
-              "run_attempt": "${{ github.run_attempt }}",
-              "runner_os": "${{ runner.os }}",
-              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              "workflow": "${GH_WORKFLOW}",
+              "run_id": "${GH_RUN_ID}",
+              "run_attempt": "${GH_RUN_ATTEMPT}",
+              "runner_os": "${GH_RUNNER_OS}",
+              "timestamp": "${TIMESTAMP}"
             },
             "verification": {
               "docker_image_attestation": "${SOURCE_IMAGE_REF}@${SOURCE_IMAGE_DIGEST}",
@@ -487,10 +492,15 @@ jobs:
       - name: Generate provenance chain metadata for .deb
         env:
           PACKAGE_ARCH: ${{ matrix.arch }}
+          GH_WORKFLOW: ${{ github.workflow }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_RUNNER_OS: ${{ runner.os }}
         run: |
           set -euo pipefail
           DEB_PATH="zallet_${RELEASE_VERSION}_${PACKAGE_ARCH}.deb"
           DEB_SHA256=$(sha256sum "$DEB_PATH" | cut -d' ' -f1)
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           cat > "${DEB_PATH}.provenance.json" <<EOF
           {
             "version": "1.0",
@@ -505,11 +515,11 @@ jobs:
               "git_ref": "${RELEASE_VERSION}"
             },
             "extraction": {
-              "workflow": "${{ github.workflow }}",
-              "run_id": "${{ github.run_id }}",
-              "run_attempt": "${{ github.run_attempt }}",
-              "runner_os": "${{ runner.os }}",
-              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              "workflow": "${GH_WORKFLOW}",
+              "run_id": "${GH_RUN_ID}",
+              "run_attempt": "${GH_RUN_ATTEMPT}",
+              "runner_os": "${GH_RUNNER_OS}",
+              "timestamp": "${TIMESTAMP}"
             },
             "verification": {
               "docker_image_attestation": "${SOURCE_IMAGE_REF}@${SOURCE_IMAGE_DIGEST}",
