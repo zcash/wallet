@@ -38,13 +38,11 @@ on:
         type: string
       platforms:
         description: "Comma- or newline-separated list of target platforms"
-        required: false
-        default: linux/amd64
+        required: true
         type: string
       oci-artifact-name:
         description: "Artifact name for the exported binaries bundle"
-        required: false
-        default: zallet-runtime-oci
+        required: true
         type: string
     secrets:
       dockerhub_registry:
