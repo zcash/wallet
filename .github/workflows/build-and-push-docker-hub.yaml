@@ -24,10 +24,6 @@ on:
         description: "Comma-separated list of tags"
         required: true
         type: string
-      context:
-        description: "Build context"
-        required: true
-        type: string
       build-args:
         description: "Docker build args (one per line, optional)"
         required: true
