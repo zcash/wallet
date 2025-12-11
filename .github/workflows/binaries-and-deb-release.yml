@@ -15,6 +15,14 @@ on:
         description: "Name of the exported binaries artifact to consume"
         required: true
         type: string
+      source-image-ref:
+        description: "Full Docker image reference (e.g. docker.io/org/image)"
+        required: true
+        type: string
+      source-image-digest:
+        description: "Content digest of the source Docker image (sha256:...)"
+        required: true
+        type: string
       platforms:
         description: "Comma- or newline-separated list of linux/ARCH platforms to package"
         required: true
@@ -46,6 +54,14 @@ on:
         type: string
       oci-artifact-name:
         description: "Name of the exported binaries artifact to consume"
+        required: true
+        type: string
+      source-image-ref:
+        description: "Full Docker image reference (e.g. docker.io/org/image)"
+        required: true
+        type: string
+      source-image-digest:
+        description: "Content digest of the source Docker image (sha256:...)"
         required: true
         type: string
       platforms:
@@ -152,6 +168,8 @@ jobs:
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
       RELEASE_SHA: ${{ inputs.git-sha || github.sha }}
       OCI_ARTIFACT_NAME: ${{ inputs.oci-artifact-name }}
+      SOURCE_IMAGE_REF: ${{ inputs.source-image-ref }}
+      SOURCE_IMAGE_DIGEST: ${{ inputs.source-image-digest }}
       SMOKE_TEST_DISTRO: ${{ inputs['smoke-distro'] || 'bullseye' }}
       APT_DISTRIBUTIONS: ${{ inputs['apt-distributions'] || 'bullseye,bookworm,trixie' }}
 
@@ -276,6 +294,40 @@ jobs:
           set -euo pipefail
           mkdir -p standalone
           cp "build/${PLATFORM_KEY}/zallet" "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
+
+      - name: Generate provenance chain metadata
+        env:
+          BINARY_SUFFIX: ${{ matrix.binary_suffix }}
+        run: |
+          set -euo pipefail
+          BINARY_PATH="standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
+          BINARY_SHA256=$(sha256sum "$BINARY_PATH" | cut -d' ' -f1)
+          cat > "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}.provenance.json" <<EOF
+          {
+            "version": "1.0",
+            "subject": {
+              "name": "zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}",
+              "sha256": "${BINARY_SHA256}"
+            },
+            "source": {
+              "image_ref": "${SOURCE_IMAGE_REF}",
+              "image_digest": "${SOURCE_IMAGE_DIGEST}",
+              "git_sha": "${RELEASE_SHA}",
+              "git_ref": "${RELEASE_VERSION}"
+            },
+            "extraction": {
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "run_attempt": "${{ github.run_attempt }}",
+              "runner_os": "${{ runner.os }}",
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            },
+            "verification": {
+              "docker_image_attestation": "${SOURCE_IMAGE_REF}@${SOURCE_IMAGE_DIGEST}",
+              "note": "This binary was extracted from the Docker image above. Verify the image attestation for full build provenance."
+            }
+          }
+          EOF
 
       - name: GPG sign standalone binary
         env:
@@ -432,6 +484,40 @@ jobs:
         run: |
           gpg -u sysadmin@z.cash --armor --digest-algo SHA256 --detach-sign "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
 
+      - name: Generate provenance chain metadata for .deb
+        env:
+          PACKAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          DEB_PATH="zallet_${RELEASE_VERSION}_${PACKAGE_ARCH}.deb"
+          DEB_SHA256=$(sha256sum "$DEB_PATH" | cut -d' ' -f1)
+          cat > "${DEB_PATH}.provenance.json" <<EOF
+          {
+            "version": "1.0",
+            "subject": {
+              "name": "zallet_${RELEASE_VERSION}_${PACKAGE_ARCH}.deb",
+              "sha256": "${DEB_SHA256}"
+            },
+            "source": {
+              "image_ref": "${SOURCE_IMAGE_REF}",
+              "image_digest": "${SOURCE_IMAGE_DIGEST}",
+              "git_sha": "${RELEASE_SHA}",
+              "git_ref": "${RELEASE_VERSION}"
+            },
+            "extraction": {
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "run_attempt": "${{ github.run_attempt }}",
+              "runner_os": "${{ runner.os }}",
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            },
+            "verification": {
+              "docker_image_attestation": "${SOURCE_IMAGE_REF}@${SOURCE_IMAGE_DIGEST}",
+              "note": "This package was built from binaries extracted from the Docker image above. Verify the image attestation for full build provenance."
+            }
+          }
+          EOF
+
       - name: Generate SPDX SBOM for Debian package
         env:
           PACKAGE_ARCH: ${{ matrix.arch }}
@@ -484,6 +570,7 @@ jobs:
           cp zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb.asc "$DEST/"
           cp zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb.sbom.spdx "$DEST/"
           cp zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb.intoto.jsonl "$DEST/"
+          cp zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb.provenance.json "$DEST/"
 
       - name: Upload artifacts for publish job
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0

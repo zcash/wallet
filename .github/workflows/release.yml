@@ -91,6 +91,8 @@ jobs:
       version: ${{ github.ref_name }}
       git-sha: ${{ github.sha }}
       oci-artifact-name: ${{ needs.container.outputs.oci-artifact-name }}
+      source-image-ref: ${{ needs.container.outputs.image-ref }}
+      source-image-digest: ${{ needs.container.outputs.image-digest }}
       platforms: ${{ needs.container.outputs.platforms }}
       smoke-distro: ${{ needs.set_env.outputs.smoke_distro }}
       apt-distributions: ${{ needs.set_env.outputs.apt_distributions }}
