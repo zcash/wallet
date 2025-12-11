@@ -68,9 +68,6 @@ jobs:
     with:
       image-name: zallet-test
       image-tags: ${{ needs.set_env.outputs.tags }}
-      dockerfile: Dockerfile
-      context: .
-      build-args: ""
       platforms: ${{ needs.set_env.outputs.platforms }}
       oci-artifact-name: ${{ format('zallet-runtime-oci-{0}', github.run_id) }}
     secrets:
