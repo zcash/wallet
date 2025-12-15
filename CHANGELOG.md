@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 During the alpha period, no Semantic Versioning is followed; all releases should
 be considered breaking changes.
 
-## [0.1.0-alpha.3] - PLANNED
+## [0.1.0-alpha.4] - PLANNED
+
+## [0.1.0-alpha.3] - 2025-12-15
 
 ### Changed
 - Finished implementing the following stubbed-out JSON-RPC methods:
