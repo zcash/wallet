@@ -68,3 +68,6 @@ pub(crate) fn call(pczt_base64: &str) -> Response {
         orchard_actions: pczt.orchard().actions().len(),
     })
 }
+
+// Maximum base64 input size (1MB decoded)
+const MAX_PCZT_BASE64_LEN: usize = 1_400_000;
