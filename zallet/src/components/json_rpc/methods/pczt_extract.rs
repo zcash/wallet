@@ -31,6 +31,12 @@ pub(super) const PARAM_PCZT_DESC: &str =
     "The base64-encoded PCZT to extract a final transaction from.";
 
 /// Extracts a final transaction from a completed PCZT.
+///
+/// The PCZT must have all required signatures and proofs in place.
+/// 
+/// NOTE: This method does not currently verify Sapling/Orchard proofs before
+/// extraction. The resulting transaction will still be validated by the network
+/// when broadcast.
 pub(crate) fn call(pczt_base64: &str) -> Response {
     let pczt_bytes = Base64::decode_vec(pczt_base64).map_err(|e| {
         LegacyCode::Deserialization.with_message(format!("Invalid base64 encoding: {e}"))
@@ -39,6 +45,9 @@ pub(crate) fn call(pczt_base64: &str) -> Response {
     let pczt = Pczt::parse(&pczt_bytes)
         .map_err(|e| LegacyCode::Deserialization.with_message(format!("Invalid PCZT: {e:?}")))?;
 
+    // NOTE: TransactionExtractor can optionally verify proofs with .with_sapling()
+    // and .with_orchard() before extraction. For now we skip verification and let
+    // the network validate the transaction on broadcast.
     let extractor = TransactionExtractor::new(pczt);
 
     let tx = extractor.extract().map_err(|e| {
