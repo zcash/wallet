@@ -113,6 +113,7 @@ jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 nix = { workspace = true, features = ["signal"] }
 orchard.workspace = true
+pczt.workspace = true
 phf.workspace = true
 rand.workspace = true
 rpassword.workspace = true
@@ -150,6 +151,7 @@ zcash_address.workspace = true
 zcash_client_backend = { workspace = true, features = [
     "lightwalletd-tonic-tls-webpki-roots",
     "orchard",
+    "pczt",
     "sync",
     "transparent-inputs",
 ] }
