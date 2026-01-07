@@ -53,6 +53,20 @@ mod view_transaction;
 mod z_get_total_balance;
 #[cfg(zallet_build = "wallet")]
 mod z_send_many;
+// PCZT methods - stateless operations
+mod pczt_combine;
+mod pczt_decode;
+mod pczt_extract;
+
+// PCZT methods - require wallet state
+#[cfg(zallet_build = "wallet")]
+mod pczt_create;
+#[cfg(zallet_build = "wallet")]
+mod pczt_finalize;
+#[cfg(zallet_build = "wallet")]
+mod pczt_fund;
+#[cfg(zallet_build = "wallet")]
+mod pczt_sign;
 
 /// The general JSON-RPC interface, containing the methods provided in all Zallet builds.
 #[rpc(server)]
