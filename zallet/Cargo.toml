@@ -157,6 +157,7 @@ zcash_client_backend = { workspace = true, features = [
 ] }
 zcash_client_sqlite = { workspace = true, features = [
     "orchard",
+    "serde",
     "transparent-inputs",
 ] }
 zcash_keys = { workspace = true, features = ["zcashd-compat", "unstable"] }
