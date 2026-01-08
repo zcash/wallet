@@ -65,7 +65,11 @@ pub(crate) fn call(
         .ok_or_else(|| LegacyCode::InWarmup.with_static("Wallet sync required"))?;
 
     // Calculate expiry height (default: current height + 40 blocks)
-    let expiry_height = expiry_height.unwrap_or(u32::from(chain_height) + 40);
+    let expiry_height = expiry_height.unwrap_or(
+        u32::from(chain_height)
+            .checked_add(40)
+            .ok_or_else(|| LegacyCode::Misc.with_static("Chain height overflow"))?,
+    );
 
     // Get the consensus branch ID for the target height
     let params = wallet.params();

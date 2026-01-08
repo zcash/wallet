@@ -219,6 +219,33 @@ pub(crate) trait Rpc {
     /// - Works only if the network of the running zallet process is `Regtest`.
     #[method(name = "stop")]
     async fn stop(&self) -> stop::Response;
+
+    /// Decodes a base64-encoded PCZT and returns its structure.
+    ///
+    /// # Arguments
+    /// - `pczt` (string, required) The base64-encoded PCZT to decode.
+    #[method(name = "pczt_decode")]
+    async fn pczt_decode(&self, pczt: &str) -> pczt_decode::Response;
+
+    /// Combines multiple PCZTs into one.
+    ///
+    /// # Arguments
+    /// - `pczts` (array, required) An array of base64-encoded PCZTs to combine.
+    #[method(name = "pczt_combine")]
+    async fn pczt_combine(&self, pczts: Vec<String>) -> pczt_combine::Response;
+
+    /// Extracts the final transaction from a fully-signed PCZT.
+    ///
+    /// The PCZT must have all required signatures and proofs in place.
+    ///
+    /// Extraction does not verify proofs by default. Set verify_proofs to true to verify
+    /// (requires proving keys to be loaded).
+    ///
+    /// # Arguments
+    /// - `pczt` (string, required) The base64-encoded PCZT to extract from.
+    /// - `verify_proofs` (bool, optional) If true, verify proofs before extraction. Defaults to false.
+    #[method(name = "pczt_extract")]
+    async fn pczt_extract(&self, pczt: &str, verify_proofs: Option<bool>) -> pczt_extract::Response;
 }
 
 /// The wallet-specific JSON-RPC interface, containing the methods only provided in the
@@ -484,6 +511,64 @@ pub(crate) trait WalletRpc {
         fee: Option<JsonValue>,
         privacy_policy: Option<String>,
     ) -> z_send_many::Response;
+
+    /// Creates an empty PCZT that can be used to build a transaction.
+    ///
+    /// The PCZT will be initialized with the current consensus parameters and
+    /// can be funded using `pczt_fund`.
+    ///
+    /// # Arguments
+    /// - `expiry_height` (numeric, optional) The expiry height for the transaction.
+    ///   Defaults to current height + 40 blocks.
+    /// - `lock_time` (numeric, optional) The lock time for the transaction. Defaults to 0.
+    #[method(name = "pczt_create")]
+    async fn pczt_create(
+        &self,
+        expiry_height: Option<u32>,
+        lock_time: Option<u32>,
+    ) -> pczt_create::Response;
+
+    /// Finalizes a PCZT by running IO finalization.
+    ///
+    /// This prepares the PCZT for signing by finalizing the input/output state.
+    ///
+    /// # Arguments
+    /// - `pczt` (string, required) The base64-encoded PCZT to finalize.
+    #[method(name = "pczt_finalize")]
+    async fn pczt_finalize(&self, pczt: &str) -> pczt_finalize::Response;
+
+    /// Creates a funded PCZT from a transaction proposal.
+    ///
+    /// This method creates a PCZT with inputs and outputs based on the specified
+    /// sender address, recipients, and privacy policy.
+    ///
+    /// # Arguments
+    /// - `from_address` (string, required) The address to send funds from.
+    /// - `amounts` (array, required) An array of recipient amounts with fields:
+    ///   - `address` (string, required) Recipient address.
+    ///   - `amount` (numeric, required) Amount in ZEC.
+    ///   - `memo` (string, optional) Optional memo for shielded recipients.
+    /// - `minconf` (numeric, optional) Minimum confirmations for inputs.
+    /// - `privacy_policy` (string, optional) Privacy policy for the transaction.
+    #[method(name = "pczt_fund")]
+    async fn pczt_fund(
+        &self,
+        from_address: String,
+        amounts: Vec<pczt_fund::AmountParam>,
+        minconf: Option<u32>,
+        privacy_policy: Option<String>,
+    ) -> pczt_fund::Response;
+
+    /// Signs a PCZT with the wallet's keys.
+    ///
+    /// This method signs all inputs in the PCZT that can be signed with keys
+    /// available in the wallet.
+    ///
+    /// # Arguments
+    /// - `pczt` (string, required) The base64-encoded PCZT to sign.
+    /// - `strict` (bool, optional) If true, fail if any inputs cannot be signed.
+    #[method(name = "pczt_sign")]
+    async fn pczt_sign(&self, pczt: &str, strict: Option<bool>) -> pczt_sign::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -643,6 +728,18 @@ impl RpcServer for RpcImpl {
     async fn stop(&self) -> stop::Response {
         stop::call(self.wallet().await?)
     }
+
+    async fn pczt_decode(&self, pczt: &str) -> pczt_decode::Response {
+        pczt_decode::call(pczt)
+    }
+
+    async fn pczt_combine(&self, pczts: Vec<String>) -> pczt_combine::Response {
+        pczt_combine::call(pczts)
+    }
+
+    async fn pczt_extract(&self, pczt: &str, verify_proofs: Option<bool>) -> pczt_extract::Response {
+        pczt_extract::call(pczt, verify_proofs)
+    }
 }
 
 #[cfg(zallet_build = "wallet")]
@@ -769,5 +866,40 @@ impl WalletRpcServer for WalletRpcImpl {
                 .await?,
             )
             .await)
+    }
+
+    async fn pczt_create(
+        &self,
+        expiry_height: Option<u32>,
+        lock_time: Option<u32>,
+    ) -> pczt_create::Response {
+        pczt_create::call(self.wallet().await?.as_ref(), expiry_height, lock_time)
+    }
+
+    async fn pczt_finalize(&self, pczt: &str) -> pczt_finalize::Response {
+        pczt_finalize::call(pczt)
+    }
+
+    async fn pczt_fund(
+        &self,
+        from_address: String,
+        amounts: Vec<pczt_fund::AmountParam>,
+        minconf: Option<u32>,
+        privacy_policy: Option<String>,
+    ) -> pczt_fund::Response {
+        pczt_fund::call(
+            self.wallet().await?,
+            self.keystore.clone(),
+            self.chain().await?,
+            from_address,
+            amounts,
+            minconf,
+            privacy_policy,
+        )
+        .await
+    }
+
+    async fn pczt_sign(&self, pczt: &str, strict: Option<bool>) -> pczt_sign::Response {
+        pczt_sign::call(self.wallet().await?, self.keystore.clone(), pczt, strict).await
     }
 }

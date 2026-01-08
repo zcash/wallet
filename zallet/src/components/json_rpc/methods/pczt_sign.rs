@@ -101,23 +101,65 @@ pub(crate) async fn call(
         pczt.transparent()
             .inputs()
             .iter()
-            .map(|input| {
-                let scope_bytes = input.proprietary().get("zallet.v1.scope")?;
-                let addr_idx_bytes = input.proprietary().get("zallet.v1.address_index")?;
+            .enumerate()
+            .map(|(i, input)| {
+                let scope_bytes = input.proprietary().get("zallet.v1.scope");
+                let addr_idx_bytes = input.proprietary().get("zallet.v1.address_index");
 
-                let scope_u32 = u32::from_le_bytes(scope_bytes.as_slice().try_into().ok()?);
-                let addr_idx_u32 = u32::from_le_bytes(addr_idx_bytes.as_slice().try_into().ok()?);
+                match (scope_bytes, addr_idx_bytes) {
+                    (Some(scope_bytes), Some(addr_idx_bytes)) => {
+                        let scope_u32 = match scope_bytes.as_slice().try_into() {
+                            Ok(bytes) => u32::from_le_bytes(bytes),
+                            Err(_) => {
+                                tracing::warn!(
+                                    "Malformed zallet.v1.scope field for transparent input {}: expected 4 bytes",
+                                    i
+                                );
+                                return None;
+                            }
+                        };
+                        let addr_idx_u32 = match addr_idx_bytes.as_slice().try_into() {
+                            Ok(bytes) => u32::from_le_bytes(bytes),
+                            Err(_) => {
+                                tracing::warn!(
+                                    "Malformed zallet.v1.address_index field for transparent input {}: expected 4 bytes",
+                                    i
+                                );
+                                return None;
+                            }
+                        };
 
-                let scope = match scope_u32 {
-                    0 => TransparentKeyScope::EXTERNAL,
-                    1 => TransparentKeyScope::INTERNAL,
-                    2 => TransparentKeyScope::EPHEMERAL,
-                    _ => return None,
-                };
+                        let scope = match scope_u32 {
+                            0 => TransparentKeyScope::EXTERNAL,
+                            1 => TransparentKeyScope::INTERNAL,
+                            2 => TransparentKeyScope::EPHEMERAL,
+                            _ => {
+                                tracing::warn!(
+                                    "Invalid scope value {} for transparent input {}",
+                                    scope_u32,
+                                    i
+                                );
+                                return None;
+                            }
+                        };
 
-                let addr_idx = NonHardenedChildIndex::from_index(addr_idx_u32)?;
+                        let addr_idx = match NonHardenedChildIndex::from_index(addr_idx_u32) {
+                            Some(idx) => idx,
+                            None => {
+                                tracing::warn!(
+                                    "Invalid address index {} for transparent input {}",
+                                    addr_idx_u32,
+                                    i
+                                );
+                                return None;
+                            }
+                        };
 
-                Some((scope, addr_idx))
+                        Some((scope, addr_idx))
+                    }
+                    // Fields not present, that's fine - input may not be from this wallet
+                    _ => None,
+                }
             })
             .collect();
 

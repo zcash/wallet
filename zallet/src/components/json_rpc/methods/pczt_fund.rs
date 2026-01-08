@@ -85,7 +85,9 @@ pub(super) const PARAM_PRIVACY_POLICY_DESC: &str = "Privacy policy for the trans
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn call(
     mut wallet: DbHandle,
+    // Reserved for future use (e.g., hardware wallet signing support)
     _keystore: KeyStore,
+    // Reserved for future use (e.g., fetching chain state for expiry height)
     _chain: FetchServiceSubscriber,
     from_address: String,
     amounts: Vec<AmountParam>,
@@ -102,7 +104,6 @@ pub(crate) async fn call(
     // Parse amounts into payments
     let mut recipient_addrs = HashSet::new();
     let mut payments = vec![];
-    let mut total_out = Zatoshis::ZERO;
 
     for amount in &amounts {
         let addr: ZcashAddress = amount.address.parse().map_err(|_| {
@@ -127,8 +128,6 @@ pub(crate) async fn call(
         })?;
 
         payments.push(payment);
-        total_out = (total_out + value)
-            .ok_or_else(|| LegacyCode::InvalidParameter.with_static("Value too large"))?;
     }
 
     if payments.is_empty() {
@@ -316,8 +315,8 @@ pub(crate) async fn call(
     )
     .map_err(|e| LegacyCode::Wallet.with_message(format!("Failed to create PCZT: {}", e)))?;
 
-    // Collect metadata for each transparent input BEFORE creating PCZT
-    // (needed for index alignment check)
+    // Collect metadata for each transparent input from the proposal
+    // (needed for index alignment check after creating PCZT)
     let mut input_metadata = Vec::new();
     for step in proposal.steps() {
         for transparent_input in step.transparent_inputs() {
