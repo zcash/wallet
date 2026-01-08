@@ -3,10 +3,11 @@
 use base64ct::{Base64, Encoding};
 use documented::Documented;
 use jsonrpsee::core::RpcResult;
-use pczt::{roles::combiner::Combiner, Pczt};
+use pczt::roles::combiner::Combiner;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use super::pczt_decode::{MAX_PCZTS_TO_COMBINE, decode_pczt_base64};
 use crate::components::json_rpc::server::LegacyCode;
 
 pub(crate) type Response = RpcResult<ResultType>;
@@ -36,16 +37,21 @@ pub(crate) fn call(pczts_base64: Vec<String>) -> Response {
         return Err(LegacyCode::InvalidParameter.with_static("At least one PCZT is required"));
     }
 
-    let pczts: Vec<Pczt> = pczts_base64
+    if pczts_base64.len() > MAX_PCZTS_TO_COMBINE {
+        return Err(LegacyCode::InvalidParameter.with_message(format!(
+            "Too many PCZTs to combine: {} exceeds maximum of {}",
+            pczts_base64.len(),
+            MAX_PCZTS_TO_COMBINE
+        )));
+    }
+
+    let pczts = pczts_base64
         .iter()
         .enumerate()
         .map(|(i, pczt_base64)| {
-            let pczt_bytes = Base64::decode_vec(pczt_base64).map_err(|e| {
+            decode_pczt_base64(pczt_base64).map_err(|e| {
                 LegacyCode::Deserialization
-                    .with_message(format!("Invalid base64 in PCZT {i}: {e}"))
-            })?;
-            Pczt::parse(&pczt_bytes).map_err(|e| {
-                LegacyCode::Deserialization.with_message(format!("Invalid PCZT {i}: {e:?}"))
+                    .with_message(format!("PCZT {i}: {}", e.message()))
             })
         })
         .collect::<Result<Vec<_>, _>>()?;

@@ -1,12 +1,12 @@
 //! PCZT extract method - extract final transaction from a completed PCZT.
 
-use base64ct::{Base64, Encoding};
 use documented::Documented;
 use jsonrpsee::core::RpcResult;
-use pczt::{roles::tx_extractor::TransactionExtractor, Pczt};
+use pczt::roles::tx_extractor::TransactionExtractor;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use super::pczt_decode::decode_pczt_base64;
 use crate::components::json_rpc::server::LegacyCode;
 
 pub(crate) type Response = RpcResult<ResultType>;
@@ -38,12 +38,7 @@ pub(super) const PARAM_PCZT_DESC: &str =
 /// extraction. The resulting transaction will still be validated by the network
 /// when broadcast.
 pub(crate) fn call(pczt_base64: &str) -> Response {
-    let pczt_bytes = Base64::decode_vec(pczt_base64).map_err(|e| {
-        LegacyCode::Deserialization.with_message(format!("Invalid base64 encoding: {e}"))
-    })?;
-
-    let pczt = Pczt::parse(&pczt_bytes)
-        .map_err(|e| LegacyCode::Deserialization.with_message(format!("Invalid PCZT: {e:?}")))?;
+    let pczt = decode_pczt_base64(pczt_base64)?;
 
     // NOTE: TransactionExtractor can optionally verify proofs with .with_sapling()
     // and .with_orchard() before extraction. For now we skip verification and let

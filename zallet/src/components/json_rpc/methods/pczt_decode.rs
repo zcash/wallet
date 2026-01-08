@@ -9,6 +9,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::components::json_rpc::server::LegacyCode;
 
+use jsonrpsee::types::ErrorObjectOwned;
+
+/// Maximum size for base64-encoded PCZT (10MB)
+pub(super) const MAX_PCZT_BASE64_LEN: usize = 10 * 1024 * 1024;
+
+/// Maximum number of PCZTs that can be combined in one call
+pub(super) const MAX_PCZTS_TO_COMBINE: usize = 20;
+
+/// Decode a base64-encoded PCZT with size limit check
+pub(super) fn decode_pczt_base64(s: &str) -> Result<Pczt, ErrorObjectOwned> {
+    if s.len() > MAX_PCZT_BASE64_LEN {
+        return Err(LegacyCode::InvalidParameter.with_static("PCZT exceeds maximum size limit"));
+    }
+    let pczt_bytes = Base64::decode_vec(s).map_err(|e| {
+        LegacyCode::Deserialization.with_message(format!("Invalid base64 encoding: {e}"))
+    })?;
+    Pczt::parse(&pczt_bytes)
+        .map_err(|e| LegacyCode::Deserialization.with_message(format!("Invalid PCZT: {e:?}")))
+}
+
 pub(crate) type Response = RpcResult<ResultType>;
 
 /// Decoded PCZT information.
@@ -47,12 +67,7 @@ pub(super) const PARAM_PCZT_DESC: &str = "The base64-encoded PCZT to decode.";
 
 /// Decodes a PCZT and returns its structure.
 pub(crate) fn call(pczt_base64: &str) -> Response {
-    let pczt_bytes = Base64::decode_vec(pczt_base64).map_err(|e| {
-        LegacyCode::Deserialization.with_message(format!("Invalid base64 encoding: {e}"))
-    })?;
-
-    let pczt = Pczt::parse(&pczt_bytes)
-        .map_err(|e| LegacyCode::Deserialization.with_message(format!("Invalid PCZT: {e:?}")))?;
+    let pczt = decode_pczt_base64(pczt_base64)?;
 
     let global = pczt.global();
 
@@ -68,6 +83,3 @@ pub(crate) fn call(pczt_base64: &str) -> Response {
         orchard_actions: pczt.orchard().actions().len(),
     })
 }
-
-// Maximum base64 input size (1MB decoded)
-const MAX_PCZT_BASE64_LEN: usize = 1_400_000;

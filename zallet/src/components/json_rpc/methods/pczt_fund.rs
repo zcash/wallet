@@ -31,6 +31,7 @@ use zcash_keys::address::Address;
 use transparent::keys::TransparentKeyScope;
 use zcash_protocol::{
     PoolType, ShieldedProtocol,
+    consensus::{NetworkType, Parameters},
     value::{MAX_MONEY, Zatoshis},
 };
 
@@ -74,7 +75,6 @@ pub(crate) struct AmountParam {
     pub memo: Option<String>,
 }
 
-pub(super) const PARAM_PCZT_DESC: &str = "Existing base64-encoded PCZT to add to.";
 pub(super) const PARAM_FROM_ADDRESS_DESC: &str = "The address to send funds from.";
 pub(super) const PARAM_AMOUNTS_DESC: &str = "An array of recipient amounts.";
 pub(super) const PARAM_AMOUNTS_REQUIRED: bool = true;
@@ -87,7 +87,6 @@ pub(crate) async fn call(
     mut wallet: DbHandle,
     _keystore: KeyStore,
     _chain: FetchServiceSubscriber,
-    _pczt: Option<String>,
     from_address: String,
     amounts: Vec<AmountParam>,
     minconf: Option<u32>,
@@ -317,6 +316,32 @@ pub(crate) async fn call(
     )
     .map_err(|e| LegacyCode::Wallet.with_message(format!("Failed to create PCZT: {}", e)))?;
 
+    // Collect metadata for each transparent input BEFORE creating PCZT
+    // (needed for index alignment check)
+    let mut input_metadata = Vec::new();
+    for step in proposal.steps() {
+        for transparent_input in step.transparent_inputs() {
+            let address = transparent_input.recipient_address();
+            // Look up the address metadata to get the derivation info
+            let meta = wallet.get_transparent_address_metadata(account.id(), address)
+                .ok()
+                .flatten();
+            input_metadata.push(meta);
+        }
+    }
+
+    // Verify index alignment between proposal and PCZT
+    if input_metadata.len() != pczt.transparent().inputs().len() {
+        return Err(LegacyCode::Misc.with_static("Internal error: transparent input count mismatch"));
+    }
+
+    // Get network ID for proprietary field
+    let network_id: u8 = match params.network_type() {
+        NetworkType::Main => 0,
+        NetworkType::Test => 1,
+        NetworkType::Regtest => 2,
+    };
+
     // Use Updater to add versioned proprietary fields
     let updater = Updater::new(pczt);
     let mut pczt = updater
@@ -331,23 +356,13 @@ pub(crate) async fn call(
                 "zallet.v1.account_index".to_string(),
                 u32::from(derivation.account_index()).to_le_bytes().to_vec(),
             );
+            // Add network identifier (mainnet=0, testnet=1, regtest=2)
+            global.set_proprietary(
+                "zallet.v1.network".to_string(),
+                vec![network_id],
+            );
         })
         .finish();
-
-    // Add per-input derivation info for transparent inputs
-    // For each transparent input, we need to store the derivation path so pczt_sign can derive the key
-    // First, collect the metadata for each input
-    let mut input_metadata = Vec::new();
-    for step in proposal.steps() {
-        for transparent_input in step.transparent_inputs() {
-            let address = transparent_input.recipient_address();
-            // Look up the address metadata to get the derivation info
-            let meta = wallet.get_transparent_address_metadata(account.id(), address)
-                .ok()
-                .flatten();
-            input_metadata.push(meta);
-        }
-    }
 
     // Now update all transparent inputs with their derivation info
     if !input_metadata.is_empty() {

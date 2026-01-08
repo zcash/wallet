@@ -3,7 +3,7 @@
 use base64ct::{Base64, Encoding};
 use documented::Documented;
 use jsonrpsee::core::RpcResult;
-use pczt::{roles::signer::Signer, Pczt};
+use pczt::roles::signer::Signer;
 use schemars::JsonSchema;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,7 @@ use transparent::keys::{NonHardenedChildIndex, TransparentKeyScope};
 use zcash_keys::keys::UnifiedSpendingKey;
 use zip32::{fingerprint::SeedFingerprint, AccountId};
 
+use super::pczt_decode::decode_pczt_base64;
 use crate::components::{database::DbHandle, json_rpc::server::LegacyCode, keystore::KeyStore};
 
 pub(crate) type Response = RpcResult<ResultType>;
@@ -26,6 +27,12 @@ pub(crate) struct SignResult {
     pub sapling_signed: usize,
     /// Number of Orchard actions signed.
     pub orchard_signed: usize,
+    /// Indices of transparent inputs that could not be signed.
+    pub unsigned_transparent: Vec<usize>,
+    /// Indices of Sapling spends that could not be signed.
+    pub unsigned_sapling: Vec<usize>,
+    /// Indices of Orchard actions that could not be signed.
+    pub unsigned_orchard: Vec<usize>,
 }
 
 pub(crate) type ResultType = SignResult;
@@ -35,27 +42,22 @@ pub(crate) type ResultType = SignResult;
 pub(crate) struct SignParams {
     /// The base64-encoded PCZT to sign.
     pub pczt: String,
-    /// The account UUID whose keys should sign.
-    pub account_uuid: Option<String>,
+    /// If true, fail if any inputs cannot be signed.
+    pub strict: Option<bool>,
 }
 
 pub(super) const PARAM_PCZT_DESC: &str = "The base64-encoded PCZT to sign.";
-pub(super) const PARAM_ACCOUNT_UUID_DESC: &str = "The account UUID whose keys should sign.";
+pub(super) const PARAM_STRICT_DESC: &str = "If true, fail if any inputs cannot be signed.";
 
 /// Signs a PCZT with the wallet's keys.
 pub(crate) async fn call(
     wallet: DbHandle,
     keystore: KeyStore,
     pczt_base64: &str,
-    _account_uuid: Option<String>,
+    strict: Option<bool>,
 ) -> Response {
     // 1. Parse PCZT from base64
-    let pczt_bytes = Base64::decode_vec(pczt_base64).map_err(|e| {
-        LegacyCode::Deserialization.with_message(format!("Invalid base64 encoding: {e}"))
-    })?;
-
-    let pczt = Pczt::parse(&pczt_bytes)
-        .map_err(|e| LegacyCode::Deserialization.with_message(format!("Invalid PCZT: {e:?}")))?;
+    let pczt = decode_pczt_base64(pczt_base64)?;
 
     // 2. Read signing hints from proprietary fields in global
     let seed_fp_bytes = pczt
@@ -147,29 +149,31 @@ pub(crate) async fn call(
 
     // 7. Sign transparent inputs
     let mut transparent_signed = 0;
+    let mut unsigned_transparent = Vec::new();
     for (i, derivation_info) in transparent_derivation_info.iter().enumerate() {
         if let Some((scope, addr_idx)) = derivation_info {
-            let sk = usk
-                .transparent()
-                .derive_secret_key(*scope, *addr_idx)
-                .map_err(|e| {
-                    LegacyCode::InvalidAddressOrKey.with_message(format!(
-                        "Failed to derive transparent key for input {}: {}",
-                        i, e
-                    ))
-                })?;
+            // Try to derive the key - on failure, track as unsigned
+            let sk = match usk.transparent().derive_secret_key(*scope, *addr_idx) {
+                Ok(sk) => sk,
+                Err(_) => {
+                    unsigned_transparent.push(i);
+                    continue;
+                }
+            };
 
-            signer.sign_transparent(i, &sk).map_err(|e| {
-                LegacyCode::Verify
-                    .with_message(format!("Failed to sign transparent input {}: {:?}", i, e))
-            })?;
-
-            transparent_signed += 1;
+            match signer.sign_transparent(i, &sk) {
+                Ok(()) => transparent_signed += 1,
+                Err(_) => unsigned_transparent.push(i),
+            }
+        } else {
+            // No derivation info available for this input
+            unsigned_transparent.push(i);
         }
     }
 
     // 8. Sign Sapling spends
     let mut sapling_signed = 0;
+    let mut unsigned_sapling = Vec::new();
     let sapling_ask = &usk.sapling().expsk.ask;
     for i in 0..sapling_count {
         // Try to sign - if the key doesn't match, it will return an error
@@ -179,17 +183,19 @@ pub(crate) async fn call(
             Err(pczt::roles::signer::Error::SaplingSign(
                 sapling::pczt::SignerError::WrongSpendAuthorizingKey,
             )) => {
-                // This spend doesn't belong to our key, skip it
+                // This spend doesn't belong to our key, track as unsigned
+                unsigned_sapling.push(i);
             }
-            Err(e) => {
-                return Err(LegacyCode::Verify
-                    .with_message(format!("Failed to sign Sapling spend {}: {:?}", i, e)));
+            Err(_) => {
+                // Other error, track as unsigned
+                unsigned_sapling.push(i);
             }
         }
     }
 
     // 9. Sign Orchard actions
     let mut orchard_signed = 0;
+    let mut unsigned_orchard = Vec::new();
     let orchard_ask = orchard::keys::SpendAuthorizingKey::from(usk.orchard());
     for i in 0..orchard_count {
         // Try to sign - if the key doesn't match, it will return an error
@@ -199,16 +205,31 @@ pub(crate) async fn call(
             Err(pczt::roles::signer::Error::OrchardSign(
                 orchard::pczt::SignerError::WrongSpendAuthorizingKey,
             )) => {
-                // This action doesn't belong to our key, skip it
+                // This action doesn't belong to our key, track as unsigned
+                unsigned_orchard.push(i);
             }
-            Err(e) => {
-                return Err(LegacyCode::Verify
-                    .with_message(format!("Failed to sign Orchard action {}: {:?}", i, e)));
+            Err(_) => {
+                // Other error, track as unsigned
+                unsigned_orchard.push(i);
             }
         }
     }
 
-    // 10. Finish and return signed PCZT
+    // 10. Check strict mode
+    if strict.unwrap_or(false)
+        && (!unsigned_transparent.is_empty()
+            || !unsigned_sapling.is_empty()
+            || !unsigned_orchard.is_empty())
+    {
+        return Err(LegacyCode::Verify.with_message(format!(
+            "Strict mode: {} transparent, {} sapling, {} orchard inputs remain unsigned",
+            unsigned_transparent.len(),
+            unsigned_sapling.len(),
+            unsigned_orchard.len()
+        )));
+    }
+
+    // 11. Finish and return signed PCZT
     let signed_pczt = signer.finish();
     let signed_pczt_bytes = signed_pczt.serialize();
     let signed_pczt_base64 = Base64::encode_string(&signed_pczt_bytes);
@@ -218,5 +239,8 @@ pub(crate) async fn call(
         transparent_signed,
         sapling_signed,
         orchard_signed,
+        unsigned_transparent,
+        unsigned_sapling,
+        unsigned_orchard,
     })
 }
