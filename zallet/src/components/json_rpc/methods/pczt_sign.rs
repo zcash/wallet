@@ -1,4 +1,9 @@
 //! PCZT sign method - sign a PCZT with wallet keys.
+//!
+//! SECURITY: Before signing, callers should validate:
+//! - Expiry height is reasonable (not too far in the future)
+//! - Consensus branch ID matches the expected network
+//! - Value balance (inputs >= outputs + fee)
 
 use base64ct::{Base64, Encoding};
 use documented::Documented;

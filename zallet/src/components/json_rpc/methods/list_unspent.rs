@@ -31,6 +31,9 @@ use crate::components::{
     },
 };
 
+/// Maximum unspent outputs to return to prevent DoS
+const MAX_UNSPENT_RESULTS: usize = 5000;
+
 /// Response to a `z_listunspent` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 
