@@ -103,7 +103,10 @@ impl PasswordHash {
     }
 
     fn check(&self, password: &str) -> bool {
-        hash_password(password, &self.salt) == self.hash
+        // Compute hash from provided password
+        let computed = hash_password(password, &self.salt);
+        // CtOutput implements constant-time comparison via subtle::ConstantTimeEq
+        computed == self.hash
     }
 }
 

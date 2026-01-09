@@ -18,6 +18,9 @@ const POOL_TRANSPARENT: &str = "transparent";
 const POOL_SAPLING: &str = "sapling";
 const POOL_ORCHARD: &str = "orchard";
 
+/// Maximum number of transactions to return to prevent DoS
+const DEFAULT_TRANSACTION_LIMIT: usize = 1000;
+
 /// Response to a `z_viewtransaction` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
 
