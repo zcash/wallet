@@ -542,7 +542,7 @@ pub(crate) async fn call(
     let consensus_branch_id = consensus::BranchId::for_height(
         wallet.params(),
         tx.height()
-            .map(BlockHeight::from_u32)
+            .and_then(|h| u32::try_from(h).ok().map(BlockHeight::from_u32))
             .unwrap_or(mempool_height),
     );
     let tx =
