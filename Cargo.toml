@@ -10,7 +10,7 @@ authors = [
     "Kris Nuttycombe <kris@electriccoin.co>",
 ]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 repository = "https://github.com/zcash/wallet"
 license = "MIT OR Apache-2.0"
 categories = ["cryptography::cryptocurrencies"]

@@ -766,10 +766,10 @@ async fn data_requests(
 
                         // Ignore transactions with outputs that don't match the status
                         // filter.
-                        if let Some(filter) = &txs_with_unspent_outputs {
-                            if !filter.contains(&txid) {
-                                continue;
-                            }
+                        if let Some(filter) = &txs_with_unspent_outputs
+                            && !filter.contains(&txid)
+                        {
+                            continue;
                         }
 
                         // TODO: Zaino should either be doing the tx parsing for us,
