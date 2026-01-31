@@ -510,16 +510,8 @@ pub(crate) async fn call(
 
     // TODO: Once we migrate to `ChainIndex`, fetch these via the snapshot.
     //       https://github.com/zcash/wallet/issues/237
-    // TODO: Zebra implements its Rust `getrawtransaction` type incorrectly and treats
-    //       `height` as a `u32`, when `-1` is a valid response (for "not in main chain").
-    //       This might be fine for server usage (if it never returns a `-1`, though that
-    //       would imply Zebra stores every block from every chain indefinitely), but is
-    //       incorrect for client usage (like in Zaino). For now, cast to `i32` as either
-    //       Zebra is not generating `-1`, or it is representing it using two's complement
-    //       as `u32::MAX` (which will cast correctly).
-    //       https://github.com/ZcashFoundation/zebra/issues/9671
     let blockhash = tx.block_hash().map(|hash| hash.to_string());
-    let height = tx.height().map(|h| h as i32);
+    let height = tx.height();
     let confirmations = tx.confirmations();
     let time = tx.time();
     let blocktime = tx.block_time();
@@ -542,7 +534,7 @@ pub(crate) async fn call(
     let consensus_branch_id = consensus::BranchId::for_height(
         wallet.params(),
         tx.height()
-            .map(BlockHeight::from_u32)
+            .and_then(|h| u32::try_from(h).ok().map(BlockHeight::from_u32))
             .unwrap_or(mempool_height),
     );
     let tx =

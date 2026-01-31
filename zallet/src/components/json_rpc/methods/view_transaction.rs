@@ -925,7 +925,7 @@ impl WalletTxInfo {
                 let tx_index = block
                     .vtx
                     .iter()
-                    .find(|ctx| ctx.hash == tx.txid().as_ref())
+                    .find(|ctx| ctx.txid == tx.txid().as_ref())
                     .map(|ctx| u32::try_from(ctx.index).expect("Zaino should provide valid data"));
 
                 (
