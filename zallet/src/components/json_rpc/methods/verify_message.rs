@@ -7,7 +7,8 @@ use secp256k1::{
     ecdsa::{RecoverableSignature, RecoveryId},
 };
 use serde::Serialize;
-use sha2::{Digest, Sha256};
+use std::io::Write;
+use zcash_primitives::transaction::util::sha256d::HashWriter;
 use transparent::address::TransparentAddress;
 use zcash_encoding::CompactSize;
 use zcash_keys::encoding::AddressCodec;
@@ -31,22 +32,23 @@ pub(super) const PARAM_MESSAGE_DESC: &str = "The message that was signed.";
 
 /// Creates the message hash for signature verification.
 ///
-/// This matches zcashd's `misc.cpp:493-495`.
+/// This matches zcashd's `src/rpc/misc.cpp:493-495`.
 ///
 /// Each string is prefixed with CompactSize length, then the result is double SHA-256 hashed.
 fn message_hash(message: &str) -> [u8; 32] {
-    let mut buf = Vec::new();
+    let mut writer = HashWriter::default();
 
-    CompactSize::write(&mut buf, MESSAGE_MAGIC.len()).expect("write to vec");
-    buf.extend_from_slice(MESSAGE_MAGIC.as_bytes());
+    CompactSize::write(&mut writer, MESSAGE_MAGIC.len()).expect("write to HashWriter");
+    writer
+        .write_all(MESSAGE_MAGIC.as_bytes())
+        .expect("write to HashWriter");
 
-    CompactSize::write(&mut buf, message.len()).expect("write to vec");
-    buf.extend_from_slice(message.as_bytes());
+    CompactSize::write(&mut writer, message.len()).expect("write to HashWriter");
+    writer
+        .write_all(message.as_bytes())
+        .expect("write to HashWriter");
 
-    let first_hash = Sha256::digest(&buf);
-    let second_hash = Sha256::digest(first_hash);
-
-    second_hash.into()
+    writer.into_hash().into()
 }
 
 /// Verifies a message signed with a transparent Zcash address.
