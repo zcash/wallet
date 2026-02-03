@@ -529,10 +529,6 @@ criteria = "safe-to-deploy"
 version = "0.1.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.der]]
-version = "0.7.8"
-criteria = "safe-to-deploy"
-
 [[exemptions.derive-getters]]
 version = "0.5.0"
 criteria = "safe-to-deploy"
@@ -1153,10 +1149,6 @@ criteria = "safe-to-deploy"
 version = "0.12.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.pem-rfc7468]]
-version = "0.7.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.petgraph]]
 version = "0.7.1"
 criteria = "safe-to-deploy"
@@ -1199,10 +1191,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.pkcs8]]
 version = "0.10.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.pkg-config]]
-version = "0.3.31"
 criteria = "safe-to-deploy"
 
 [[exemptions.poly1305]]
@@ -1251,14 +1239,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.proc-macro-crate]]
 version = "3.3.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.proc-macro-error-attr2]]
-version = "2.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.proc-macro-error2]]
-version = "2.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.proc-macro2]]
