@@ -8,10 +8,10 @@ use secp256k1::{
 };
 use serde::Serialize;
 use std::io::Write;
-use zcash_primitives::transaction::util::sha256d::HashWriter;
 use transparent::address::TransparentAddress;
 use zcash_encoding::CompactSize;
 use zcash_keys::encoding::AddressCodec;
+use zcash_primitives::transaction::util::sha256d::HashWriter;
 
 use crate::{components::json_rpc::server::LegacyCode, network::Network};
 
@@ -82,9 +82,7 @@ pub(crate) fn call(
     // Header 27-30 = uncompressed pubkey, 31-34 = compressed pubkey.
     let header = sig_bytes[0];
     if (27..=30).contains(&header) {
-        return Err(LegacyCode::Type.with_static(
-            "Uncompressed key signatures are not supported.",
-        ));
+        return Err(LegacyCode::Type.with_static("Uncompressed key signatures are not supported."));
     }
     if !(31..=34).contains(&header) {
         return Ok(ResultType(false));
@@ -209,7 +207,10 @@ mod tests {
         let result = call(&mainnet(), TEST_ADDRESS, &uncompressed_sig, TEST_MESSAGE);
         let err = result.unwrap_err();
         assert_eq!(err.code(), LegacyCode::Type as i32);
-        assert_eq!(err.message(), "Uncompressed key signatures are not supported.");
+        assert_eq!(
+            err.message(),
+            "Uncompressed key signatures are not supported."
+        );
     }
 
     #[test]
