@@ -21,6 +21,8 @@ use {
 mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
+mod get_balances;
+#[cfg(zallet_build = "wallet")]
 mod get_new_account;
 #[cfg(zallet_build = "wallet")]
 mod get_notes_count;
@@ -348,6 +350,28 @@ pub(crate) trait WalletRpc {
         &self,
         accounts: Vec<recover_accounts::AccountParameter<'_>>,
     ) -> recover_accounts::Response;
+
+    /// Returns the balances available for each independent spending authority held by the
+    /// wallet, and optionally the balances and received amounts associated with imported
+    /// watch-only addresses and viewing keys.
+    ///
+    /// This includes funds held by each HD-derived Unified Account in the wallet,
+    /// spending keys imported with `z_importkey`, and (if enabled) the legacy transparent
+    /// pool of funds.
+    ///
+    /// # Arguments
+    ///
+    /// - `minconf` (numeric, optional, default=1) Only include unspent outputs in
+    ///   transactions confirmed at least this many times.
+    /// - `include_watchonly` (bool, optional, default=false) Also include balance in
+    ///   accounts that are not locally spendable, and watchonly transparent addresses
+    ///   (see 'importaddress' and 'z_importviewingkey').
+    #[method(name = "z_getbalances")]
+    async fn get_balances(
+        &self,
+        minconf: Option<u32>,
+        include_watchonly: Option<bool>,
+    ) -> get_balances::Response;
 
     /// Returns the total value of funds stored in the node's wallet.
     ///
@@ -725,6 +749,14 @@ impl WalletRpcServer for WalletRpcImpl {
             accounts,
         )
         .await
+    }
+
+    async fn get_balances(
+        &self,
+        minconf: Option<u32>,
+        include_watchonly: Option<bool>,
+    ) -> get_balances::Response {
+        get_balances::call(self.wallet().await?.as_ref(), minconf, include_watchonly)
     }
 
     async fn z_get_total_balance(
