@@ -200,7 +200,7 @@ delta = "1.0.19 -> 1.0.20"
 notes = """
 Changes to `unsafe` code:
 - Migrating to `core::ptr::addr_of_mut!()` with MSRV bump.
-- Gating a function that uses `unsafe` behind `target_has_atomic = \"ptr\"`.
+- Gating a function that uses `unsafe` behind `target_has_atomic = "ptr"`.
 """
 
 [[audits.errno]]
@@ -384,7 +384,7 @@ delta = "1.2.2 -> 1.2.3"
 notes = """
 Changes to `unsafe` code are to replace individual `target_os` cfg flags for
 Apple targets that gate functions containing `unsafe` blocks, with a
-`target_vendor = \"apple\"`.
+`target_vendor = "apple"`.
 """
 
 [[audits.pkg-config]]
