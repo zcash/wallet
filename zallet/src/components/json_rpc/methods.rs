@@ -48,6 +48,7 @@ mod recover_accounts;
 mod stop;
 #[cfg(zallet_build = "wallet")]
 mod unlock_wallet;
+mod verify_message;
 mod view_transaction;
 #[cfg(zallet_build = "wallet")]
 mod z_get_total_balance;
@@ -205,6 +206,20 @@ pub(crate) trait Rpc {
     /// - Works only if the network of the running zallet process is `Regtest`.
     #[method(name = "stop")]
     async fn stop(&self) -> stop::Response;
+
+    /// Verify a signed message.
+    ///
+    /// # Arguments
+    /// - `zcashaddress` (string, required): The Zcash transparent address used to sign the message.
+    /// - `signature` (string, required): The signature provided by the signer in base64 encoding.
+    /// - `message` (string, required): The message that was signed.
+    #[method(name = "verifymessage")]
+    async fn verify_message(
+        &self,
+        zcashaddress: &str,
+        signature: &str,
+        message: &str,
+    ) -> verify_message::Response;
 }
 
 /// The wallet-specific JSON-RPC interface, containing the methods only provided in the
@@ -628,6 +643,20 @@ impl RpcServer for RpcImpl {
 
     async fn stop(&self) -> stop::Response {
         stop::call(self.wallet().await?)
+    }
+
+    async fn verify_message(
+        &self,
+        zcashaddress: &str,
+        signature: &str,
+        message: &str,
+    ) -> verify_message::Response {
+        verify_message::call(
+            self.wallet().await?.params(),
+            zcashaddress,
+            signature,
+            message,
+        )
     }
 }
 
