@@ -38,6 +38,7 @@ xdg = "2.5"
 
 # Hashing
 hmac = "0.12"
+ripemd = "0.1"
 sha2 = "0.10"
 
 # Key storage

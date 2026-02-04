@@ -7446,6 +7446,7 @@ dependencies = [
  "quote",
  "rand 0.8.5",
  "regex",
+ "ripemd 0.1.3",
  "rpassword",
  "rusqlite",
  "rust-embed",
