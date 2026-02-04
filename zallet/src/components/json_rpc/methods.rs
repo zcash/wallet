@@ -18,6 +18,7 @@ use {
     tokio::sync::RwLock,
 };
 
+mod decode_raw_transaction;
 mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
@@ -187,6 +188,13 @@ pub(crate) trait Rpc {
         verbose: Option<u64>,
         blockhash: Option<String>,
     ) -> get_raw_transaction::Response;
+
+    /// Return a JSON object representing the serialized, hex-encoded transaction.
+    ///
+    /// # Arguments
+    /// - `hexstring` (string, required) The transaction hex string.
+    #[method(name = "decoderawtransaction")]
+    async fn decode_raw_transaction(&self, hexstring: &str) -> decode_raw_transaction::Response;
 
     /// Returns detailed information about in-wallet transaction `txid`.
     ///
@@ -635,6 +643,10 @@ impl RpcServer for RpcImpl {
             blockhash,
         )
         .await
+    }
+
+    async fn decode_raw_transaction(&self, hexstring: &str) -> decode_raw_transaction::Response {
+        decode_raw_transaction::call(hexstring)
     }
 
     async fn view_transaction(&self, txid: &str) -> view_transaction::Response {
