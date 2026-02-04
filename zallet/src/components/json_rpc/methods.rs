@@ -34,6 +34,7 @@ mod get_operation;
 mod get_raw_transaction;
 #[cfg(zallet_build = "wallet")]
 mod get_wallet_info;
+mod get_wallet_status;
 #[cfg(zallet_build = "wallet")]
 mod help;
 mod list_accounts;
@@ -64,6 +65,10 @@ mod z_send_many;
 /// The general JSON-RPC interface, containing the methods provided in all Zallet builds.
 #[rpc(server)]
 pub(crate) trait Rpc {
+    /// Returns wallet status information.
+    #[method(name = "getwalletstatus")]
+    async fn get_wallet_status(&self) -> get_wallet_status::Response;
+
     /// Returns the list of accounts created with `z_getnewaccount` or `z_recoveraccounts`.
     ///
     /// # Arguments
@@ -619,6 +624,10 @@ impl WalletRpcImpl {
 
 #[async_trait]
 impl RpcServer for RpcImpl {
+    async fn get_wallet_status(&self) -> get_wallet_status::Response {
+        get_wallet_status::call(self.wallet().await?.as_ref(), self.chain().await?).await
+    }
+
     async fn list_accounts(&self, include_addresses: Option<bool>) -> list_accounts::Response {
         list_accounts::call(self.wallet().await?.as_ref(), include_addresses)
     }
