@@ -115,6 +115,7 @@ nix = { workspace = true, features = ["signal"] }
 orchard.workspace = true
 phf.workspace = true
 rand.workspace = true
+ripemd.workspace = true
 rpassword.workspace = true
 rusqlite.workspace = true
 rust_decimal.workspace = true

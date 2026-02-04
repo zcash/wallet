@@ -18,6 +18,7 @@ use {
     tokio::sync::RwLock,
 };
 
+mod decode_script;
 mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
@@ -220,6 +221,13 @@ pub(crate) trait Rpc {
         signature: &str,
         message: &str,
     ) -> verify_message::Response;
+
+    /// Decode a hex-encoded script.
+    ///
+    /// # Arguments
+    /// - `hexstring` (string, required): The hex-encoded script.
+    #[method(name = "decodescript")]
+    async fn decode_script(&self, hexstring: &str) -> decode_script::Response;
 }
 
 /// The wallet-specific JSON-RPC interface, containing the methods only provided in the
@@ -657,6 +665,10 @@ impl RpcServer for RpcImpl {
             signature,
             message,
         )
+    }
+
+    async fn decode_script(&self, hexstring: &str) -> decode_script::Response {
+        decode_script::call(self.wallet().await?.params(), hexstring)
     }
 }
 
