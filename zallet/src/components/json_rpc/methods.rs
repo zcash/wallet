@@ -18,6 +18,7 @@ use {
     tokio::sync::RwLock,
 };
 
+mod convert_tex;
 mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
@@ -220,6 +221,17 @@ pub(crate) trait Rpc {
         signature: &str,
         message: &str,
     ) -> verify_message::Response;
+
+    /// Converts a transparent P2PKH Zcash address to a TEX address.
+    ///
+    /// TEX addresses (defined in ZIP 320) are transparent-source-only addresses.
+    ///
+    /// The input address must be valid for the network this node is running on.
+    ///
+    /// # Arguments
+    /// - `transparent_address` (string, required): The transparent P2PKH address to convert.
+    #[method(name = "z_converttex")]
+    async fn convert_tex(&self, transparent_address: &str) -> convert_tex::Response;
 }
 
 /// The wallet-specific JSON-RPC interface, containing the methods only provided in the
@@ -657,6 +669,10 @@ impl RpcServer for RpcImpl {
             signature,
             message,
         )
+    }
+
+    async fn convert_tex(&self, transparent_address: &str) -> convert_tex::Response {
+        convert_tex::call(self.wallet().await?.params(), transparent_address)
     }
 }
 
