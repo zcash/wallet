@@ -19,9 +19,6 @@ pub(crate) type Response = RpcResult<ResultType>;
 /// The result type for OpenRPC schema generation.
 pub(crate) type ResultType = DecodedTransaction;
 
-/// Parameter description for OpenRPC schema generation.
-pub(super) const PARAM_HEXSTRING_DESC: &str = "The transaction hex string";
-
 /// A decoded transaction.
 ///
 /// Based on zcashd `src/rpc/rawtransaction.cpp:212-338`.
@@ -88,6 +85,9 @@ pub(crate) struct DecodedTransaction {
     #[serde(skip_serializing_if = "Option::is_none")]
     orchard: Option<Orchard>,
 }
+
+/// Parameter description for OpenRPC schema generation.
+pub(super) const PARAM_HEXSTRING_DESC: &str = "The transaction hex string";
 
 /// Decodes a hex-encoded transaction.
 pub(crate) fn call(hexstring: &str) -> Response {
