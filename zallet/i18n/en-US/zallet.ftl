@@ -39,7 +39,16 @@ usage-header = Usage
 
 flags-header = Options
 
+## Command prompts & output
+
+cmd-add-rpc-user-prompt = Enter password:
+cmd-add-rpc-user-instructions = Add this to your {-zallet_toml} file:
+cmd-seed-fingerprint = Seed fingerprint: {$seedfp}
+cmd-import-mnemonic-prompt = Enter mnemonic:
+
 ## Startup messages
+
+warn-config-unused = Config option '{$option}' is not yet implemented in {-zallet}; ignoring its value.
 
 rpc-bare-password-auth-info = Using '{-cfg-rpc-auth-password}' authorization
 rpc-bare-password-auth-warn =
@@ -117,10 +126,23 @@ err-init-config-db-mismatch =
     The wallet database was created for network type {$db_network_type}, but the
     config is using network type {$config_network_type}.
 
+err-init-identity-not-found = Encryption identity file could not be located at {$path}
+err-init-identity-not-passphrase-encrypted = {$path} is not encrypted with a passphrase
+err-init-path-not-utf8 = {$path} is not currently supported (not UTF-8)
+err-init-identity-not-usable = Identity file at {$path} is not usable: {$error}
+err-init-rpc-auth-invalid = Invalid `rpc.auth` configuration
+
 ## Keystore errors
 
 err-keystore-missing-recipients = The wallet has not been set up to store key material securely.
 rec-keystore-missing-recipients = Have you run '{$init_cmd}'?
+err-keystore-already-initialized = Keystore age recipients already initialized
+err-wallet-locked = Wallet is locked
+
+## Account errors
+
+err-account-not-found = Account does not exist
+err-account-no-payment-source = Account has no payment source.
 
 # errors in migration of configuration data from the zcashd `zcash.conf` config file format
 

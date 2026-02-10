@@ -133,9 +133,10 @@ use crate::{
 
 use super::database::Database;
 
+use crate::fl;
+
 #[cfg(feature = "zcashd-import")]
 use {
-    crate::fl,
     sapling::zip32::{DiversifiableFullViewingKey, ExtendedSpendingKey},
     transparent::address::TransparentAddress,
     zcash_keys::address::Address,
@@ -177,9 +178,9 @@ impl KeyStore {
         let path = config.encryption_identity();
         if !path.exists() {
             return Err(ErrorKind::Init
-                .context(format!(
-                    "encryption identity file could not be located at {}",
-                    path.display()
+                .context(fl!(
+                    "err-init-identity-not-found",
+                    path = path.display().to_string(),
                 ))
                 .into());
         }
@@ -201,9 +202,9 @@ impl KeyStore {
                         .is_none()
                     {
                         return Err(ErrorKind::Init
-                            .context(format!(
-                                "{} is not encrypted with a passphrase",
-                                path.display(),
+                            .context(fl!(
+                                "err-init-identity-not-passphrase-encrypted",
+                                path = path.display().to_string(),
                             ))
                             .into());
                     }
@@ -217,9 +218,9 @@ impl KeyStore {
                     let identity_file = age::IdentityFile::from_file(
                         path.to_str()
                             .ok_or_else(|| {
-                                ErrorKind::Init.context(format!(
-                                    "{} is not currently supported (not UTF-8)",
-                                    path.display(),
+                                ErrorKind::Init.context(fl!(
+                                    "err-init-path-not-utf8",
+                                    path = path.display().to_string(),
                                 ))
                             })?
                             .to_string(),
@@ -227,9 +228,10 @@ impl KeyStore {
                     .map_err(|e| ErrorKind::Init.context(e))?
                     .with_callbacks(age::cli_common::UiCallbacks);
                     let identities = identity_file.into_identities().map_err(|e| {
-                        ErrorKind::Init.context(format!(
-                            "Identity file at {} is not usable: {e}",
-                            path.display(),
+                        ErrorKind::Init.context(fl!(
+                            "err-init-identity-not-usable",
+                            path = path.display().to_string(),
+                            error = e.to_string(),
                         ))
                     })?;
 
@@ -408,7 +410,7 @@ impl KeyStore {
         // re-encrypt the wallet).
         if !self.maybe_recipients().await?.is_empty() {
             return Err(ErrorKind::Generic
-                .context("Keystore age recipients already initialized")
+                .context(fl!("err-keystore-already-initialized"))
                 .into());
         }
 
@@ -660,7 +662,7 @@ impl KeyStore {
         // Acquire a read lock on the identities for decryption.
         let identities = self.identities.read().await;
         if identities.is_empty() {
-            return Err(ErrorKind::Generic.context("Wallet is locked").into());
+            return Err(ErrorKind::Generic.context(fl!("err-wallet-locked")).into());
         }
 
         let encrypted_mnemonic = self
@@ -731,7 +733,7 @@ impl KeyStore {
         // Acquire a read lock on the identities for decryption.
         let identities = self.identities.read().await;
         if identities.is_empty() {
-            return Err(ErrorKind::Generic.context("Wallet is locked").into());
+            return Err(ErrorKind::Generic.context(fl!("err-wallet-locked")).into());
         }
 
         let encrypted_key_bytes = self

@@ -9,6 +9,7 @@ use crate::{
     components::{chain::Chain, database::Database, json_rpc::JsonRpc, sync::WalletSync},
     config::ZalletConfig,
     error::Error,
+    fl,
     prelude::*,
 };
 
@@ -21,8 +22,8 @@ impl AsyncRunnable for StartCmd {
         let _lock = config.lock_datadir()?;
 
         // ALPHA: Warn when currently-unused config options are set.
-        let warn_unused = |option| {
-            warn!("Config option '{option}' is not yet implemented in Zallet; ignoring its value.")
+        let warn_unused = |option: &str| {
+            warn!("{}", fl!("warn-config-unused", option = option.to_string()))
         };
         // TODO: https://github.com/zcash/wallet/issues/199
         if config.builder.spend_zeroconf_change.is_some() {
