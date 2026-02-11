@@ -37,10 +37,10 @@ impl From<FetchServiceError> for IndexerError {
 
 #[derive(Debug)]
 pub(crate) enum SyncError {
-    Indexer(IndexerError),
+    Indexer(Box<IndexerError>),
     Scan(ScanError),
-    Tree(ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>),
-    Other(SqliteClientError),
+    Tree(Box<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>>),
+    Other(Box<SqliteClientError>),
 }
 
 impl fmt::Display for SyncError {
@@ -58,25 +58,25 @@ impl std::error::Error for SyncError {}
 
 impl From<IndexerError> for SyncError {
     fn from(value: IndexerError) -> Self {
-        SyncError::Indexer(value)
+        SyncError::Indexer(Box::new(value))
     }
 }
 
 impl From<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>> for SyncError {
     fn from(e: ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>) -> Self {
-        Self::Tree(e)
+        Self::Tree(Box::new(e))
     }
 }
 
 impl From<SqliteClientError> for SyncError {
     fn from(e: SqliteClientError) -> Self {
-        Self::Other(e)
+        Self::Other(Box::new(e))
     }
 }
 
 impl From<FetchServiceError> for SyncError {
     fn from(e: FetchServiceError) -> Self {
-        Self::Indexer(IndexerError::from(e))
+        Self::Indexer(Box::new(IndexerError::from(e)))
     }
 }
 

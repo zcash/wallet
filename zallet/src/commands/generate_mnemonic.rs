@@ -32,7 +32,10 @@ impl AsyncRunnable for GenerateMnemonicCmd {
 
         let seedfp = keystore.encrypt_and_store_mnemonic(mnemonic).await?;
 
-        println!("{}", fl!("cmd-seed-fingerprint", seedfp = seedfp.to_string()));
+        println!(
+            "{}",
+            fl!("cmd-seed-fingerprint", seedfp = seedfp.to_string())
+        );
 
         Ok(())
     }

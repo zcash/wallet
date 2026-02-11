@@ -22,9 +22,8 @@ impl AsyncRunnable for StartCmd {
         let _lock = config.lock_datadir()?;
 
         // ALPHA: Warn when currently-unused config options are set.
-        let warn_unused = |option: &str| {
-            warn!("{}", fl!("warn-config-unused", option = option.to_string()))
-        };
+        let warn_unused =
+            |option: &str| warn!("{}", fl!("warn-config-unused", option = option.to_string()));
         // TODO: https://github.com/zcash/wallet/issues/199
         if config.builder.spend_zeroconf_change.is_some() {
             warn_unused("builder.spend_zeroconf_change");
