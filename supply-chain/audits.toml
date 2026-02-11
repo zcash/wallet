@@ -372,6 +372,12 @@ who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.8.0 -> 0.8.1"
 
+[[audits.metrics]]
+who = "Kris Nuttycombe <kris@nutty.land>"
+criteria = "safe-to-deploy"
+delta = "0.24.1 -> 0.24.3"
+notes = "Mostly test and minor type signature changes; no use of powerful imports or unsafe functionality."
+
 [[audits.multimap]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
