@@ -423,6 +423,9 @@ pub(crate) async fn call(
             .unwrap_or_else(fallback_addr))
     }
 
+    // Process spends first, so we can use them to determine whether this transaction was
+    // funded by the wallet.
+
     if let Some(bundle) = tx.transparent_bundle() {
         // Skip transparent inputs for coinbase transactions (as they are not spends).
         if !bundle.is_coinbase() {
@@ -484,7 +487,61 @@ pub(crate) async fn call(
                 });
             }
         }
+    }
 
+    if let Some(bundle) = tx.sapling_bundle() {
+        // Sapling spends
+        for (spend, idx) in bundle.shielded_spends().iter().zip(0..) {
+            let spent_note =
+                output_with_nullifier(wallet, ShieldedProtocol::Sapling, spend.nullifier().0)?;
+
+            if let Some((txid_prev, output_prev, account_id, address, value)) = spent_note {
+                spends.push(Spend {
+                    pool: POOL_SAPLING,
+                    t_in: None,
+                    spend: Some(idx),
+                    action: None,
+                    txid_prev: txid_prev.to_string(),
+                    t_out_prev: None,
+                    output_prev: Some(output_prev),
+                    action_prev: None,
+                    account_uuid: Some(account_id.expose_uuid().to_string()),
+                    address,
+                    value: value_from_zatoshis(value),
+                    value_zat: value.into_u64(),
+                });
+            }
+        }
+    }
+
+    if let Some(bundle) = tx.orchard_bundle() {
+        for (action, idx) in bundle.actions().iter().zip(0..) {
+            let spent_note = output_with_nullifier(
+                wallet,
+                ShieldedProtocol::Orchard,
+                action.nullifier().to_bytes(),
+            )?;
+
+            if let Some((txid_prev, action_prev, account_id, address, value)) = spent_note {
+                spends.push(Spend {
+                    pool: POOL_ORCHARD,
+                    t_in: None,
+                    spend: None,
+                    action: Some(idx),
+                    txid_prev: txid_prev.to_string(),
+                    t_out_prev: None,
+                    output_prev: None,
+                    action_prev: Some(action_prev),
+                    account_uuid: Some(account_id.expose_uuid().to_string()),
+                    address,
+                    value: value_from_zatoshis(value),
+                    value_zat: value.into_u64(),
+                });
+            }
+        }
+    }
+
+    if let Some(bundle) = tx.transparent_bundle() {
         // Transparent outputs
         for (output, idx) in bundle.vout.iter().zip(0..) {
             let (account_uuid, address, outgoing, wallet_internal) =
@@ -588,29 +645,6 @@ pub(crate) async fn call(
                     })
                 })
                 .collect();
-
-        // Sapling spends
-        for (spend, idx) in bundle.shielded_spends().iter().zip(0..) {
-            let spent_note =
-                output_with_nullifier(wallet, ShieldedProtocol::Sapling, spend.nullifier().0)?;
-
-            if let Some((txid_prev, output_prev, account_id, address, value)) = spent_note {
-                spends.push(Spend {
-                    pool: POOL_SAPLING,
-                    t_in: None,
-                    spend: Some(idx),
-                    action: None,
-                    txid_prev: txid_prev.to_string(),
-                    t_out_prev: None,
-                    output_prev: Some(output_prev),
-                    action_prev: None,
-                    account_uuid: Some(account_id.expose_uuid().to_string()),
-                    address,
-                    value: value_from_zatoshis(value),
-                    value_zat: value.into_u64(),
-                });
-            }
-        }
 
         // Sapling outputs
         for (_, idx) in bundle.shielded_outputs().iter().zip(0..) {
@@ -719,30 +753,7 @@ pub(crate) async fn call(
             })
             .collect();
 
-        for (action, idx) in bundle.actions().iter().zip(0..) {
-            let spent_note = output_with_nullifier(
-                wallet,
-                ShieldedProtocol::Orchard,
-                action.nullifier().to_bytes(),
-            )?;
-
-            if let Some((txid_prev, action_prev, account_id, address, value)) = spent_note {
-                spends.push(Spend {
-                    pool: POOL_ORCHARD,
-                    t_in: None,
-                    spend: None,
-                    action: Some(idx),
-                    txid_prev: txid_prev.to_string(),
-                    t_out_prev: None,
-                    output_prev: None,
-                    action_prev: Some(action_prev),
-                    account_uuid: Some(account_id.expose_uuid().to_string()),
-                    address,
-                    value: value_from_zatoshis(value),
-                    value_zat: value.into_u64(),
-                });
-            }
-
+        for (_, idx) in bundle.actions().iter().zip(0..) {
             if let Some((note, account_uuid, addr, memo)) = incoming
                 .get(&idx)
                 .map(|(n, account_id, addr, memo)| {
