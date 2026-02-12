@@ -16,6 +16,10 @@ pub(crate) mod tracing;
 #[cfg(zallet_build = "wallet")]
 pub(crate) mod keystore;
 
+#[cfg(test)]
+#[cfg(zallet_build = "wallet")]
+pub(crate) mod testing;
+
 /// A handle to a background task spawned by a component.
 ///
 /// Background tasks in Zallet are either one-shot (expected to terminate before Zallet),

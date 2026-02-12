@@ -25,6 +25,9 @@ mod ext;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub(crate) mod testing;
+
 pub(crate) type DbHandle = deadpool::managed::Object<connection::WalletManager>;
 
 /// Returns the full list of migrations defined in Zallet, to be applied alongside the
@@ -52,6 +55,15 @@ impl fmt::Debug for Database {
 }
 
 impl Database {
+    /// Creates a Database from an existing pool.
+    ///
+    /// Note: This does NOT apply migrations. Caller must ensure
+    /// the database is already initialized.
+    #[cfg(test)]
+    pub(crate) fn from_pool(pool: connection::WalletPool) -> Self {
+        Self { db_data_pool: pool }
+    }
+
     pub(crate) async fn open(config: &ZalletConfig) -> Result<Self, Error> {
         let path = config.wallet_db_path();
 
@@ -59,7 +71,7 @@ impl Database {
             .await
             .map_err(|e| ErrorKind::Init.context(e))?;
 
-        let db_data_pool = connection::pool(&path, config.consensus.network())?;
+        let db_data_pool = connection::pool(&path, config.consensus.network(), None)?;
 
         let database = Self { db_data_pool };
 

@@ -28,11 +28,38 @@ use crate::{
     network::Network,
 };
 
-pub(super) fn pool(path: impl AsRef<Path>, params: Network) -> Result<WalletPool, Error> {
+/// Configuration for the database connection pool.
+#[derive(Clone, Debug)]
+pub(crate) struct PoolConfig {
+    /// Maximum number of connections in the pool.
+    pub max_size: usize,
+}
+
+impl Default for PoolConfig {
+    fn default() -> Self {
+        // Default deadpool size is 16
+        Self { max_size: 16 }
+    }
+}
+
+pub(super) fn pool(
+    path: impl AsRef<Path>,
+    params: Network,
+    pool_config: Option<PoolConfig>,
+) -> Result<WalletPool, Error> {
     let config = deadpool_sqlite::Config::new(path.as_ref());
     let manager = WalletManager::from_config(&config, params);
+
+    let dp_config = match pool_config {
+        Some(cfg) => deadpool::managed::PoolConfig {
+            max_size: cfg.max_size,
+            ..deadpool::managed::PoolConfig::default()
+        },
+        None => deadpool::managed::PoolConfig::default(),
+    };
+
     WalletPool::builder(manager)
-        .config(deadpool::managed::PoolConfig::default())
+        .config(dp_config)
         .build()
         .map_err(|e| ErrorKind::Generic.context(e).into())
 }
