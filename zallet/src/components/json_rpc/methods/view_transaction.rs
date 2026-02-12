@@ -207,7 +207,7 @@ struct Output {
 
     /// The UUID of the Zallet account that received the output.
     ///
-    /// Omitted if the output is not for an account in the wallet (`outgoing = true`).
+    /// Omitted if the output is not for an account in the wallet (`outgoing != false`).
     #[serde(skip_serializing_if = "Option::is_none")]
     account_uuid: Option<String>,
 
@@ -219,8 +219,15 @@ struct Output {
     #[serde(skip_serializing_if = "Option::is_none")]
     address: Option<String>,
 
-    /// `true` if the output is not for an address in the wallet.
-    outgoing: bool,
+    /// Whether or not the output is outgoing from this wallet.
+    ///
+    /// - `true` if the output is not for an account in the wallet, and the transaction
+    ///   was funded by the wallet.
+    /// - `false` if the output is for an account in the wallet.
+    ///
+    /// Omitted if the output is not for an account in the wallet, and the transaction was
+    /// not funded by the wallet.
+    outgoing: Option<bool>,
 
     /// `true` if the output was received by the account's internal viewing key.
     ///
@@ -541,12 +548,14 @@ pub(crate) async fn call(
         }
     }
 
+    let funded_by_this_wallet = spends.iter().any(|spend| spend.account_uuid.is_some());
+
     if let Some(bundle) = tx.transparent_bundle() {
         // Transparent outputs
         for (output, idx) in bundle.vout.iter().zip(0..) {
             let (account_uuid, address, outgoing, wallet_internal) =
                 match output.recipient_address() {
-                    None => (None, None, true, false),
+                    None => (None, None, None, false),
                     Some(address) => {
                         let (account_uuid, wallet_scope) = account_ids
                             .iter()
@@ -560,10 +569,16 @@ pub(crate) async fn call(
                             })
                             .unzip();
 
+                        let outgoing = match (&account_uuid, funded_by_this_wallet) {
+                            (None, true) => Some(true),
+                            (Some(_), _) => Some(false),
+                            (None, false) => None,
+                        };
+
                         (
                             account_uuid,
                             Some(address.encode(wallet.params())),
-                            wallet_scope.is_none(),
+                            outgoing,
                             // The outer `Some` indicates that we have address metadata; the inner
                             // `Option` is `None` for addresses associated with imported transparent
                             // spending keys.
@@ -669,7 +684,11 @@ pub(crate) async fn call(
                             .encode()
                         })
                     })?;
-                let outgoing = account_uuid.is_none();
+                // Don't need to check `funded_by_this_wallet` because we only reach this
+                // line if the output was decryptable by an IVK (so it doesn't matter) or
+                // an OVK (so it is by definition outgoing, even if we can't currently
+                // detect a spent nullifier due to non-linear scanning).
+                let outgoing = Some(account_uuid.is_none());
                 let wallet_internal = address.is_none();
 
                 let value = Zatoshis::const_from_u64(note.value().inner());
@@ -778,7 +797,11 @@ pub(crate) async fn call(
                             .encode()
                         })
                     })?;
-                let outgoing = account_uuid.is_none();
+                // Don't need to check `funded_by_this_wallet` because we only reach this
+                // line if the output was decryptable by an IVK (so it doesn't matter) or
+                // an OVK (so it is by definition outgoing, even if we can't currently
+                // detect a spent nullifier due to non-linear scanning).
+                let outgoing = Some(account_uuid.is_none());
                 let wallet_internal = address.is_none();
 
                 let value = Zatoshis::const_from_u64(note.value().inner());
