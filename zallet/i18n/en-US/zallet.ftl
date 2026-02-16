@@ -30,6 +30,7 @@
 -legacy_pool_seed_fingerprint = legacy_pool_seed_fingerprint
 -zallet_toml = zallet.toml
 
+-cfg-rpc-auth = rpc.auth
 -cfg-rpc-auth-password = rpc.auth.password
 -cfg-rpc-auth-pwhash = rpc.auth.pwhash
 
@@ -54,7 +55,7 @@ rpc-bare-password-auth-info = Using '{-cfg-rpc-auth-password}' authorization
 rpc-bare-password-auth-warn =
     The use of '{-cfg-rpc-auth-password}' is less secure, because credentials are
     configured in plain text. It is recommended that locally-run instances switch to
-    cookie-based auth, or otherwise to use `rpc.auth.pwhash` credentials generated with
+    cookie-based auth, or otherwise to use '{-cfg-rpc-auth-pwhash}' credentials generated with
     '{-zallet-add-rpc-user}'.
 rpc-pwhash-auth-info = Using '{-cfg-rpc-auth-pwhash}' authorization
 
@@ -130,7 +131,7 @@ err-init-identity-not-found = Encryption identity file could not be located at {
 err-init-identity-not-passphrase-encrypted = {$path} is not encrypted with a passphrase
 err-init-path-not-utf8 = {$path} is not currently supported (not UTF-8)
 err-init-identity-not-usable = Identity file at {$path} is not usable: {$error}
-err-init-rpc-auth-invalid = Invalid `rpc.auth` configuration
+err-init-rpc-auth-invalid = Invalid '{-cfg-rpc-auth}' configuration
 
 ## Keystore errors
 
