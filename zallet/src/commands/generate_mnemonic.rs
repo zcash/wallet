@@ -7,6 +7,7 @@ use crate::{
     commands::AsyncRunnable,
     components::{database::Database, keystore::KeyStore},
     error::Error,
+    fl,
     prelude::*,
 };
 
@@ -31,7 +32,10 @@ impl AsyncRunnable for GenerateMnemonicCmd {
 
         let seedfp = keystore.encrypt_and_store_mnemonic(mnemonic).await?;
 
-        println!("Seed fingerprint: {seedfp}");
+        println!(
+            "{}",
+            fl!("cmd-seed-fingerprint", seedfp = seedfp.to_string())
+        );
 
         Ok(())
     }

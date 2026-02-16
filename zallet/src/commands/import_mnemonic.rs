@@ -7,6 +7,7 @@ use crate::{
     commands::AsyncRunnable,
     components::{database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
+    fl,
     prelude::*,
 };
 
@@ -19,7 +20,7 @@ impl AsyncRunnable for ImportMnemonicCmd {
         let keystore = KeyStore::new(&config, db)?;
 
         let phrase = SecretString::new(
-            rpassword::prompt_password("Enter mnemonic:")
+            rpassword::prompt_password(fl!("cmd-import-mnemonic-prompt"))
                 .map_err(|e| ErrorKind::Generic.context(e))?,
         );
 
@@ -28,7 +29,10 @@ impl AsyncRunnable for ImportMnemonicCmd {
 
         let seedfp = keystore.encrypt_and_store_mnemonic(mnemonic).await?;
 
-        println!("Seed fingerprint: {seedfp}");
+        println!(
+            "{}",
+            fl!("cmd-seed-fingerprint", seedfp = seedfp.to_string())
+        );
 
         Ok(())
     }

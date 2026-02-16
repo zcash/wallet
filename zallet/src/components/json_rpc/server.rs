@@ -10,6 +10,7 @@ use crate::{
     components::{chain::Chain, database::Database},
     config::RpcSection,
     error::{Error, ErrorKind},
+    fl,
 };
 
 use super::methods::{RpcImpl, RpcServer as _};
@@ -54,7 +55,7 @@ pub(crate) async fn spawn(
     let http_middleware = tower::ServiceBuilder::new()
         .layer(
             authorization::AuthorizationLayer::new(config.auth)
-                .map_err(|()| ErrorKind::Init.context("Invalid `rpc.auth` configuration"))?,
+                .map_err(|()| ErrorKind::Init.context(fl!("err-init-rpc-auth-invalid")))?,
         )
         .layer(http_request_compatibility::HttpRequestMiddlewareLayer::new())
         .timeout(timeout);

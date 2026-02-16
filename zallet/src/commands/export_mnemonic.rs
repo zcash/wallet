@@ -8,6 +8,7 @@ use crate::{
     commands::AsyncRunnable,
     components::{database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
+    fl,
     prelude::*,
 };
 
@@ -23,12 +24,12 @@ impl AsyncRunnable for ExportMnemonicCmd {
         let account = wallet
             .get_account(AccountUuid::from_uuid(self.account_uuid))
             .map_err(|e| ErrorKind::Generic.context(e))?
-            .ok_or_else(|| ErrorKind::Generic.context("Account does not exist"))?;
+            .ok_or_else(|| ErrorKind::Generic.context(fl!("err-account-not-found")))?;
 
         let derivation = account
             .source()
             .key_derivation()
-            .ok_or_else(|| ErrorKind::Generic.context("Account has no payment source."))?;
+            .ok_or_else(|| ErrorKind::Generic.context(fl!("err-account-no-payment-source")))?;
 
         let encrypted_mnemonic = keystore
             .export_mnemonic(derivation.seed_fingerprint(), self.armor)

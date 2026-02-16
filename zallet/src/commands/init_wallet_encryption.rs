@@ -5,6 +5,7 @@ use crate::{
     commands::AsyncRunnable,
     components::{database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
+    fl,
     prelude::*,
 };
 
@@ -34,9 +35,9 @@ impl AsyncRunnable for InitWalletEncryptionCmd {
                         .encryption_identity()
                         .to_str()
                         .ok_or_else(|| {
-                            ErrorKind::Init.context(format!(
-                                "{} is not currently supported (not UTF-8)",
-                                config.encryption_identity().display(),
+                            ErrorKind::Init.context(fl!(
+                                "err-init-path-not-utf8",
+                                path = config.encryption_identity().display().to_string(),
                             ))
                         })?
                         .to_string(),
