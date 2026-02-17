@@ -115,6 +115,26 @@ jobs:
       - name: Verify working directory is clean (excluding lockfile)
         run: git diff --exit-code ':!Cargo.lock'
 
+  trigger-integration:
+    name: Trigger integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.ZALLET_APP_ID }}
+          private-key: ${{ secrets.ZALLET_APP_PRIVATE_KEY }}
+          owner: zcash
+          repositories: integration-tests
+      - name: Trigger integration tests
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: >
+          gh api repos/zcash/integration-tests/dispatches
+            --field event_type="zallet-interop-request"
+            --field client_payload[sha]="$GITHUB_SHA"
+
   required-checks:
     name: Required status checks have passed
     needs:
