@@ -115,6 +115,18 @@ jobs:
       - name: Verify working directory is clean (excluding lockfile)
         run: git diff --exit-code ':!Cargo.lock'
 
+  trigger-integration:
+    name: Trigger integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger integration tests
+        env:
+          GH_TOKEN: ${{ secrets.INTEGRATION_TESTS_ACCESS_TOKEN }}
+        run: >
+          gh api repos/zcash/integration-tests/dispatches
+            --field event_type="zallet-interop-request"
+            --field client_payload[sha]="$GITHUB_SHA"
+
   required-checks:
     name: Required status checks have passed
     needs:
