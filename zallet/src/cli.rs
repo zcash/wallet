@@ -87,6 +87,10 @@ pub(crate) enum ZalletCmd {
     /// Commands for repairing broken wallet states.
     #[command(subcommand)]
     Repair(RepairCmd),
+
+    /// Hidden regtest-only commands.
+    #[command(subcommand, hide = true)]
+    Regtest(RegtestCmd),
 }
 
 /// `start` subcommand
@@ -283,3 +287,16 @@ pub(crate) struct TruncateWalletCmd {
     /// if it is not possible to truncate exactly to the specified height.
     pub(crate) max_height: u32,
 }
+
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command, Runnable))]
+pub(crate) enum RegtestCmd {
+    /// Generate a default account and return a transparent address for miner outputs.
+    #[cfg(zallet_build = "wallet")]
+    GenerateAccountAndMinerAddress(GenerateAccountAndMinerAddressCmd),
+}
+
+#[cfg(zallet_build = "wallet")]
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct GenerateAccountAndMinerAddressCmd {}
