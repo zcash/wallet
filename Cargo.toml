@@ -10,7 +10,7 @@ authors = [
     "Kris Nuttycombe <kris@electriccoin.co>",
 ]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 repository = "https://github.com/zcash/wallet"
 license = "MIT OR Apache-2.0"
 categories = ["cryptography::cryptocurrencies"]
@@ -120,9 +120,9 @@ zaino-common = "0.1"
 zaino-fetch = "0.1"
 zaino-proto = "0.1"
 zaino-state = "0.1"
-zebra-chain = "2.0"
-zebra-rpc = "2.0.1"
-zebra-state = "2.0"
+zebra-chain = "3"
+zebra-rpc = "3"
+zebra-state = "3"
 
 # Zcash wallet
 deadpool = "0.12"
@@ -156,10 +156,10 @@ age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "f84f80612813ba00a0a8a9a5f060bd217fa981cc" }
 zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "9c72d1805c269f88ea5caa4eb33c6d38013b9776" }
 
-zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "15b81f110349b34090341b3ab8b7cd58c7b9aeef" }
-zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "15b81f110349b34090341b3ab8b7cd58c7b9aeef" }
-zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "15b81f110349b34090341b3ab8b7cd58c7b9aeef" }
-zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "15b81f110349b34090341b3ab8b7cd58c7b9aeef" }
+zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "da2717f44b040f346543ed96c3758ad9e876ae6e" }
+zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "da2717f44b040f346543ed96c3758ad9e876ae6e" }
+zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "da2717f44b040f346543ed96c3758ad9e876ae6e" }
+zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "da2717f44b040f346543ed96c3758ad9e876ae6e" }
 
 [profile.release]
 debug = "line-tables-only"

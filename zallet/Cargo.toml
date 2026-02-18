@@ -235,4 +235,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(tokio_unstable)',
     'cfg(zallet_build, values("merchant_terminal", "wallet"))',
     'cfg(zallet_unimplemented)',
+    'cfg(zcash_unstable, values("nu7"))',
 ] }

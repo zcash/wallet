@@ -613,10 +613,6 @@ criteria = "safe-to-deploy"
 version = "1.0.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.enum_primitive]]
-version = "0.1.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.env_home]]
 version = "0.1.0"
 criteria = "safe-to-deploy"
@@ -1061,10 +1057,6 @@ criteria = "safe-to-deploy"
 version = "0.8.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.num-traits]]
-version = "0.1.43"
-criteria = "safe-to-deploy"
-
 [[exemptions.num_cpus]]
 version = "1.16.0"
 criteria = "safe-to-deploy"
@@ -1271,6 +1263,14 @@ criteria = "safe-to-deploy"
 
 [[exemptions.publicsuffix]]
 version = "2.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.pulldown-cmark]]
+version = "0.13.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.pulldown-cmark-to-cmark]]
+version = "21.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.quickcheck]]
@@ -1541,10 +1541,6 @@ criteria = "safe-to-deploy"
 version = "3.12.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.sha-1]]
-version = "0.10.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.sha2]]
 version = "0.11.0-pre.4"
 criteria = "safe-to-deploy"
@@ -1738,7 +1734,7 @@ version = "0.14.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.tonic-reflection]]
-version = "0.12.3"
+version = "0.14.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.tower]]
@@ -1926,15 +1922,15 @@ version = "2.5.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-fetch]]
-version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
+version = "0.1.2@git:da2717f44b040f346543ed96c3758ad9e876ae6e"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-proto]]
-version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
+version = "0.1.2@git:da2717f44b040f346543ed96c3758ad9e876ae6e"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-state]]
-version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
+version = "0.1.2@git:da2717f44b040f346543ed96c3758ad9e876ae6e"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_encoding]]
@@ -1946,15 +1942,15 @@ version = "0.1.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-chain]]
-version = "2.0.0"
+version = "3.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-consensus]]
-version = "2.0.0"
+version = "3.1.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-network]]
-version = "1.1.0"
+version = "2.0.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-node-services]]
@@ -1962,7 +1958,7 @@ version = "1.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-rpc]]
-version = "2.0.1"
+version = "3.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-script]]
@@ -1970,7 +1966,7 @@ version = "2.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-state]]
-version = "2.0.0"
+version = "3.1.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.zerocopy]]
