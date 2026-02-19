@@ -48,6 +48,7 @@ mod recover_accounts;
 mod stop;
 #[cfg(zallet_build = "wallet")]
 mod unlock_wallet;
+mod validate_address;
 mod verify_message;
 mod view_transaction;
 #[cfg(zallet_build = "wallet")]
@@ -206,6 +207,13 @@ pub(crate) trait Rpc {
     /// - Works only if the network of the running zallet process is `Regtest`.
     #[method(name = "stop")]
     async fn stop(&self) -> stop::Response;
+
+    /// Validate a transparent Zcash address, returning information about it.
+    ///
+    /// # Arguments
+    /// - `address` (string, required): The transparent address to validate.
+    #[method(name = "validateaddress")]
+    async fn validate_address(&self, address: &str) -> validate_address::Response;
 
     /// Verify a signed message.
     ///
@@ -643,6 +651,10 @@ impl RpcServer for RpcImpl {
 
     async fn stop(&self) -> stop::Response {
         stop::call(self.wallet().await?)
+    }
+
+    async fn validate_address(&self, address: &str) -> validate_address::Response {
+        validate_address::call(self.wallet().await?.params(), address)
     }
 
     async fn verify_message(
