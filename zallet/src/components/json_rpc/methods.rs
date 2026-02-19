@@ -45,6 +45,8 @@ mod lock_wallet;
 mod openrpc;
 #[cfg(zallet_build = "wallet")]
 mod recover_accounts;
+#[cfg(zallet_build = "wallet")]
+mod sign_message;
 mod stop;
 #[cfg(zallet_build = "wallet")]
 mod unlock_wallet;
@@ -485,6 +487,14 @@ pub(crate) trait WalletRpc {
         fee: Option<JsonValue>,
         privacy_policy: Option<String>,
     ) -> z_send_many::Response;
+
+    /// Sign a message with the private key of a transparent address.
+    ///
+    /// # Arguments
+    /// - `t_addr` (string, required): The transparent address to use to look up the private key that will be used to sign the message.
+    /// - `message` (string, required): The message to create a signature of.
+    #[method(name = "signmessage")]
+    async fn sign_message(&self, t_addr: &str, message: &str) -> sign_message::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -784,5 +794,15 @@ impl WalletRpcServer for WalletRpcImpl {
                 .await?,
             )
             .await)
+    }
+
+    async fn sign_message(&self, t_addr: &str, message: &str) -> sign_message::Response {
+        sign_message::call(
+            self.wallet().await?.as_ref(),
+            &self.keystore,
+            t_addr,
+            message,
+        )
+        .await
     }
 }
