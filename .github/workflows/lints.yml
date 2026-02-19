@@ -11,23 +11,27 @@ jobs:
   clippy:
     name: Clippy (MSRV)
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: Run clippy
-        uses: actions-rs/clippy-check@v1
+        uses: auguwu/clippy-action@94a9ff2f6920180b89e5c03d121d0af04a9d3e03 # 1.4.0
         with:
-          name: Clippy (MSRV)
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: >
+          check-args: >
+            --all-features
             --all-targets
-            --
+          args: >
             -D warnings
 
   clippy-beta:
     name: Clippy (beta)
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
     continue-on-error: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -38,17 +42,17 @@ jobs:
         with:
           components: clippy
       - run: rustup override set "${TOOLCHAIN}"
+        shell: sh
         env:
           TOOLCHAIN: ${{steps.toolchain.outputs.name}}
       - name: Run Clippy (beta)
-        uses: actions-rs/clippy-check@v1
-        continue-on-error: true
+        uses: auguwu/clippy-action@94a9ff2f6920180b89e5c03d121d0af04a9d3e03 # 1.4.0
         with:
-          name: Clippy (beta)
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: >
+          check-args: >
+            --all-features
             --all-targets
-            --
+          args: >
             -W clippy::all
 
   doc-links:
