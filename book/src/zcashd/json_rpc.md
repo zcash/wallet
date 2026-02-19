@@ -92,6 +92,11 @@ Changes to response:
     was received on an account-internal address; it is now also omitted if it is
     a transparent output to a script that doesn't have an address encoding. Use
     `walletInternal` if you need to identify change outputs.
+  - `outgoing` field on outputs: in `zcashd`, this was always set because every
+    decryptable shielded output is either for the wallet (`outgoing = false`),
+    or in a transaction funded by the wallet (`outgoing = true`). Now that
+    transparent outputs are included, this field is omitted for outputs that are
+    not for the wallet in transactions not funded by the wallet.
   - `memo` field on outputs is omitted if `pool = "transparent"`.
   - `memoStr` field on outputs is no longer only omitted if `memo` does not
     contain valid UTF-8.
