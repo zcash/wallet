@@ -37,7 +37,7 @@ pub(crate) enum ResultType {
 
 /// Verbose information about a transaction.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-pub(crate) struct Transaction {
+pub(super) struct Transaction {
     /// Whether specified block is in the active chain or not.
     ///
     /// Only present with explicit `blockhash` argument.
@@ -183,7 +183,7 @@ pub(crate) struct Transaction {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct TransparentInput {
+pub(super) struct TransparentInput {
     /// The coinbase `scriptSig`, encoded as a hex string.
     ///
     /// Omitted if this is not a coinbase transaction.
@@ -212,7 +212,7 @@ struct TransparentInput {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct TransparentScriptSig {
+pub(super) struct TransparentScriptSig {
     /// The assembly string representation of the script.
     asm: String,
 
@@ -221,7 +221,7 @@ struct TransparentScriptSig {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct TransparentOutput {
+pub(super) struct TransparentOutput {
     /// The value in ZEC.
     value: JsonZec,
 
@@ -241,7 +241,7 @@ struct TransparentOutput {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct TransparentScriptPubKey {
+pub(super) struct TransparentScriptPubKey {
     /// The assembly string representation of the script.
     asm: String,
 
@@ -319,7 +319,7 @@ struct JoinSplit {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct SaplingSpend {
+pub(super) struct SaplingSpend {
     /// Value commitment to the input note.
     ///
     /// Encoded as a byte-reversed hex string for legacy reasons.
@@ -349,7 +349,7 @@ struct SaplingSpend {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct SaplingOutput {
+pub(super) struct SaplingOutput {
     /// Value commitment to the output note.
     ///
     /// Encoded as a byte-reversed hex string for legacy reasons.
@@ -380,7 +380,7 @@ struct SaplingOutput {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct Orchard {
+pub(super) struct Orchard {
     /// The Orchard Actions for the transaction.
     actions: Vec<OrchardAction>,
 
@@ -422,7 +422,7 @@ struct Orchard {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct OrchardAction {
+pub(super) struct OrchardAction {
     /// A value commitment to the net value of the input note minus the output note,
     /// encoded as a hex string.
     cv: String,
@@ -456,7 +456,7 @@ struct OrchardAction {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-struct OrchardFlags {
+pub(super) struct OrchardFlags {
     /// Whether spends are enabled in this Orchard bundle.
     #[serde(rename = "enableSpends")]
     enable_spends: bool,
@@ -647,7 +647,7 @@ pub(crate) async fn call(
 }
 
 impl TransparentInput {
-    fn encode(tx_in: &TxIn<transparent::bundle::Authorized>, is_coinbase: bool) -> Self {
+    pub(super) fn encode(tx_in: &TxIn<transparent::bundle::Authorized>, is_coinbase: bool) -> Self {
         let script_hex = hex::encode(&tx_in.script_sig().0.0);
 
         if is_coinbase {
@@ -676,7 +676,7 @@ impl TransparentInput {
 }
 
 impl TransparentOutput {
-    fn encode((tx_out, n): (&TxOut, u16)) -> Self {
+    pub(super) fn encode((tx_out, n): (&TxOut, u16)) -> Self {
         let script_pub_key = TransparentScriptPubKey {
             // TODO: Implement this
             //       https://github.com/zcash/wallet/issues/235
@@ -709,7 +709,7 @@ impl JoinSplit {
 }
 
 impl SaplingSpend {
-    fn encode(spend: &SpendDescription<sapling::bundle::Authorized>) -> Self {
+    pub(super) fn encode(spend: &SpendDescription<sapling::bundle::Authorized>) -> Self {
         Self {
             cv: TxId::from_bytes(spend.cv().to_bytes()).to_string(),
             anchor: TxId::from_bytes(spend.anchor().to_bytes()).to_string(),
@@ -722,7 +722,7 @@ impl SaplingSpend {
 }
 
 impl SaplingOutput {
-    fn encode(output: &OutputDescription<sapling::bundle::GrothProofBytes>) -> Self {
+    pub(super) fn encode(output: &OutputDescription<sapling::bundle::GrothProofBytes>) -> Self {
         Self {
             cv: TxId::from_bytes(output.cv().to_bytes()).to_string(),
             cmu: TxId::from_bytes(output.cmu().to_bytes()).to_string(),
@@ -735,7 +735,9 @@ impl SaplingOutput {
 }
 
 impl Orchard {
-    fn encode(bundle: Option<&orchard::Bundle<orchard::bundle::Authorized, ZatBalance>>) -> Self {
+    pub(super) fn encode(
+        bundle: Option<&orchard::Bundle<orchard::bundle::Authorized, ZatBalance>>,
+    ) -> Self {
         match bundle {
             None => Self {
                 actions: vec![],
