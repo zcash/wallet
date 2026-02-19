@@ -1,4 +1,4 @@
-# Contributing to `librustzcash` Crates
+# Contributing to Zallet
 
 First off, thanks for taking the time to contribute! ❤️
 
@@ -41,7 +41,7 @@ behavior as documented in the code of conduct.
 > If you want to ask a question, please ensure that you have read the available
 > documentation. Documentation is published to the [Zallet Book](https://zcash.github.io/wallet).
 
-Before you ask a question, it is best to search for existing [Issues](/issues)
+Before you ask a question, it is best to search for existing [Issues](https://github.com/zcash/wallet/issues)
 that might help you. In case you have found a suitable issue and still need
 clarification, you can write your question in this issue. It is also advisable
 to search the internet for answers first.
@@ -53,7 +53,7 @@ recommend the following:
   There are no bad questions, only insufficiently documented answers. If you're
   able to find an answer and it wasn't already in the docs, consider opening a
   pull request to add it to the documentation!
-- You can also open an [Issue](/issues/new). If you do so:
+- You can also open an [Issue](https://github.com/zcash/wallet/issues/new). If you do so:
   - Provide as much context as you can about what you're running into.
   - Provide project and platform versions depending on what seems relevant.
 
@@ -74,7 +74,7 @@ it is desirable for users to use the latest released version. Detailed
 change logs are available in the `CHANGELOG.md` file.
 
 Please note that the wallet in this workspace is under continuous development
-and new SemVer major-version releases are frequent. Users of this application,
+and new SemVer major-version releases are frequent. Users of this application
 should expect a corresponding maintenance burden. The `CHANGELOG.md` file is
 vital to understanding these changes. Under normal circumstances, proposed
 changes will be considered for application against the last two major release
@@ -96,10 +96,10 @@ possible.
   documented preconditions for an operation.
 - To see if other users have experienced (and potentially already solved) the
   same issue you are having, check if there is not already a bug report
-  existing for your bug or error in the [bug tracker](issues?q=label%3Abug).
+  existing for your bug or error in the [bug tracker](https://github.com/zcash/wallet/issues?q=label%3Abug).
 - Also make sure to search the internet to see if users outside of the GitHub
   community have discussed the issue. You can also ask about your problem in
-  the [Zcash R&D Discord](https://discordapp.com/channels/809218587167293450/876655911790321684).
+  the [Zcash R&D Discord](https://discord.com/channels/809218587167293450/876655911790321684).
 - Collect information about the problem:
   - OS, Platform and Version (Windows, Linux, macOS, x86, ARM)
   - Version of the compiler, runtime environment, etc. depending on what seems
@@ -120,7 +120,7 @@ possible.
 We use GitHub issues to track bugs and errors. If you run into an issue with
 the project:
 
-- Open an [Issue](/issues/new). (Since we can't be sure at this point whether
+- Open an [Issue](https://github.com/zcash/wallet/issues/new). (Since we can't be sure at this point whether
   the issue describes a bug or not, we ask you not to label the issue.)
 - Explain the behavior you would expect and the actual behavior.
 - Please provide as much context as possible and describe the **reproduction
@@ -140,7 +140,7 @@ Once it's filed:
 - If the team is able to reproduce the issue, it will be assigned an
   appropriate category and fixed according to the criticality of the issue. If
   you're able to contribute a proposed fix, this will likely speed up the
-  process, although be aware that `librustzcash` is a complex project and fixes
+  process, although be aware that Zallet is a complex project and fixes
   will be considered in the context of safety and potential for unintentional
   misuse of overall API; you should be prepared to alter your approach based on
   suggestions from the team and for your contributions to undergo multiple
@@ -159,7 +159,7 @@ community to understand your suggestion and find related suggestions.
 
 - Read the documentation of the latest version of the appropriate crate to find
   out if the functionality is already provided, potentially under a feature flag.
-- Perform a [search](/issues) to see if the enhancement has already been
+- Perform a [search](https://github.com/zcash/wallet/issues) to see if the enhancement has already been
   suggested. If it has, add a comment to the existing issue instead of opening
   a new one.
 - Find out whether your idea fits with the scope and aims of the project. It's
@@ -176,7 +176,7 @@ community to understand your suggestion and find related suggestions.
 
 #### How Do I Submit a Good Enhancement Suggestion?
 
-Enhancement suggestions are tracked as [GitHub issues](/issues).
+Enhancement suggestions are tracked as [GitHub issues](https://github.com/zcash/wallet/issues).
 
 - Use a **clear and descriptive title** for the issue to identify the
   suggestion. The relevant library crate, if known, should be indicated by prefixing
@@ -197,18 +197,8 @@ Enhancement suggestions are tracked as [GitHub issues](/issues).
 
 This repository is currently developed with an "unstable main" workflow. The
 current contents of the main branch is a preview of what the next full release
-of all crates may look like, but is not stable. For example, as-yet-unreleased
-`zcash_client_sqlite` migrations may be altered incompatibly at any time.
-
-In the main branch, all crates have the version corresponding to their most
-recent stable release on https://crates.io; this enables the preview state to
-be tested ahead-of-time by downstream users via [patch.crates-io] directives.
-
-Individual crates have their own tags, e.g. `zcash_primitives-0.19.0`. These
-tags point to the Git commit at which that crate version was published (which
-in general is not the merge commit for a release branch, but the actual commit
-that incremented the crate's version). Note however that other crates should
-not be considered stable at that revision.
+of all crates may look like, but is not stable. As-yet-unreleased code may be
+altered incompatibly at any time.
 
 #### Merge Workflow
 
@@ -259,9 +249,7 @@ conflicts.
   crates' `CHANGELOG.md` files to clearly document the change.
 - Updated or added members of the public API MUST include complete `rustdoc`
   documentation comments.
-- It is acceptable and desirable to open pull requests in "Draft" status. Only
-  once the pull request has passed CI checks should it be transitioned to
-  "Ready For Review".
+- Each commit should be formatted cleanly using `cargo fmt`.
 - There MUST NOT be "work in progress" commits as part of your history, with
   the following exceptions:
   - When making a change to a public API or a core semantic change, it is
@@ -277,8 +265,40 @@ conflicts.
     additions or other changes to the test framework may be required. Please
     consult with the maintainers if substantial changes of this sort are
     needed, or if you are having difficulties reproducing the bug in a test.
+- Each commit MUST pass `cargo clippy --all-targets -- -D warnings` (using the
+  pinned MSRV toolchain). Additionally, PRs MUST NOT introduce new warnings from
+  `cargo +beta clippy --tests --all-features --all-targets`. Preexisting beta
+  clippy warnings need not be resolved, but new ones introduced by a PR will
+  block merging. The first case described above for work-in-progress commits is
+  excepted from these requirements.
 
-#### Pull Request Review
+#### Pull Requests
+
+A pull request MUST reference one or more issues that it closes. Furthermore,
+DO NOT submit a pull request without a maintainer having acknowledged the
+validity of the issue(s) that the pull request purports to close.
+
+It is acceptable and desirable to open pull requests in "Draft" status. Only
+once the pull request has passed CI checks should it be transitioned to "Ready
+For Review". Please @mention a maintainer if you need CI to be triggered in
+preparation for transitioning the PR to "Ready For Review"; CI does not run
+automatically for PRs from external contributors.
+
+##### Commit Messages
+
+- Commit messages should have a short (preferably less than ~120 characters) title.
+- The body of each commit message should include the motivation for the change,
+  although for some simple cases (such as the application of suggested changes) this
+  may be elided.
+- When a commit has multiple authors, please add `Co-Authored-By:` metadata to
+  the commit message to include everyone who is responsible for the contents of
+  the commit; this is important for determining who has the most complete
+  understanding of the changes. 
+- If any AI agent was used in writing the code being committed, you MUST
+  maintain or add `Co-Authored-By:` metadata indicating the participation of
+  the AI agent. Failure to do so is grounds for closing a pull request.
+
+##### Pull Request Review
 
 It is acceptable and desirable to use a rebase-based workflow within the
 context of a single pull request in order to produce a clean commit history.
@@ -339,24 +359,11 @@ To get around this GitHub UI limitation, the general process we follow is:
 
 If a PR author is non-responsive to review comments, the crate maintainers may
 take over make the necessary changes to the PR ourselves. For PRs created from
-user forks we can generally do this in the same PR. PRs from anonther
+user forks we can generally do this in the same PR. PRs from another
 organization's forks usually do not allow changes from maintainers (due to
 missing cross-organization permissions); in this case (or if a user's PR has
 "allow maintainers to edit" disabled), we may close the PR and open a new PR
 containing the commits from the original.
-
-#### Commit Messages
-
-- Commit messages should have a short (preferably less than ~120 characters) title.
-- The body of each commit message should include the motivation for the change,
-  although for some simple cases (such as the application of suggested changes) this
-  may be elided.
-- When a commit has multiple authors, please add `Co-Authored-By:` metadata to
-  the commit message to include everyone who is responsible for the contents of
-  the commit; this is important for determining who has the most complete
-  understanding of the changes. If any AI agent was used in writing the code
-  being commited, you MUST maintain or add `Co-Authored-By` metadata indicating
-  the use of the AI agent. Failure to do so is grounds for closing a PR.
 
 ### Coding Style
 
@@ -387,9 +394,8 @@ implications, including but not limited to the following:
     state space are used.
   - Use custom `enum`s with semantically relevant variants instead of boolean
     arguments and return values.
-- Prefer immutability; make data types immutable unless there is a strong
-  reason to believe that values will need to be modified in-place for
-  performance reasons.
+- Make data types immutable unless there is a strong reason to believe that
+  values will need to be modified in-place for performance reasons.
 - Take care when introducing and/or using structured enum variants, because
   Rust does not provide adequate language features for making such values
   immutable or ensuring safe construction. Instead of creating structured or
@@ -405,8 +411,9 @@ This means:
 - Write referentially transparent functions. A referentially transparent
   function is one that, given a particular input, always returns the same
   output.
-- Avoid mutation whenever possible. If it's strictly necessary, use mutable
-  variables only in the narrowest possible scope.
+- Avoid mutation. If it's necessary for performance, use mutable variables only
+  in the narrowest possible scope (e.g. within the internal scope of a
+  referentially transparent function).
 - In Rust, we don't have good tools for referentially transparent treatment
   of operations that involve side effects. If a statement produces or makes use
   of a side-effect, the context in which that statement is executed should use
