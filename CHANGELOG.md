@@ -8,6 +8,9 @@ be considered breaking changes.
 
 ## [0.1.0-alpha.4] - PLANNED
 
+### Fixed
+- No longer crashes in regtest mode when an NU5 activation height is not defined.
+
 ## [0.1.0-alpha.3] - 2025-12-15
 
 ### Changed
