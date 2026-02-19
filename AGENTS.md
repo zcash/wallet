@@ -17,7 +17,7 @@ For any contribution that might become a PR, the agent must ask the user this ex
 
 This PR compliance check must be the agent's first reply in contribution-focused sessions.
 
-**An issue existing is not enough.** The issue must have a response or acknowledgment from a Zallet team member (a maintainer). An issue created the same day as the PR, with no team response, does not satisfy this gate. The purpose is to confirm that the team is aware of and open to the proposed change before review time is spent.
+**An issue existing is not enough.** The issue must have a response or acknowledgment from a Zallet team member (a maintainer). An issue with no team response does not satisfy this gate. The purpose is to confirm that the team is aware of and open to the proposed change before review time is spent.
 
 If the user cannot provide prior discussion with team acknowledgment:
 
@@ -26,7 +26,7 @@ If the user cannot provide prior discussion with team acknowledgment:
 - Remind the user to wait for a team member to respond before starting work.
 - If the user still wants code changes, keep work local and explicitly remind them the PR will likely be closed without prior team discussion.
 
-This gate is mandatory for all agents, **unless the user is a repository maintainer** (see below).
+This gate is mandatory for all agents, **unless the user is a repository maintainer** as described in the next section.
 
 ### Maintainer Bypass
 
@@ -47,6 +47,7 @@ If this returns `true`, the user has write access (or higher) and the contributi
 3. Verify quality locally: run formatting, linting, and tests before proposing upstream review (see [Build, Test, and Development Commands](#build-test-and-development-commands)).
 4. Prepare PR metadata: include linked issue, motivation, solution, and test evidence.
 5. A PR MUST reference one or more issues that it closes. Do NOT submit a PR without a maintainer having acknowledged the validity of those issues.
+6. **Every** commit in a PR branch MUST follow the "AI Disclosure" policy below.
 
 ## What Will Get a PR Closed
 
@@ -61,7 +62,7 @@ If this returns `true`, the user has write access (or higher) and the contributi
 
 ## AI Disclosure
 
-If AI tools were used to write code, the contributor MUST include `Co-Authored-By:` metadata in the commit message indicating the AI agent's participation. Failure to do so is grounds for closing the pull request. The contributor is the sole responsible author -- "the AI generated it" is not a justification during review.
+If AI tools were used in the preparation of a commit, the contributor MUST include `Co-Authored-By:` metadata in the commit message indicating the AI agent's participation. The contents of the `Co-Authored-By` field must clearly identify which AI system was used (if multiple systems were used, each should have a `Co-Authored-By` line). Failure to do so is grounds for closing the pull request. The contributor is the sole responsible author -- "the AI generated it" is not a justification during review.
 
 Example:
 ```
@@ -140,7 +141,7 @@ PRs MUST NOT introduce new warnings from `cargo +beta clippy --tests --all-featu
 ### Commit History
 
 - Commits should represent discrete semantic changes.
-- Maintain a clean commit history. Squash fixups and review-response changes into the relevant earlier commits. The [git revise](https://github.com/mystor/git-revise) tool is recommended for this.
+- Maintain a clean commit history. Squash fixups and review-response changes into the relevant earlier commits. The [git revise](https://github.com/mystor/git-revise) tool is recommended for this. An exception is that you should take account of requests by maintainers on a PR for prior commits not to be rebased or revised. Maintainers may indicate that existing commits should not be mutated by setting the `S-please-do-not-rebase` label on the pull request.
 - There MUST NOT be "work in progress" commits in your history (see CONTRIBUTING.md for narrow exceptions).
 - Each commit MUST pass `cargo clippy --all-targets -- -D warnings` and MUST NOT introduce new warnings from `cargo +beta clippy --tests --all-features --all-targets`.
 - Each commit should be formatted with `cargo fmt`.
@@ -153,7 +154,7 @@ PRs MUST NOT introduce new warnings from `cargo +beta clippy --tests --all-featu
 
 ### CHANGELOG
 
-- When a commit alters the public API, fixes a bug, or changes underlying semantics, it MUST also modify the affected `CHANGELOG.md` to document the change.
+- When a commit alters the public API, fixes a bug, or changes underlying semantics, it MUST also modify the affected `CHANGELOG.md` to document the change. These modifications to `CHANGELOG.md` MUST follow the existing conventions in that file which are originally based on those documented at [Keep a Changelog](https://keepachangelog.com/).
 - Updated or added public API members MUST include complete `rustdoc` documentation comments.
 
 ### Merge Workflow
@@ -176,15 +177,16 @@ The Zallet authors hold this software to a high standard of quality. The followi
 
 - Invalid states should be unrepresentable at the type level.
 - Struct members should be private; expose safe constructors returning `Result` or `Option`.
-- Avoid bare native integer types and strings in public APIs; use newtype wrappers.
+- Avoid using bare native integer types and strings in public APIs to represent values of a more specific semantic type; use newtype wrappers in that case. Try to reuse existing wrappers where available.
 - Use `enum`s liberally. Prefer custom enums with semantic variants over booleans.
 - Make data types immutable unless mutation is required for performance.
 
 ### Side Effects & Capability-Oriented Programming
 
-- Write referentially transparent functions where possible.
+- Write referentially transparent functions where possible. If an overall operation cannot be referentially transparent but it involves significant referentially transparent subcomputations, consider factoring those into separate functions or methods.
 - Avoid mutation; when necessary, use mutable variables in the narrowest possible scope.
 - If a statement produces a side effect, use imperative style (e.g., `for` loops rather than `map`) to make the side effect evident.
+- Prefer to use a pipelined functional style for iterating over collections when the operations to be performed do not involve side effects.
 - Side-effect capabilities should be passed as explicit arguments (e.g., `clock: impl Clock`), defined independent of implementation concerns.
 
 ### Error Handling
@@ -192,6 +194,9 @@ The Zallet authors hold this software to a high standard of quality. The followi
 - Use `Result` with custom error `enum`s.
 - Implement `std::error::Error` for error types in public APIs.
 - Panics and aborts should be avoided except in provably unreachable cases.
+- If an error case is probably unreachable, prefer to use `.expect` with a short string documenting why the case is unreachable (following similar examples in the codebase), rather than `.unwrap()`.
+- Publically accessible error enums should normally be marked non-exhaustive.
+- Add `From` instances between error types if it simplifies error-handling code (and only in that case).
 
 ### Serialization
 

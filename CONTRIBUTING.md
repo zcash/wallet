@@ -111,7 +111,7 @@ possible.
 
 #### How Do I Submit a Good Bug Report?
 
-> You must never report security related issues, vulnerabilities or bugs
+> We ask that you never report security-related issues, vulnerabilities or bugs
 > including sensitive information to the issue tracker, or elsewhere in public.
 > Issues that have implications for personal or network security should be
 > reported as described at
@@ -140,10 +140,10 @@ Once it's filed:
 - If the team is able to reproduce the issue, it will be assigned an
   appropriate category and fixed according to the criticality of the issue. If
   you're able to contribute a proposed fix, this will likely speed up the
-  process, although be aware that Zallet is a complex project and fixes
+  process. Be aware that Zallet is a complex project and fixes
   will be considered in the context of safety and potential for unintentional
   misuse of overall API; you should be prepared to alter your approach based on
-  suggestions from the team and for your contributions to undergo multiple
+  suggestions from the team, and for your contributions to undergo multiple
   rounds of review.
 
 
@@ -296,7 +296,11 @@ automatically for PRs from external contributors.
   understanding of the changes. 
 - If any AI agent was used in writing the code being committed, you MUST
   maintain or add `Co-Authored-By:` metadata indicating the participation of
-  the AI agent. Failure to do so is grounds for closing a pull request.
+  the AI agent. Failure to do so is grounds for closing a pull request. The [AGENTS.md]
+  file has instructions intended for consumption by the agent itself, but we recommend
+  that you also read it in order to ensure that these instructions have been followed. You
+  should review the PR yourself before submitting it, and you as a human are responsible
+  for its contents.
 
 ##### Pull Request Review
 
@@ -315,7 +319,7 @@ Two important points:
   metadata is included in the commit. If the changes are substantial enough
   that it makes more sense to rewrite the original commit, make sure to
   include co-author metadata in the commit message when doing so (squashing
-  the GitHub-generate suggestion acceptance commit(s) together with the
+  the GitHub-generated suggestion acceptance commit(s) together with the
   original commit in an interactive rebase can make this easy).
 
 Our rebase-heavy workflow for in-progress PRs can interact poorly with PR
@@ -348,6 +352,8 @@ To get around this GitHub UI limitation, the general process we follow is:
   to there not being a good way to split the contents down into stacked PRs),
   and significant review has started, then older commits in the PR will
   generally ossify, and we will from then onward avoid rebasing the entire PR.
+  In this case (if we remember) we will add the `S-please-do-not-rebase` label to
+  indicate that prior commits should not be rebased or revised.
   We will switch to merging the target branch (e.g. `main`) into the PR branch
   for merge conflict resolution, and commit changes in response to PR review as
   separate commits rather than updating the ossified earlier ones. Recent
@@ -436,6 +442,8 @@ This means:
 This project consistently uses `Result` with custom error `enum`s to indicate
 the presence of errors. The `std::error::Error` trait should be implemented for
 such error types when the error type is part of the public API of the crate.
+Publically accessible error enums should generally be marked non-exhaustive unless
+there is a good reason not to.
 
 #### Serialization
 
