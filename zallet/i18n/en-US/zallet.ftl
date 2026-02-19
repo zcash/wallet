@@ -266,6 +266,11 @@ rec-privpol-privacy-weakening =
     to '{$policy}' or weaker if you wish to allow this transaction to proceed
     anyway.
 
+## RPC method errors
+
+err-rpc-convert-tex-invalid-address = Invalid address
+err-rpc-convert-tex-not-p2pkh = Address is not a transparent p2pkh address
+
 ## RPC CLI errors
 
 err-rpc-cli-conn-failed = Failed to connect to the Zallet wallet's JSON-RPC port.
