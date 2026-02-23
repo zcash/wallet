@@ -19,6 +19,7 @@ use {
 };
 
 mod convert_tex;
+mod decode_script;
 mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
@@ -232,6 +233,13 @@ pub(crate) trait Rpc {
     /// - `transparent_address` (string, required): The transparent P2PKH address to convert.
     #[method(name = "z_converttex")]
     async fn convert_tex(&self, transparent_address: &str) -> convert_tex::Response;
+
+    /// Decodes a hex-encoded script.
+    ///
+    /// # Arguments
+    /// - `hexstring` (string, required): The hex-encoded script.
+    #[method(name = "decodescript")]
+    async fn decode_script(&self, hexstring: &str) -> decode_script::Response;
 }
 
 /// The wallet-specific JSON-RPC interface, containing the methods only provided in the
@@ -673,6 +681,10 @@ impl RpcServer for RpcImpl {
 
     async fn convert_tex(&self, transparent_address: &str) -> convert_tex::Response {
         convert_tex::call(self.wallet().await?.params(), transparent_address)
+    }
+
+    async fn decode_script(&self, hexstring: &str) -> decode_script::Response {
+        decode_script::call(self.wallet().await?.params(), hexstring)
     }
 }
 
