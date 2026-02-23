@@ -262,7 +262,7 @@ async fn fetch_compact_block_inner(
             .into_iter()
             .map(|ctx| CompactTx {
                 index: ctx.index,
-                hash: ctx.hash,
+                hash: ctx.txid,
                 fee: ctx.fee,
                 spends: ctx
                     .spends
