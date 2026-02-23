@@ -7,13 +7,7 @@ use serde::Serialize;
 use zcash_client_backend::data_api::{WalletRead, wallet::ConfirmationsPolicy};
 use zcash_protocol::value::Zatoshis;
 
-use crate::components::{
-    database::DbConnection,
-    json_rpc::{
-        server::LegacyCode,
-        utils::{JsonZec, value_from_zatoshis},
-    },
-};
+use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 /// Response to a `z_getbalances` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -114,9 +108,6 @@ struct Balance {
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 struct Value {
-    /// The balance in ZEC.
-    value: JsonZec,
-
     /// The balance in zatoshis.
     #[serde(rename = "valueZat")]
     value_zat: u64,
@@ -236,14 +227,12 @@ fn opt_balance(spendable: Zatoshis, pending: Zatoshis, dust: Zatoshis) -> Option
 
 fn value(value: Zatoshis) -> Value {
     Value {
-        value: value_from_zatoshis(value),
         value_zat: value.into_u64(),
     }
 }
 
 fn opt_value(value: Zatoshis) -> Option<Value> {
     (!value.is_zero()).then(|| Value {
-        value: value_from_zatoshis(value),
         value_zat: value.into_u64(),
     })
 }
