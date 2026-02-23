@@ -224,6 +224,21 @@ who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.13.0 -> 0.13.1"
 
+[[audits.futures-channel]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.31 -> 0.3.32"
+
+[[audits.futures-core]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.31 -> 0.3.32"
+
+[[audits.futures-sink]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.31 -> 0.3.32"
+
 [[audits.generic-array]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
@@ -430,6 +445,12 @@ who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.13.4 -> 0.13.5"
 
+[[audits.pulldown-cmark]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.13.0 -> 0.13.1"
+notes = "Library crate is identical to 0.13.0."
+
 [[audits.quinn-udp]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
@@ -546,6 +567,16 @@ who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.13.0 -> 0.13.1"
 
+[[audits.tonic-reflection]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.14.3 -> 0.14.5"
+
+[[audits.tower-batch-control]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.41 -> 1.0.1"
+
 [[audits.trycmd]]
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-run"
@@ -564,6 +595,11 @@ code or usages of powerful imports.
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "0.7.0 -> 0.7.1"
+
+[[audits.unicase]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.8.1 -> 2.9.0"
 
 [[audits.wasi]]
 who = "Jack Grigg <jack@electriccoin.co>"
@@ -611,6 +647,16 @@ notes = """
 Changes to generated `unsafe` code are to silence the `clippy::mem_forget` lint;
 no actual code changes.
 """
+
+[[audits.zebra-node-services]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.1 -> 2.1.1"
+
+[[audits.zebra-script]]
+who = "Jack Grigg <thestr4d@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 3.0.1"
 
 [[audits.zeroize]]
 who = "Jack Grigg <jack@electriccoin.co>"
@@ -668,6 +714,12 @@ criteria = "safe-to-deploy"
 user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2024-09-25"
 end = "2026-04-09"
+
+[[trusted.libzcash_script]]
+criteria = "safe-to-deploy"
+user-id = 6289 # Jack Grigg (str4d)
+start = "2025-09-25"
+end = "2027-01-31"
 
 [[trusted.orchard]]
 criteria = "safe-to-deploy"
@@ -911,7 +963,7 @@ end = "2026-09-26"
 
 [[trusted.zcash_script]]
 criteria = "safe-to-deploy"
-user-id = 159631 # Conrado (conradoplg)
+user-id = 159631
 start = "2022-08-31"
 end = "2026-04-08"
 
