@@ -12,6 +12,7 @@ use zcash_protocol::{
     consensus::{self, BlockHeight},
     value::ZatBalance,
 };
+use zcash_script::script::{Asm, Code};
 
 use crate::components::{
     database::DbConnection,
@@ -648,7 +649,8 @@ pub(crate) async fn call(
 
 impl TransparentInput {
     fn encode(tx_in: &TxIn<transparent::bundle::Authorized>, is_coinbase: bool) -> Self {
-        let script_hex = hex::encode(&tx_in.script_sig().0.0);
+        let script_bytes = &tx_in.script_sig().0.0;
+        let script_hex = hex::encode(script_bytes);
 
         if is_coinbase {
             Self {
@@ -659,14 +661,15 @@ impl TransparentInput {
                 sequence: tx_in.sequence(),
             }
         } else {
+            // For scriptSig, we pass `true` since there may be signatures
+            let asm = to_zcashd_asm(&Code(script_bytes.to_vec()).to_asm(true));
+
             Self {
                 coinbase: None,
                 txid: Some(TxId::from_bytes(*tx_in.prevout().hash()).to_string()),
                 vout: Some(tx_in.prevout().n()),
                 script_sig: Some(TransparentScriptSig {
-                    // TODO: Implement this
-                    //       https://github.com/zcash/wallet/issues/235
-                    asm: "TODO: Implement this".into(),
+                    asm,
                     hex: script_hex,
                 }),
                 sequence: tx_in.sequence(),
@@ -677,16 +680,19 @@ impl TransparentInput {
 
 impl TransparentOutput {
     fn encode((tx_out, n): (&TxOut, u16)) -> Self {
+        let script_bytes = &tx_out.script_pubkey().0.0;
+
+        // For scriptPubKey, we pass `false` since there are no signatures
+        let asm = to_zcashd_asm(&Code(script_bytes.to_vec()).to_asm(false));
+
+        // Detect the script type using zcash_script's solver.
+        let (kind, req_sigs) = detect_script_type_and_sigs(script_bytes);
+
         let script_pub_key = TransparentScriptPubKey {
-            // TODO: Implement this
-            //       https://github.com/zcash/wallet/issues/235
-            asm: "TODO: Implement this".into(),
-            hex: hex::encode(&tx_out.script_pubkey().0.0),
-            // TODO: zcashd relied on initialization behaviour for the default value
-            //       for null-data or non-standard outputs. Figure out what it is.
-            //       https://github.com/zcash/wallet/issues/236
-            req_sigs: 0,
-            kind: "nonstandard",
+            asm,
+            hex: hex::encode(script_bytes),
+            req_sigs,
+            kind,
             addresses: vec![],
         };
 
@@ -780,5 +786,260 @@ impl OrchardAction {
             out_ciphertext: hex::encode(action.encrypted_note().out_ciphertext),
             spend_auth_sig: hex::encode(<[u8; 64]>::from(action.authorization())),
         }
+    }
+}
+
+/// Converts zcash_script asm output to zcashd-compatible format.
+///
+/// The zcash_script crate outputs "OP_0" through "OP_16" and "OP_1NEGATE",
+/// but zcashd outputs "0" through "16" and "-1" respectively.
+///
+/// Reference: https://github.com/zcash/zcash/blob/v6.11.0/src/script/script.cpp#L19-L40
+///
+/// TODO: Remove this function once zcash_script is upgraded past 0.4.x,
+///       as `to_asm()` will natively output zcashd-compatible format.
+///       See https://github.com/ZcashFoundation/zcash_script/pull/289
+fn to_zcashd_asm(asm: &str) -> String {
+    asm.split(' ')
+        .map(|token| match token {
+            "OP_1NEGATE" => "-1",
+            "OP_1" => "1",
+            "OP_2" => "2",
+            "OP_3" => "3",
+            "OP_4" => "4",
+            "OP_5" => "5",
+            "OP_6" => "6",
+            "OP_7" => "7",
+            "OP_8" => "8",
+            "OP_9" => "9",
+            "OP_10" => "10",
+            "OP_11" => "11",
+            "OP_12" => "12",
+            "OP_13" => "13",
+            "OP_14" => "14",
+            "OP_15" => "15",
+            "OP_16" => "16",
+            other => other,
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Detects the script type and required signatures from a scriptPubKey.
+///
+/// Returns a tuple of (type_name, required_signatures).
+///
+/// TODO: Replace match arms with `ScriptKind::as_str()` and `ScriptKind::req_sigs()`
+///       once zcash_script is upgraded past 0.4.x.
+///       See https://github.com/ZcashFoundation/zcash_script/pull/291
+// TODO: zcashd relied on initialization behaviour for the default value
+//       for null-data or non-standard outputs. Figure out what it is.
+//       https://github.com/zcash/wallet/issues/236
+fn detect_script_type_and_sigs(script_bytes: &[u8]) -> (&'static str, u8) {
+    Code(script_bytes.to_vec())
+        .to_component()
+        .ok()
+        .and_then(|c| c.refine().ok())
+        .and_then(|component| zcash_script::solver::standard(&component))
+        .map(|script_kind| match script_kind {
+            zcash_script::solver::ScriptKind::PubKeyHash { .. } => ("pubkeyhash", 1),
+            zcash_script::solver::ScriptKind::ScriptHash { .. } => ("scripthash", 1),
+            zcash_script::solver::ScriptKind::MultiSig { required, .. } => ("multisig", required),
+            zcash_script::solver::ScriptKind::NullData { .. } => ("nulldata", 0),
+            zcash_script::solver::ScriptKind::PubKey { .. } => ("pubkey", 1),
+        })
+        .unwrap_or(("nonstandard", 0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// P2PKH scriptSig with sighash decode.
+    ///
+    /// Test vector from zcashd `qa/rpc-tests/decodescript.py:122-125`.
+    /// Tests that scriptSig asm correctly decodes the sighash type suffix.
+    #[test]
+    fn scriptsig_asm_p2pkh_with_sighash() {
+        let scriptsig = hex::decode(
+            "47304402207174775824bec6c2700023309a168231ec80b82c6069282f5133e6f11cbb04460220570edc55c7c5da2ca687ebd0372d3546ebc3f810516a002350cac72dfe192dfb014104d3f898e6487787910a690410b7a917ef198905c27fb9d3b0a42da12aceae0544fc7088d239d9a48f2828a15a09e84043001f27cc80d162cb95404e1210161536"
+        ).unwrap();
+        let asm = Code(scriptsig).to_asm(true);
+        assert_eq!(
+            asm,
+            "304402207174775824bec6c2700023309a168231ec80b82c6069282f5133e6f11cbb04460220570edc55c7c5da2ca687ebd0372d3546ebc3f810516a002350cac72dfe192dfb[ALL] 04d3f898e6487787910a690410b7a917ef198905c27fb9d3b0a42da12aceae0544fc7088d239d9a48f2828a15a09e84043001f27cc80d162cb95404e1210161536"
+        );
+    }
+
+    /// P2PKH scriptPubKey asm output.
+    ///
+    /// Test vector from zcashd `qa/rpc-tests/decodescript.py:134`.
+    #[test]
+    fn scriptpubkey_asm_p2pkh() {
+        let script = hex::decode("76a914dc863734a218bfe83ef770ee9d41a27f824a6e5688ac").unwrap();
+        let asm = Code(script.clone()).to_asm(false);
+        assert_eq!(
+            asm,
+            "OP_DUP OP_HASH160 dc863734a218bfe83ef770ee9d41a27f824a6e56 OP_EQUALVERIFY OP_CHECKSIG"
+        );
+
+        // Verify script type detection
+        let (kind, req_sigs) = detect_script_type_and_sigs(&script);
+        assert_eq!(kind, "pubkeyhash");
+        assert_eq!(req_sigs, 1);
+    }
+
+    /// P2SH scriptPubKey asm output.
+    ///
+    /// Test vector from zcashd `qa/rpc-tests/decodescript.py:135`.
+    #[test]
+    fn scriptpubkey_asm_p2sh() {
+        let script = hex::decode("a9142a5edea39971049a540474c6a99edf0aa4074c5887").unwrap();
+        let asm = Code(script.clone()).to_asm(false);
+        assert_eq!(
+            asm,
+            "OP_HASH160 2a5edea39971049a540474c6a99edf0aa4074c58 OP_EQUAL"
+        );
+
+        let (kind, req_sigs) = detect_script_type_and_sigs(&script);
+        assert_eq!(kind, "scripthash");
+        assert_eq!(req_sigs, 1);
+    }
+
+    /// OP_RETURN nulldata scriptPubKey.
+    ///
+    /// Test vector from zcashd `qa/rpc-tests/decodescript.py:142`.
+    #[test]
+    fn scriptpubkey_asm_nulldata() {
+        let script = hex::decode("6a09300602010002010001").unwrap();
+        let asm = Code(script.clone()).to_asm(false);
+        assert_eq!(asm, "OP_RETURN 300602010002010001");
+
+        let (kind, req_sigs) = detect_script_type_and_sigs(&script);
+        assert_eq!(kind, "nulldata");
+        assert_eq!(req_sigs, 0);
+    }
+
+    /// P2PK scriptPubKey (uncompressed pubkey).
+    ///
+    /// Pubkey extracted from zcashd `qa/rpc-tests/decodescript.py:122-125` scriptSig,
+    /// wrapped in P2PK format (OP_PUSHBYTES_65 <pubkey> OP_CHECKSIG).
+    #[test]
+    fn scriptpubkey_asm_p2pk() {
+        let script = hex::decode(
+            "4104d3f898e6487787910a690410b7a917ef198905c27fb9d3b0a42da12aceae0544fc7088d239d9a48f2828a15a09e84043001f27cc80d162cb95404e1210161536ac"
+        ).unwrap();
+        let asm = Code(script.clone()).to_asm(false);
+        assert_eq!(
+            asm,
+            "04d3f898e6487787910a690410b7a917ef198905c27fb9d3b0a42da12aceae0544fc7088d239d9a48f2828a15a09e84043001f27cc80d162cb95404e1210161536 OP_CHECKSIG"
+        );
+
+        let (kind, req_sigs) = detect_script_type_and_sigs(&script);
+        assert_eq!(kind, "pubkey");
+        assert_eq!(req_sigs, 1);
+    }
+
+    /// Nonstandard script detection.
+    ///
+    /// Tests fallback behavior for scripts that don't match standard patterns.
+    #[test]
+    fn scriptpubkey_nonstandard() {
+        // Just OP_TRUE (0x51) - a valid but nonstandard script
+        let script = hex::decode("51").unwrap();
+
+        let (kind, req_sigs) = detect_script_type_and_sigs(&script);
+        assert_eq!(kind, "nonstandard");
+        assert_eq!(req_sigs, 0);
+    }
+
+    /// Test that scriptSig uses sighash decoding (true) and scriptPubKey does not (false).
+    ///
+    /// Verifies correct wiring: `TransparentInput::encode` passes `true` to `to_asm()`
+    /// while `TransparentOutput::encode` passes `false`.
+    #[test]
+    fn scriptsig_vs_scriptpubkey_sighash_handling() {
+        // A simple signature with SIGHASH_ALL (0x01) suffix
+        // This is a minimal DER signature followed by 0x01
+        let sig_with_sighash = hex::decode(
+            "483045022100ab4c5228e6f8290a5c7e1c4afedbb32b6a6e95b9f873d2e1d5f6a8c3b4e7f09102205d6a8c3b4e7f091ab4c5228e6f8290a5c7e1c4afedbb32b6a6e95b9f873d2e1d01"
+        ).unwrap();
+
+        // With sighash decode (for scriptSig), should show [ALL]
+        let asm_with_decode = Code(sig_with_sighash.clone()).to_asm(true);
+        assert!(
+            asm_with_decode.ends_with("[ALL]"),
+            "scriptSig should decode sighash suffix"
+        );
+
+        // Without sighash decode (for scriptPubKey), should show raw hex
+        let asm_without_decode = Code(sig_with_sighash).to_asm(false);
+        assert!(
+            !asm_without_decode.contains("[ALL]"),
+            "scriptPubKey should not decode sighash suffix"
+        );
+    }
+
+    /// Test all sighash type suffixes are decoded correctly.
+    ///
+    /// Sighash types from zcashd `src/test/script_tests.cpp:949-977` (`script_GetScriptAsm`).
+    #[test]
+    fn sighash_type_decoding() {
+        // Base DER signature (without sighash byte)
+        let base_sig = "3045022100ab4c5228e6f8290a5c7e1c4afedbb32b6a6e95b9f873d2e1d5f6a8c3b4e7f09102205d6a8c3b4e7f091ab4c5228e6f8290a5c7e1c4afedbb32b6a6e95b9f873d2e1d";
+
+        let test_cases = [
+            ("01", "[ALL]"),
+            ("02", "[NONE]"),
+            ("03", "[SINGLE]"),
+            ("81", "[ALL|ANYONECANPAY]"),
+            ("82", "[NONE|ANYONECANPAY]"),
+            ("83", "[SINGLE|ANYONECANPAY]"),
+        ];
+
+        for (sighash_byte, expected_suffix) in test_cases {
+            let sig_hex = format!("48{}{}", base_sig, sighash_byte);
+            let sig_bytes = hex::decode(&sig_hex).unwrap();
+            let asm = Code(sig_bytes).to_asm(true);
+            assert!(
+                asm.ends_with(expected_suffix),
+                "Sighash byte {} should produce suffix {}, got: {}",
+                sighash_byte,
+                expected_suffix,
+                asm
+            );
+        }
+    }
+
+    /// Test that numeric opcodes are formatted as zcashd expects.
+    ///
+    /// Test vectors from zcashd `qa/rpc-tests/decodescript.py:54,82`.
+    #[test]
+    fn asm_numeric_opcodes_match_zcashd() {
+        // From decodescript.py:54 - script '5100' (OP_1 OP_0) should produce '1 0'
+        let script = hex::decode("5100").unwrap();
+        let asm = to_zcashd_asm(&Code(script).to_asm(false));
+        assert_eq!(asm, "1 0");
+
+        // OP_1NEGATE (0x4f) should produce '-1'
+        let script = hex::decode("4f").unwrap();
+        let asm = to_zcashd_asm(&Code(script).to_asm(false));
+        assert_eq!(asm, "-1");
+
+        // From decodescript.py:82 - 2-of-3 multisig pattern should use '2' and '3'
+        // Script: OP_2 <pubkey> <pubkey> <pubkey> OP_3 OP_CHECKMULTISIG
+        let public_key = "03b0da749730dc9b4b1f4a14d6902877a92541f5368778853d9c4a0cb7802dcfb2";
+        let push_public_key = format!("21{}", public_key);
+        let script_hex = format!(
+            "52{}{}{}53ae",
+            push_public_key, push_public_key, push_public_key
+        );
+        let script = hex::decode(&script_hex).unwrap();
+        let asm = to_zcashd_asm(&Code(script).to_asm(false));
+        let expected = format!(
+            "2 {} {} {} 3 OP_CHECKMULTISIG",
+            public_key, public_key, public_key
+        );
+        assert_eq!(asm, expected);
     }
 }
