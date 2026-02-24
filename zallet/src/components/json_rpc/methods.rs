@@ -363,15 +363,8 @@ pub(crate) trait WalletRpc {
     ///
     /// - `minconf` (numeric, optional, default=1) Only include unspent outputs in
     ///   transactions confirmed at least this many times.
-    /// - `include_watchonly` (bool, optional, default=false) Also include balance in
-    ///   accounts that are not locally spendable, and watchonly transparent addresses
-    ///   (see 'importaddress' and 'z_importviewingkey').
     #[method(name = "z_getbalances")]
-    async fn get_balances(
-        &self,
-        minconf: Option<u32>,
-        include_watchonly: Option<bool>,
-    ) -> get_balances::Response;
+    async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response;
 
     /// Returns the total value of funds stored in the node's wallet.
     ///
@@ -751,12 +744,8 @@ impl WalletRpcServer for WalletRpcImpl {
         .await
     }
 
-    async fn get_balances(
-        &self,
-        minconf: Option<u32>,
-        include_watchonly: Option<bool>,
-    ) -> get_balances::Response {
-        get_balances::call(self.wallet().await?.as_ref(), minconf, include_watchonly)
+    async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response {
+        get_balances::call(self.wallet().await?.as_ref(), minconf)
     }
 
     async fn z_get_total_balance(

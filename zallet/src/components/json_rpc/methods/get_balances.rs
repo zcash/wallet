@@ -29,6 +29,16 @@ pub(crate) struct Balances {
     /// or no legacy transparent funds are present.
     #[serde(skip_serializing_if = "Option::is_none")]
     legacy_transparent: Option<TransparentBalance>,
+
+    /// The balance of transparent funds held by legacy watch-only transparent addresses.
+    ///
+    /// All funds held in legacy transparent addresses are treated as though they are
+    /// associated with a single spending authority.
+    ///
+    /// Omitted if `features.legacy_pool_seed_fingerprint` is unset in the Zallet config,
+    /// or no legacy transparent funds are present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    legacy_transparent_watchonly: Option<TransparentBalance>,
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
@@ -38,9 +48,20 @@ struct AccountBalance {
 
     /// The balance held by the account in the transparent pool.
     ///
+    /// This includes all funds held by transparent addresses derived from the account's
+    /// viewing key, and excludes all funds held by watch-only standalone transparent
+    /// addresses imported into the account.
+    ///
     /// Omitted if no transparent funds are present.
     #[serde(skip_serializing_if = "Option::is_none")]
     transparent: Option<TransparentBalance>,
+
+    /// The balance held by each watch-only standalone transparent address imported into
+    /// the account.
+    ///
+    /// Omitted if the account has no standalone transparent addresses.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    transparent_watchonly: Vec<StandaloneTransparentAddressBalance>,
 
     /// The balance held by the account in the Sapling shielded pool.
     ///
@@ -56,6 +77,15 @@ struct AccountBalance {
 
     /// The total funds in all pools held by the account.
     total: Balance,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+struct StandaloneTransparentAddressBalance {
+    /// The standalone transparent address.
+    address: String,
+
+    #[serde(flatten)]
+    balance: TransparentBalance,
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
@@ -115,19 +145,8 @@ struct Value {
 
 pub(super) const PARAM_MINCONF_DESC: &str =
     "Only include unspent outputs in transactions confirmed at least this many times.";
-pub(super) const PARAM_INCLUDE_WATCHONLY_DESC: &str = "Also include balance in accounts that are not locally spendable, and watchonly transparent addresses.";
 
-pub(crate) fn call(
-    wallet: &DbConnection,
-    minconf: Option<u32>,
-    include_watchonly: Option<bool>,
-) -> Response {
-    match include_watchonly {
-        Some(true) => Ok(()),
-        None | Some(false) => Err(LegacyCode::Misc
-            .with_message("include_watchonly argument must be set to true (for now)")),
-    }?;
-
+pub(crate) fn call(wallet: &DbConnection, minconf: Option<u32>) -> Response {
     let confirmations_policy = match minconf {
         Some(minconf) => match NonZeroU32::new(minconf) {
             Some(c) => ConfirmationsPolicy::new_symmetrical(c, false),
@@ -151,12 +170,13 @@ pub(crate) fn call(
         .account_balances()
         .iter()
         .map(|(account_uuid, account)| {
-            // TODO: Separate out transparent coinbase.
+            // TODO: Separate out transparent coinbase and standalone balances.
             let transparent_regular = account.unshielded_balance();
 
             Ok(AccountBalance {
                 account_uuid: account_uuid.expose_uuid().to_string(),
                 transparent: opt_transparent_balance(transparent_regular)?,
+                transparent_watchonly: vec![],
                 sapling: opt_balance_from(account.sapling_balance())?,
                 orchard: opt_balance_from(account.orchard_balance())?,
                 total: balance_from(account)?,
@@ -169,6 +189,7 @@ pub(crate) fn call(
         // TODO: Fetch legacy transparent balance once supported.
         // https://github.com/zcash/wallet/issues/384
         legacy_transparent: None,
+        legacy_transparent_watchonly: None,
     })
 }
 
