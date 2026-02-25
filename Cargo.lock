@@ -5540,9 +5540,9 @@ dependencies = [
 
 [[package]]
 name = "shardtree"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "637e95dcd06bc1bb3f86ed9db1e1832a70125f32daae071ef37dcb7701b7d4fe"
+checksum = "359e552886ae54d1642091645980d83f7db465fd9b5b0248e3680713c1773388"
 dependencies = [
  "bitflags 2.10.0",
  "either",
@@ -7487,11 +7487,11 @@ dependencies = [
  "zcash_encoding 0.3.0",
  "zcash_keys 0.12.0",
  "zcash_note_encryption",
- "zcash_primitives 0.26.3",
+ "zcash_primitives 0.26.4",
  "zcash_proofs 0.26.1",
  "zcash_protocol 0.7.2",
  "zcash_script 0.4.2",
- "zcash_transparent 0.6.2",
+ "zcash_transparent 0.6.3",
  "zebra-chain",
  "zebra-rpc",
  "zebra-state",
@@ -7587,10 +7587,10 @@ dependencies = [
  "zcash_encoding 0.3.0",
  "zcash_keys 0.12.0",
  "zcash_note_encryption",
- "zcash_primitives 0.26.3",
+ "zcash_primitives 0.26.4",
  "zcash_protocol 0.7.2",
  "zcash_script 0.4.2",
- "zcash_transparent 0.6.2",
+ "zcash_transparent 0.6.3",
  "zip32 0.2.1",
  "zip321",
 ]
@@ -7634,10 +7634,10 @@ dependencies = [
  "zcash_client_backend",
  "zcash_encoding 0.3.0",
  "zcash_keys 0.12.0",
- "zcash_primitives 0.26.3",
+ "zcash_primitives 0.26.4",
  "zcash_protocol 0.7.2",
  "zcash_script 0.4.2",
- "zcash_transparent 0.6.2",
+ "zcash_transparent 0.6.3",
  "zip32 0.2.1",
 ]
 
@@ -7755,7 +7755,7 @@ dependencies = [
  "zcash_address 0.10.1",
  "zcash_encoding 0.3.0",
  "zcash_protocol 0.7.2",
- "zcash_transparent 0.6.2",
+ "zcash_transparent 0.6.3",
  "zeroize",
  "zip32 0.2.1",
 ]
@@ -7856,9 +7856,9 @@ dependencies = [
 
 [[package]]
 name = "zcash_primitives"
-version = "0.26.3"
+version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b07638935a3a5e4f51a63d36707cb2558effeadac44e6b57636a8ea227d77db6"
+checksum = "3fd9ff256fb298a7e94a73c1adad6c7e0b4b194b902e777ee9f5f2e12c4c4776"
 dependencies = [
  "bip32 0.6.0-pre.1",
  "blake2b_simd",
@@ -7893,7 +7893,7 @@ dependencies = [
  "zcash_protocol 0.7.2",
  "zcash_script 0.4.2",
  "zcash_spec 0.2.1",
- "zcash_transparent 0.6.2",
+ "zcash_transparent 0.6.3",
  "zip32 0.2.1",
 ]
 
@@ -7941,7 +7941,7 @@ dependencies = [
  "tracing",
  "wagyu-zcash-parameters",
  "xdg",
- "zcash_primitives 0.26.3",
+ "zcash_primitives 0.26.4",
 ]
 
 [[package]]
@@ -8059,9 +8059,9 @@ dependencies = [
 
 [[package]]
 name = "zcash_transparent"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07192f112b7b5f18b3817570a21bdbf6c09ce38793f1681020ee87a1da02c5b8"
+checksum = "5a9b7b4bc11d8bb20833d1b8ab6807f4dca941b381f1129e5bbd72a84e391991"
 dependencies = [
  "bip32 0.6.0-pre.1",
  "blake2b_simd",
@@ -8070,6 +8070,7 @@ dependencies = [
  "document-features",
  "getset",
  "hex",
+ "nonempty 0.11.0",
  "ripemd 0.1.3",
  "secp256k1 0.29.1",
  "sha2 0.10.9",
