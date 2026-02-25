@@ -10,9 +10,11 @@ use transparent::{address::TransparentAddress, bundle::OutPoint, keys::Transpare
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
-        AccountBirthday, AccountMeta, AddressInfo, Balance, InputSource, NoteFilter,
-        ORCHARD_SHARD_HEIGHT, ReceivedNotes, SAPLING_SHARD_HEIGHT, TargetValue,
-        WalletCommitmentTrees, WalletRead, WalletUtxo, WalletWrite, Zip32Derivation,
+        AccountBirthday, AccountMeta, AddressInfo, Balance, DecryptedTransaction, InputSource,
+        NoteFilter, ORCHARD_SHARD_HEIGHT, ReceivedNotes, ReceivedTransactionOutput,
+        SAPLING_SHARD_HEIGHT, TargetValue, WalletCommitmentTrees, WalletRead, WalletUtxo,
+        WalletWrite, Zip32Derivation,
+        chain::ChainState,
         wallet::{ConfirmationsPolicy, TargetHeight},
     },
     keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
@@ -356,6 +358,15 @@ impl WalletRead for DbConnection {
     ) -> Result<Vec<zcash_client_backend::data_api::TransactionDataRequest>, Self::Error> {
         self.with(|db_data| db_data.transaction_data_requests())
     }
+
+    fn get_received_outputs(
+        &self,
+        txid: zcash_protocol::TxId,
+        target_height: TargetHeight,
+        confirmations_policy: ConfirmationsPolicy,
+    ) -> Result<Vec<ReceivedTransactionOutput>, Self::Error> {
+        self.with(|db_data| db_data.get_received_outputs(txid, target_height, confirmations_policy))
+    }
 }
 
 impl InputSource for DbConnection {
@@ -517,7 +528,7 @@ impl WalletWrite for DbConnection {
 
     fn put_blocks(
         &mut self,
-        from_state: &zcash_client_backend::data_api::chain::ChainState,
+        from_state: &ChainState,
         blocks: Vec<zcash_client_backend::data_api::ScannedBlock<Self::AccountId>>,
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.put_blocks(from_state, blocks))
@@ -532,7 +543,7 @@ impl WalletWrite for DbConnection {
 
     fn store_decrypted_tx(
         &mut self,
-        received_tx: zcash_client_backend::data_api::DecryptedTransaction<'_, Self::AccountId>,
+        received_tx: DecryptedTransaction<'_, Transaction, Self::AccountId>,
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.store_decrypted_tx(received_tx))
     }
@@ -554,6 +565,10 @@ impl WalletWrite for DbConnection {
 
     fn truncate_to_height(&mut self, max_height: BlockHeight) -> Result<BlockHeight, Self::Error> {
         self.with_mut(|mut db_data| db_data.truncate_to_height(max_height))
+    }
+
+    fn truncate_to_chain_state(&mut self, chain_state: ChainState) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.truncate_to_chain_state(chain_state))
     }
 
     fn reserve_next_n_ephemeral_addresses(
