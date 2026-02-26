@@ -19,27 +19,37 @@ pub(crate) type Response = RpcResult<ResultType>;
 /// The result of decoding a script.
 #[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct ResultType {
-    /// String representation of the script public key.
+    #[serde(flatten)]
+    inner: TransparentScript,
+
+    /// The P2SH address for this script.
+    p2sh: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub(super) struct TransparentScript {
+    /// The assembly string representation of the script.
     asm: String,
-    /// The type of script.
-    ///
-    /// One of: `pubkeyhash`, `scripthash`, `pubkey`, `multisig`, `nulldata`, `nonstandard`.
-    #[serde(rename = "type")]
-    kind: &'static str,
-    /// The required number of signatures.
+
+    /// The required number of signatures to spend this output.
     ///
     /// Omitted for scripts that don't contain identifiable addresses (such as
     /// non-standard or null-data scripts).
     #[serde(rename = "reqSigs", skip_serializing_if = "Option::is_none")]
     req_sigs: Option<u8>,
-    /// The addresses associated with this script.
+
+    /// The type of script.
+    ///
+    /// One of `["pubkey", "pubkeyhash", "scripthash", "multisig", "nulldata", "nonstandard"]`.
+    #[serde(rename = "type")]
+    kind: &'static str,
+
+    /// Array of the transparent addresses involved in the script.
     ///
     /// Omitted for scripts that don't contain identifiable addresses (such as
     /// non-standard or null-data scripts).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     addresses: Vec<String>,
-    /// The P2SH address for this script.
-    p2sh: String,
 }
 
 pub(super) const PARAM_HEXSTRING_DESC: &str = "The hex-encoded script.";
@@ -54,18 +64,27 @@ pub(crate) fn call(params: &Network, hexstring: &str) -> Response {
         .map_err(|_| LegacyCode::Deserialization.with_static("Hex decoding failed"))?;
 
     let script_code = Code(script_bytes);
-    let asm = to_zcashd_asm(&script_code.to_asm(false));
 
-    let (kind, req_sigs, addresses) = detect_script_info(&script_code, params);
     let p2sh = calculate_p2sh_address(&script_code.0, params);
 
     Ok(ResultType {
+        inner: script_to_json(params, &script_code),
+        p2sh,
+    })
+}
+
+/// Equivalent of `ScriptPubKeyToJSON` in `zcashd` with `fIncludeHex = false`.
+pub(super) fn script_to_json(params: &Network, script_code: &Code) -> TransparentScript {
+    let asm = to_zcashd_asm(&script_code.to_asm(false));
+
+    let (kind, req_sigs, addresses) = detect_script_info(&script_code, params);
+
+    TransparentScript {
         asm,
         kind,
         req_sigs,
         addresses,
-        p2sh,
-    })
+    }
 }
 
 /// Converts zcash_script ASM output to zcashd-compatible format.
@@ -126,6 +145,13 @@ fn calculate_p2sh_address(script_bytes: &[u8], params: &Network) -> String {
 /// Detects the script type and extracts associated information.
 ///
 /// Returns a tuple of (type_name, required_sigs, addresses).
+//
+// TODO: Replace match arms with `ScriptKind::as_str()` and `ScriptKind::req_sigs()`
+//       once zcash_script is upgraded past 0.4.x.
+//       See https://github.com/ZcashFoundation/zcash_script/pull/291
+// TODO: zcashd relied on initialization behaviour for the default value
+//       for null-data or non-standard outputs. Figure out what it is.
+//       https://github.com/zcash/wallet/issues/236
 fn detect_script_info(
     script_code: &Code,
     params: &Network,
@@ -193,7 +219,7 @@ mod tests {
         // From zcashd qa/rpc-tests/decodescript.py:65
         // P2PKH: OP_DUP OP_HASH160 <pubkey_hash> OP_EQUALVERIFY OP_CHECKSIG
         let script_hex = format!("76a914{ZCASHD_PUBLIC_KEY_HASH}88ac");
-        let result = call(&mainnet(), &script_hex).unwrap();
+        let result = call(&mainnet(), &script_hex).unwrap().inner;
 
         assert_eq!(result.kind, "pubkeyhash");
         assert_eq!(result.req_sigs, Some(1));
@@ -210,7 +236,7 @@ mod tests {
         // From zcashd qa/rpc-tests/decodescript.py:73
         // P2SH: OP_HASH160 <script_hash> OP_EQUAL
         let script_hex = format!("a914{ZCASHD_PUBLIC_KEY_HASH}87");
-        let result = call(&mainnet(), &script_hex).unwrap();
+        let result = call(&mainnet(), &script_hex).unwrap().inner;
 
         assert_eq!(result.kind, "scripthash");
         assert_eq!(result.req_sigs, Some(1));
@@ -228,7 +254,7 @@ mod tests {
         // P2PK: <pubkey> OP_CHECKSIG
         // 0x21 = 33 bytes push opcode
         let script_hex = format!("21{ZCASHD_PUBLIC_KEY}ac");
-        let result = call(&mainnet(), &script_hex).unwrap();
+        let result = call(&mainnet(), &script_hex).unwrap().inner;
 
         assert_eq!(result.kind, "pubkey");
         assert_eq!(result.req_sigs, Some(1));
@@ -250,7 +276,7 @@ mod tests {
              53ae",
             pk = ZCASHD_PUBLIC_KEY
         );
-        let result = call(&mainnet(), &script_hex).unwrap();
+        let result = call(&mainnet(), &script_hex).unwrap().inner;
 
         assert_eq!(result.kind, "multisig");
         assert_eq!(result.req_sigs, Some(2));
@@ -269,7 +295,7 @@ mod tests {
         let script_hex = "6a48304502207fa7a6d1e0ee81132a269ad84e68d695483745cde8b541e\
             3bf630749894e342a022100c1f7ab20e13e22fb95281a870f3dcf38d782e53023ee31\
             3d741ad0cfbc0c509001";
-        let result = call(&mainnet(), script_hex).unwrap();
+        let result = call(&mainnet(), script_hex).unwrap().inner;
 
         assert_eq!(result.kind, "nulldata");
         assert_eq!(result.req_sigs, None);
@@ -281,7 +307,7 @@ mod tests {
     fn decode_nonstandard_script() {
         // OP_TRUE (0x51)
         let script_hex = "51";
-        let result = call(&mainnet(), script_hex).unwrap();
+        let result = call(&mainnet(), script_hex).unwrap().inner;
 
         assert_eq!(result.kind, "nonstandard");
         assert_eq!(result.req_sigs, None);
@@ -294,10 +320,10 @@ mod tests {
     fn decode_empty_script() {
         let result = call(&mainnet(), "").unwrap();
 
-        assert_eq!(result.kind, "nonstandard");
-        assert_eq!(result.req_sigs, None);
-        assert!(result.addresses.is_empty());
-        assert!(result.asm.is_empty());
+        assert_eq!(result.inner.kind, "nonstandard");
+        assert_eq!(result.inner.req_sigs, None);
+        assert!(result.inner.addresses.is_empty());
+        assert!(result.inner.asm.is_empty());
         // P2SH should still be computed (hash of empty script)
         assert!(result.p2sh.starts_with("t3"));
     }
@@ -317,9 +343,9 @@ mod tests {
         let script_hex = format!("76a914{ZCASHD_PUBLIC_KEY_HASH}88ac");
         let result = call(&testnet(), &script_hex).unwrap();
 
-        assert_eq!(result.kind, "pubkeyhash");
+        assert_eq!(result.inner.kind, "pubkeyhash");
         // Testnet addresses start with "tm" for P2PKH
-        assert!(result.addresses[0].starts_with("tm"));
+        assert!(result.inner.addresses[0].starts_with("tm"));
         // P2SH testnet addresses start with "t2"
         assert!(result.p2sh.starts_with("t2"));
     }
@@ -334,5 +360,90 @@ mod tests {
         let script_bytes = hex::decode(&script_hex).unwrap();
         let expected_p2sh = calculate_p2sh_address(&script_bytes, &mainnet());
         assert_eq!(result.p2sh, expected_p2sh);
+    }
+
+    /// P2PKH scriptPubKey asm output.
+    ///
+    /// Test vector from zcashd `qa/rpc-tests/decodescript.py:134`.
+    #[test]
+    fn scriptpubkey_asm_p2pkh() {
+        let script =
+            Code(hex::decode("76a914dc863734a218bfe83ef770ee9d41a27f824a6e5688ac").unwrap());
+        let asm = script.to_asm(false);
+        assert_eq!(
+            asm,
+            "OP_DUP OP_HASH160 dc863734a218bfe83ef770ee9d41a27f824a6e56 OP_EQUALVERIFY OP_CHECKSIG"
+        );
+
+        // Verify script type detection
+        let (kind, req_sigs, _) = detect_script_info(&script, &mainnet());
+        assert_eq!(kind, "pubkeyhash");
+        assert_eq!(req_sigs, Some(1));
+    }
+
+    /// P2SH scriptPubKey asm output.
+    ///
+    /// Test vector from zcashd `qa/rpc-tests/decodescript.py:135`.
+    #[test]
+    fn scriptpubkey_asm_p2sh() {
+        let script = Code(hex::decode("a9142a5edea39971049a540474c6a99edf0aa4074c5887").unwrap());
+        let asm = script.to_asm(false);
+        assert_eq!(
+            asm,
+            "OP_HASH160 2a5edea39971049a540474c6a99edf0aa4074c58 OP_EQUAL"
+        );
+
+        let (kind, req_sigs, _) = detect_script_info(&script, &mainnet());
+        assert_eq!(kind, "scripthash");
+        assert_eq!(req_sigs, Some(1));
+    }
+
+    /// OP_RETURN nulldata scriptPubKey.
+    ///
+    /// Test vector from zcashd `qa/rpc-tests/decodescript.py:142`.
+    #[test]
+    fn scriptpubkey_asm_nulldata() {
+        let script = Code(hex::decode("6a09300602010002010001").unwrap());
+        let asm = script.to_asm(false);
+        assert_eq!(asm, "OP_RETURN 300602010002010001");
+
+        let (kind, req_sigs, addresses) = detect_script_info(&script, &mainnet());
+        assert_eq!(kind, "nulldata");
+        assert_eq!(req_sigs, None);
+        assert!(addresses.is_empty());
+    }
+
+    /// P2PK scriptPubKey (uncompressed pubkey).
+    ///
+    /// Pubkey extracted from zcashd `qa/rpc-tests/decodescript.py:122-125` scriptSig,
+    /// wrapped in P2PK format (OP_PUSHBYTES_65 <pubkey> OP_CHECKSIG).
+    #[test]
+    fn scriptpubkey_asm_p2pk() {
+        let script = Code(hex::decode(
+            "4104d3f898e6487787910a690410b7a917ef198905c27fb9d3b0a42da12aceae0544fc7088d239d9a48f2828a15a09e84043001f27cc80d162cb95404e1210161536ac"
+        ).unwrap());
+        let asm = script.to_asm(false);
+        assert_eq!(
+            asm,
+            "04d3f898e6487787910a690410b7a917ef198905c27fb9d3b0a42da12aceae0544fc7088d239d9a48f2828a15a09e84043001f27cc80d162cb95404e1210161536 OP_CHECKSIG"
+        );
+
+        let (kind, req_sigs, _) = detect_script_info(&script, &mainnet());
+        assert_eq!(kind, "pubkey");
+        assert_eq!(req_sigs, Some(1));
+    }
+
+    /// Nonstandard script detection.
+    ///
+    /// Tests fallback behavior for scripts that don't match standard patterns.
+    #[test]
+    fn scriptpubkey_nonstandard() {
+        // Just OP_TRUE (0x51) - a valid but nonstandard script
+        let script = Code(hex::decode("51").unwrap());
+
+        let (kind, req_sigs, addresses) = detect_script_info(&script, &mainnet());
+        assert_eq!(kind, "nonstandard");
+        assert_eq!(req_sigs, None);
+        assert!(addresses.is_empty());
     }
 }

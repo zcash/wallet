@@ -3,7 +3,7 @@ use zcash_primitives::transaction::Transaction;
 use zcash_protocol::consensus;
 
 use super::get_raw_transaction::{TransactionDetails, tx_to_json};
-use crate::components::json_rpc::server::LegacyCode;
+use crate::{components::json_rpc::server::LegacyCode, network::Network};
 
 /// Response to a `decoderawtransaction` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -15,7 +15,7 @@ pub(crate) type ResultType = TransactionDetails;
 pub(super) const PARAM_HEXSTRING_DESC: &str = "The transaction hex string";
 
 /// Decodes a hex-encoded transaction.
-pub(crate) fn call(hexstring: &str) -> Response {
+pub(crate) fn call(params: &Network, hexstring: &str) -> Response {
     let tx_bytes = hex::decode(hexstring)
         .map_err(|_| LegacyCode::Deserialization.with_static("TX decode failed"))?;
 
@@ -26,7 +26,7 @@ pub(crate) fn call(hexstring: &str) -> Response {
 
     let size = tx_bytes.len() as u64;
 
-    Ok(tx_to_json(tx, size))
+    Ok(tx_to_json(params, tx, size))
 }
 
 #[cfg(test)]
@@ -34,11 +34,12 @@ mod tests {
     use super::*;
 
     // Test vectors from zcashd `src/test/rpc_tests.cpp:26-70`
+    const MAINNET: &Network = &Network::Consensus(consensus::Network::MainNetwork);
 
     /// Tests that "DEADBEEF" (valid hex but invalid transaction) returns an error.
     #[test]
     fn decode_deadbeef_returns_error() {
-        let result = call("DEADBEEF");
+        let result = call(MAINNET, "DEADBEEF");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.message(), "TX decode failed");
@@ -47,7 +48,7 @@ mod tests {
     /// Tests that "null" (invalid hex) returns an error.
     #[test]
     fn decode_null_returns_error() {
-        let result = call("null");
+        let result = call(MAINNET, "null");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.message(), "TX decode failed");
@@ -56,7 +57,7 @@ mod tests {
     /// Tests that an empty string returns an error.
     #[test]
     fn decode_empty_returns_error() {
-        let result = call("");
+        let result = call(MAINNET, "");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.message(), "TX decode failed");
@@ -65,7 +66,7 @@ mod tests {
     /// Tests that the error code is RPC_DESERIALIZATION_ERROR (value -22) for decode failures.
     #[test]
     fn decode_error_has_correct_code() {
-        let result = call("DEADBEEF");
+        let result = call(MAINNET, "DEADBEEF");
         let err = result.unwrap_err();
         assert_eq!(err.code(), LegacyCode::Deserialization as i32);
     }

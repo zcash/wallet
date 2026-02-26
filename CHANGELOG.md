@@ -16,8 +16,8 @@ be considered breaking changes.
   - `z_converttex`
 
 ### Changed
-- `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, and
-  `kind` for transparent outputs.
+- `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
+  and `addresses` for transparent outputs.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
   `zcashd` didn't include in its response.
 

@@ -666,7 +666,7 @@ impl RpcServer for RpcImpl {
     }
 
     async fn decode_raw_transaction(&self, hexstring: &str) -> decode_raw_transaction::Response {
-        decode_raw_transaction::call(hexstring)
+        decode_raw_transaction::call(self.wallet().await?.params(), hexstring)
     }
 
     async fn view_transaction(&self, txid: &str) -> view_transaction::Response {
