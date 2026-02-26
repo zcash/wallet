@@ -599,11 +599,14 @@ async fn data_requests(
                         // instead of requiring us to specify a verbosity and then deal
                         // with an enum variant that should never occur.
                         Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => unreachable!(),
-                        Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => tx
-                            .height()
-                            .map(BlockHeight::from_u32)
-                            .map(TransactionStatus::Mined)
-                            .unwrap_or(TransactionStatus::NotInMainChain),
+                        Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => {
+                            match tx.height() {
+                                Some(h @ 0..) => {
+                                    TransactionStatus::Mined(BlockHeight::from_u32(h as u32))
+                                }
+                                _ => TransactionStatus::NotInMainChain,
+                            }
+                        }
                         // TODO: Zaino is not correctly parsing the error response, so we
                         // can't look for `LegacyCode::InvalidAddressOrKey`. Instead match
                         // on these three possible error messages:
@@ -632,7 +635,17 @@ async fn data_requests(
                         // with an enum variant that should never occur.
                         Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => unreachable!(),
                         Ok(zebra_rpc::methods::GetRawTransaction::Object(tx)) => {
-                            let mined_height = tx.height().map(BlockHeight::from_u32);
+                            let mined_height = match tx.height() {
+                                None => None,
+                                Some(h @ 0..) => Some(BlockHeight::from_u32(h as u32)),
+                                Some(_) => {
+                                    db_data.set_transaction_status(
+                                        txid,
+                                        TransactionStatus::NotInMainChain,
+                                    )?;
+                                    continue;
+                                }
+                            };
 
                             // TODO: Zaino should either be doing the tx parsing for us,
                             // or telling us the consensus branch ID for which the tx is
@@ -755,7 +768,12 @@ async fn data_requests(
                             zebra_rpc::methods::GetRawTransaction::Object(tx) => tx,
                         };
 
-                        let mined_height = tx.height().map(BlockHeight::from_u32);
+                        // Ignore transactions that don't exist in the main chain or its mempool.
+                        let mined_height = match tx.height() {
+                            None => None,
+                            Some(h @ 0..) => Some(BlockHeight::from_u32(h as u32)),
+                            Some(_) => continue,
+                        };
 
                         // Ignore transactions that don't match the status filter.
                         match (&req.tx_status_filter(), mined_height) {
@@ -766,10 +784,10 @@ async fn data_requests(
 
                         // Ignore transactions with outputs that don't match the status
                         // filter.
-                        if let Some(filter) = &txs_with_unspent_outputs {
-                            if !filter.contains(&txid) {
-                                continue;
-                            }
+                        if let Some(filter) = &txs_with_unspent_outputs
+                            && !filter.contains(&txid)
+                        {
+                            continue;
                         }
 
                         // TODO: Zaino should either be doing the tx parsing for us,
