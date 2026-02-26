@@ -262,7 +262,7 @@ async fn fetch_compact_block_inner(
             .into_iter()
             .map(|ctx| CompactTx {
                 index: ctx.index,
-                hash: ctx.hash,
+                txid: ctx.hash,
                 fee: ctx.fee,
                 spends: ctx
                     .spends
@@ -288,6 +288,8 @@ async fn fetch_compact_block_inner(
                         ciphertext: a.ciphertext,
                     })
                     .collect(),
+                vin: vec![],
+                vout: vec![],
             })
             .collect(),
         chain_metadata: compact_block.chain_metadata.map(|m| ChainMetadata {

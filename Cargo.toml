@@ -106,8 +106,8 @@ tracing-subscriber = "0.3"
 zcash_protocol = "0.7"
 
 # Zcash payment protocols
-orchard = "0.11"
-sapling = { package = "sapling-crypto", version = "0.5" }
+orchard = "0.12"
+sapling = { package = "sapling-crypto", version = "0.6" }
 transparent = { package = "zcash_transparent", version = "0.6" }
 zcash_keys = { version = "0.12", features = ["transparent-inputs", "sapling", "orchard", "transparent-key-encoding"] }
 zcash_primitives = "0.26"
@@ -152,6 +152,19 @@ anyhow = "1.0"
 tonic = "0.14"
 
 [patch.crates-io]
+equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "ddba12c9a09bdde0f0a2f746c37b3bce4c437c82" }
+
 age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633bb70c91eef91142fd4" }
 
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "f84f80612813ba00a0a8a9a5f060bd217fa981cc" }
