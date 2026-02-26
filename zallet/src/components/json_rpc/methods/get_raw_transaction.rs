@@ -15,6 +15,7 @@ use zcash_protocol::{
 };
 use zcash_script::script::{Asm, Code};
 
+use super::decode_script::to_zcashd_asm;
 use crate::components::{
     database::DbConnection,
     json_rpc::{
@@ -817,42 +818,6 @@ impl OrchardAction {
             spend_auth_sig: hex::encode(<[u8; 64]>::from(action.authorization())),
         }
     }
-}
-
-/// Converts zcash_script asm output to zcashd-compatible format.
-///
-/// The zcash_script crate outputs "OP_0" through "OP_16" and "OP_1NEGATE",
-/// but zcashd outputs "0" through "16" and "-1" respectively.
-///
-/// Reference: https://github.com/zcash/zcash/blob/v6.11.0/src/script/script.cpp#L19-L40
-///
-/// TODO: Remove this function once zcash_script is upgraded past 0.4.x,
-///       as `to_asm()` will natively output zcashd-compatible format.
-///       See https://github.com/ZcashFoundation/zcash_script/pull/289
-fn to_zcashd_asm(asm: &str) -> String {
-    asm.split(' ')
-        .map(|token| match token {
-            "OP_1NEGATE" => "-1",
-            "OP_1" => "1",
-            "OP_2" => "2",
-            "OP_3" => "3",
-            "OP_4" => "4",
-            "OP_5" => "5",
-            "OP_6" => "6",
-            "OP_7" => "7",
-            "OP_8" => "8",
-            "OP_9" => "9",
-            "OP_10" => "10",
-            "OP_11" => "11",
-            "OP_12" => "12",
-            "OP_13" => "13",
-            "OP_14" => "14",
-            "OP_15" => "15",
-            "OP_16" => "16",
-            other => other,
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 /// Detects the script type and required signatures from a scriptPubKey.

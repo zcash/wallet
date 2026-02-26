@@ -68,10 +68,17 @@ pub(crate) fn call(params: &Network, hexstring: &str) -> Response {
     })
 }
 
-/// Converts zcash_script ASM format to zcashd format.
+/// Converts zcash_script ASM output to zcashd-compatible format.
 ///
-/// zcashd uses numbers for small values (OP_1 -> "1", OP_1NEGATE -> "-1")
-fn to_zcashd_asm(asm: &str) -> String {
+/// The zcash_script crate outputs "OP_1" through "OP_16" and "OP_1NEGATE",
+/// but zcashd outputs "1" through "16" and "-1" respectively.
+///
+/// Reference: https://github.com/zcash/zcash/blob/v6.11.0/src/script/script.cpp#L19-L40
+///
+/// TODO: Remove this function once zcash_script is upgraded past 0.4.x,
+///       as `to_asm()` will natively output zcashd-compatible format.
+///       See https://github.com/ZcashFoundation/zcash_script/pull/289
+pub(super) fn to_zcashd_asm(asm: &str) -> String {
     asm.split(' ')
         .map(|token| match token {
             "OP_1NEGATE" => "-1",
