@@ -7654,10 +7654,10 @@ dependencies = [
 [[package]]
 name = "zcash_encoding"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bca38087e6524e5f51a5b0fb3fc18f36d7b84bf67b2056f494ca0c281590953d"
+source = "git+https://github.com/distractedm1nd/librustzcash.git?rev=cf39300ffa47aca9f2dec1f55727d17a5301f2fe#cf39300ffa47aca9f2dec1f55727d17a5301f2fe"
 dependencies = [
  "core2 0.3.3",
+ "hex",
  "nonempty 0.11.0",
 ]
 

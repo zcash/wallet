@@ -9,7 +9,6 @@ use schemars::{JsonSchema, json_schema};
 use serde::Serialize;
 use zcash_client_sqlite::AccountUuid;
 use zcash_protocol::{
-    TxId,
     consensus::BlockHeight,
     value::{COIN, ZatBalance, Zatoshis},
 };
@@ -41,16 +40,6 @@ pub(super) async fn ensure_wallet_is_unlocked(keystore: &KeyStore) -> RpcResult<
     } else {
         Ok(())
     }
-}
-
-// TODO: Move this to `zcash_protocol`.
-//       https://github.com/zcash/librustzcash/issues/1934
-pub(crate) fn parse_txid(txid_str: &str) -> RpcResult<TxId> {
-    let mut bytes = [0; 32];
-    hex::decode_to_slice(txid_str, &mut bytes)
-        .map_err(|_| LegacyCode::InvalidParameter.with_static("invalid txid"))?;
-    bytes.reverse();
-    Ok(TxId::from_bytes(bytes))
 }
 
 /// Parses the `seedfp` parameter present in many wallet RPCs.
