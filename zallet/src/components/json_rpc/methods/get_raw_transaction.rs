@@ -7,6 +7,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use transparent::bundle::{TxIn, TxOut};
 use zaino_state::{FetchServiceError, FetchServiceSubscriber, LightWalletIndexer, ZcashIndexer};
+use zcash_primitives::transaction::TxVersion;
 use zcash_protocol::{
     TxId,
     consensus::{self, BlockHeight},
@@ -628,8 +629,18 @@ pub(super) fn tx_to_json(
                     bundle.authorization().binding_sig,
                 ))),
             )
-        } else {
+        } else if matches!(tx.version(), TxVersion::Sprout(_) | TxVersion::V3) {
+            // Omitted if `version < 4`.
             (None, None, None, None, None)
+        } else {
+            // Present but empty, except for `bindingSig`.
+            (
+                Some(value_from_zat_balance(ZatBalance::zero())),
+                Some(0),
+                Some(vec![]),
+                Some(vec![]),
+                None,
+            )
         };
 
     let orchard = tx
