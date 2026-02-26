@@ -48,6 +48,48 @@ pub(crate) struct Transaction {
     /// The serialized, hex-encoded data for the transaction identified by `txid`.
     hex: String,
 
+    #[serde(flatten)]
+    inner: TransactionDetails,
+
+    /// The hash of the block that the transaction is mined in, if any.
+    ///
+    /// Omitted if the transaction is not known to be mined in any block.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blockhash: Option<String>,
+
+    /// The height of the block that the transaction is mined in, or -1 if that block is
+    /// not in the current best chain.
+    ///
+    /// Omitted if `blockhash` is either omitted or unknown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    height: Option<i32>,
+
+    /// The number of confirmations the transaction has, or 0 if the block it is mined in
+    /// is not in the current best chain.
+    ///
+    /// Omitted if `blockhash` is either omitted or unknown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confirmations: Option<u32>,
+
+    /// The transaction time in seconds since epoch (Jan 1 1970 GMT).
+    ///
+    /// This is always identical to `blocktime`.
+    ///
+    /// Omitted if `blockhash` is either omitted or not in the current best chain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    time: Option<i64>,
+
+    /// The block time in seconds since epoch (Jan 1 1970 GMT) for the block that the
+    /// transaction is mined in.
+    ///
+    /// Omitted if `blockhash` is either omitted or not in the current best chain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blocktime: Option<i64>,
+}
+
+/// Verbose information about a transaction.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
+pub(crate) struct TransactionDetails {
     /// The transaction ID (same as provided).
     txid: String,
 
@@ -146,41 +188,6 @@ pub(crate) struct Transaction {
     #[serde(rename = "joinSplitSig")]
     #[serde(skip_serializing_if = "Option::is_none")]
     join_split_sig: Option<String>,
-
-    /// The hash of the block that the transaction is mined in, if any.
-    ///
-    /// Omitted if the transaction is not known to be mined in any block.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    blockhash: Option<String>,
-
-    /// The height of the block that the transaction is mined in, or -1 if that block is
-    /// not in the current best chain.
-    ///
-    /// Omitted if `blockhash` is either omitted or unknown.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    height: Option<i32>,
-
-    /// The number of confirmations the transaction has, or 0 if the block it is mined in
-    /// is not in the current best chain.
-    ///
-    /// Omitted if `blockhash` is either omitted or unknown.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    confirmations: Option<u32>,
-
-    /// The transaction time in seconds since epoch (Jan 1 1970 GMT).
-    ///
-    /// This is always identical to `blocktime`.
-    ///
-    /// Omitted if `blockhash` is either omitted or not in the current best chain.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    time: Option<i64>,
-
-    /// The block time in seconds since epoch (Jan 1 1970 GMT) for the block that the
-    /// transaction is mined in.
-    ///
-    /// Omitted if `blockhash` is either omitted or not in the current best chain.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    blocktime: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
@@ -540,6 +547,8 @@ pub(crate) async fn call(
             .expect("not our problem"),
     ) + 1;
 
+    let size = tx.hex().as_ref().len() as u64;
+
     let consensus_branch_id = consensus::BranchId::for_height(
         wallet.params(),
         tx.height()
@@ -550,8 +559,23 @@ pub(crate) async fn call(
         zcash_primitives::transaction::Transaction::read(tx.hex().as_ref(), consensus_branch_id)
             .expect("guaranteed to be parseable by Zaino");
 
-    let size = (tx_hex.len() / 2) as u64;
+    Ok(ResultType::Verbose(Box::new(Transaction {
+        in_active_chain: None,
+        hex: tx_hex,
+        inner: tx_to_json(tx, size),
+        blockhash,
+        height,
+        confirmations,
+        time,
+        blocktime,
+    })))
+}
 
+/// Equivalent of `TxToJSON` in `zcashd` with null `hashBlock`.
+pub(super) fn tx_to_json(
+    tx: zcash_primitives::transaction::Transaction,
+    size: u64,
+) -> TransactionDetails {
     let overwintered = tx.version().has_overwinter();
 
     let (vin, vout) = match tx.transparent_bundle() {
@@ -613,10 +637,8 @@ pub(crate) async fn call(
         .has_orchard()
         .then(|| Orchard::encode(tx.orchard_bundle()));
 
-    Ok(ResultType::Verbose(Box::new(Transaction {
-        in_active_chain: None,
-        hex: tx_hex,
-        txid: txid_str.to_ascii_lowercase(),
+    TransactionDetails {
+        txid: tx.txid().to_string(),
         authdigest: TxId::from_bytes(tx.auth_commitment().as_bytes().try_into().unwrap())
             .to_string(),
         size,
@@ -639,12 +661,7 @@ pub(crate) async fn call(
         join_split_pub_key,
         #[cfg(zallet_unimplemented)]
         join_split_sig,
-        blockhash,
-        height,
-        confirmations,
-        time,
-        blocktime,
-    })))
+    }
 }
 
 impl TransparentInput {
@@ -856,6 +873,21 @@ fn detect_script_type_and_sigs(script_bytes: &[u8]) -> (&'static str, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const V1_TX_HEX: &str = "0100000001a15d57094aa7a21a28cb20b59aab8fc7d1149a3bdbcddba9c622e4f5f6a99ece010000006c493046022100f93bb0e7d8db7bd46e40132d1f8242026e045f03a0efe71bbb8e3f475e970d790221009337cd7f1f929f00cc6ff01f03729b069a7c21b59b1736ddfee5db5946c5da8c0121033b9b137ee87d5a812d6f506efdd37f0affa7ffc310711c06c7f3e097c9447c52ffffffff0100e1f505000000001976a9140389035a9225b3839e2bbf32d826a1e222031fd888ac00000000";
+
+    #[test]
+    fn decode_v1_transaction() {
+        let tx = super::super::decode_raw_transaction::call(V1_TX_HEX).unwrap();
+        assert_eq!(tx.size, 193);
+        assert_eq!(tx.version, 1);
+        assert_eq!(tx.locktime, 0);
+        assert!(!tx.overwintered);
+        assert!(tx.versiongroupid.is_none());
+        assert!(tx.expiryheight.is_none());
+        assert_eq!(tx.vin.len(), 1);
+        assert_eq!(tx.vout.len(), 1);
+    }
 
     /// P2PKH scriptSig with sighash decode.
     ///
