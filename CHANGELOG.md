@@ -8,6 +8,19 @@ be considered breaking changes.
 
 ## [0.1.0-alpha.4] - PLANNED
 
+### Added
+- RPC methods:
+  - `decoderawtransaction`
+  - `decodescript`
+  - `verifymessage`
+  - `z_converttex`
+
+### Changed
+- `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, and
+  `kind` for transparent outputs.
+- `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
+  `zcashd` didn't include in its response.
+
 ### Fixed
 - No longer crashes in regtest mode when an NU5 activation height is not defined.
 
