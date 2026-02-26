@@ -266,7 +266,7 @@ pub(crate) trait WalletRpc {
     /// Returns an OpenRPC schema as a description of this service.
     // TODO: Improve the build script so this works with non-wallet Zallet builds.
     #[method(name = "rpc.discover")]
-    fn openrpc(&self) -> openrpc::Response;
+    fn openrpc(&self) -> openrpsee::openrpc::Response;
 
     /// Returns the list of operation ids currently known to the wallet.
     ///
@@ -707,7 +707,7 @@ impl WalletRpcServer for WalletRpcImpl {
         help::call(command)
     }
 
-    fn openrpc(&self) -> openrpc::Response {
+    fn openrpc(&self) -> openrpsee::openrpc::Response {
         openrpc::call()
     }
 

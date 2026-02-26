@@ -112,6 +112,7 @@ incrementalmerkletree = { workspace = true, features = ["legacy-api"] }
 jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 nix = { workspace = true, features = ["signal"] }
+openrpsee.workspace = true
 orchard.workspace = true
 phf.workspace = true
 rand.workspace = true
@@ -185,6 +186,7 @@ flate2.workspace = true
 i18n-embed.workspace = true
 i18n-embed-fl.workspace = true
 quote.workspace = true
+openrpsee.workspace = true
 rust-embed.workspace = true
 shadow-rs = { workspace = true, default-features = true }
 spdx.workspace = true
