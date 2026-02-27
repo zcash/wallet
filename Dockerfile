@@ -50,7 +50,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --network=none \
     cargo build \
-	-j 64 \
 	--release \
 	--locked \
         --target ${TARGET_ARCH} \
@@ -66,7 +65,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/src/app/target \
     --network=none \
     cargo install \
-	-j 64 \
 	--locked \
         --path zallet \
         --bin zallet \
