@@ -15,7 +15,7 @@ Zallet’s release automation is designed to satisfy the latest [SLSA v1.0](http
 
 | Artifact | Where it ships | Integrity evidence |
 | --- | --- | --- |
-| Multi-arch OCI image (`docker.io/<namespace>/zallet-test`) | Docker Hub | Cosign signature, Rekor entry, auto-pushed SLSA provenance, SBOM |
+| Multi-arch OCI image (`docker.io/zodl-inc/zallet`) | Docker Hub | Cosign signature, Rekor entry, auto-pushed SLSA provenance, SBOM |
 | Exported runtime bundle | GitHub Actions artifact (`zallet-runtime-oci-*`) | Detached from release, referenced for auditing |
 | Standalone binaries (`zallet-${VERSION}-linux-{amd64,arm64}`) | GitHub Release assets | GPG `.asc`, SPDX SBOM, `intoto.jsonl` provenance |
 | Debian packages (`zallet_${VERSION}_{amd64,arm64}.deb`) | GitHub Release assets + apt.z.cash | GPG `.asc`, SPDX SBOM, `intoto.jsonl` provenance |
@@ -37,7 +37,6 @@ The following sections cover every command required to validate a tagged release
 - `rekor-cli` ≥ 1.2 (transparency log inspection)
 - `crane` or `skopeo` (digest lookup)
 - `oras` (optional SBOM pull)
-- `slsa-verifier` ≥ 2.5
 - `gh` CLI (or `curl`) for release assets
 - `jq`, `coreutils` (`sha256sum`)
 - `gnupg`, `gpgv`, and optionally `dpkg-sig`
@@ -58,13 +57,13 @@ export PATH="$PATH:$HOME/go/bin"
 ```bash
 export VERSION=v1.2.3
 export REPO=zcash/zallet
-export IMAGE=docker.io/<namespace>/zallet-test               # replace <namespace> with the Docker Hub org stored in DOCKERHUB_REGISTRY (must match IMAGE_FULL_NAME from the release workflow output)
+export IMAGE=docker.io/zodl-inc/zallet
 export IMAGE_WORKFLOW="https://github.com/${REPO}/.github/workflows/build-and-push-docker-hub.yaml@refs/tags/${VERSION}"
 export BIN_WORKFLOW="https://github.com/${REPO}/.github/workflows/binaries-and-deb-release.yml@refs/tags/${VERSION}"
 export OIDC_ISSUER="https://token.actions.githubusercontent.com"
-export IMAGE_PLATFORMS="linux/amd64"                         # comma or space separated list from the release metadata
-export BINARY_SUFFIXES="linux-amd64 linux-arm64"             # list of standalone binary suffixes (set to whichever assets the release produced)
-export DEB_ARCHES="amd64 arm64"                              # list of Debian package architectures (match the release output)
+export IMAGE_PLATFORMS="linux/amd64"                         # currently amd64 only; arm64 support is planned
+export BINARY_SUFFIXES="linux-amd64"                         # set to whichever suffixes the release produced (arm64 coming soon)
+export DEB_ARCHES="amd64"                                    # set to whichever architectures the release produced (arm64 coming soon)
 export BIN_SIGNER_WORKFLOW="github.com/${REPO}/.github/workflows/binaries-and-deb-release.yml@refs/tags/${VERSION}"
 mkdir -p verify/dist
 export PATH="$PATH:$HOME/go/bin"
@@ -73,7 +72,7 @@ export PATH="$PATH:$HOME/go/bin"
 # but the snippets now return with `false` so an outer shell stays alive even without it.
 
 # Double-check that `${IMAGE}` points to the exact repository printed by the release workflow
-# (e.g. `docker.io/electriccoinco/zallet-test`). If the namespace is wrong, `cosign download`
+# (e.g. `docker.io/zodl-inc/zallet`). If the namespace is wrong, `cosign download`
 # will look at a different repository and report "no signatures associated" even though the
 # tagged digest was signed under the real namespace.
 ```
@@ -178,9 +177,6 @@ The SBOMs verified here are the same artifacts generated during the build
 (`sbom: true`). You can further inspect them with tools like `jq` or `syft` to validate
 dependencies and policy compliance.
 
-
-The downloaded SBOM is generated directly by the build (`sbom: true`). Inspect it with `jq` or `syft` to validate dependencies.
-
 ### 3. Verify standalone binaries exported from the StageX image
 
 ```bash
@@ -273,9 +269,8 @@ This ensures the repository metadata match the GPG key decrypted inside the `bin
 
 ### 6. Inspect provenance predicates (SLSA v1.0)
 
-For any provenance file downloaded above:
+For any provenance file downloaded above, e.g.:
 
-e.g
 ```bash
 FILE=verify/dist/zallet_${VERSION}_amd64.deb
 
@@ -312,6 +307,8 @@ Automated validation:
 
 ### 7. Reproduce the deterministic StageX build locally
 
+> **Note:** The CI release pipeline currently targets `linux/amd64` only. Support for `linux/arm64` is planned and the SLSA pipeline is already prepared for it (the platform matrix is driven by `release.yml`). The reproduction steps below apply to `linux/amd64`.
+
 ```bash
 git clean -fdx
 git checkout "${VERSION}"
@@ -319,7 +316,14 @@ make build IMAGE_TAG="${VERSION}"
 skopeo inspect docker-archive:build/oci/zallet.tar | jq -r '.Digest'
 ```
 
-Compare the digest returned by `skopeo` (or `docker image inspect`) with `${IMAGE_DIGEST}` from Step 2. Because StageX enforces hermetic toolchains (`utils/build.sh`), the digests must match bit-for-bit. After importing:
+`make build` invokes `utils/build.sh`, which builds a single-platform (`linux/amd64`) OCI tarball at `build/oci/zallet.tar`. The CI workflow pushes a multi-architecture manifest list directly to the registry, so the digest of the local tarball will differ from `${IMAGE_DIGEST}` in Step 2 (which is the multi-arch manifest digest). To compare apples-to-apples, extract the `linux/amd64` platform digest from the manifest:
+
+```bash
+crane manifest "${IMAGE}@${IMAGE_DIGEST}" \
+  | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest'
+```
+
+That per-platform digest should match the one produced by the local StageX build. After importing:
 
 ```bash
 make import IMAGE_TAG="${VERSION}"
@@ -327,6 +331,26 @@ docker run --rm zallet:${VERSION} zallet --version
 ```
 
 Running this reproduction as part of downstream promotion pipelines provides additional assurance that the published image and binaries stem from the deterministic StageX build.
+
+## Supplemental provenance metadata (`.provenance.json`)
+
+Every standalone binary and Debian package in a GitHub Release includes a supplemental
+`*.provenance.json` file alongside the SLSA-standard `*.intoto.jsonl` attestation. For example:
+
+```
+zallet-v1.2.3-linux-amd64
+zallet-v1.2.3-linux-amd64.asc
+zallet-v1.2.3-linux-amd64.sbom.spdx
+zallet-v1.2.3-linux-amd64.intoto.jsonl       ← SLSA standard attestation
+zallet-v1.2.3-linux-amd64.provenance.json    ← supplemental metadata (non-standard)
+```
+
+The `.provenance.json` file is **not** a SLSA-standard predicate. It is a human-readable
+JSON document that records the source Docker image reference and digest, the git commit SHA,
+the GitHub Actions run ID, and the SHA-256 of the artifact — useful as a quick audit trail
+but not suitable for automated SLSA policy enforcement. Use the `*.intoto.jsonl` attestation
+(verified via `gh attestation verify` as shown in sections 3 and 4) for any automated
+compliance checks.
 
 ## Residual work
 
