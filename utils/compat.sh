@@ -63,8 +63,8 @@ check_tools(){
 		case $cmd in
 			buildah)
 				podman buildx version >/dev/null 2>&1 || die "Error: buildx not found"
-				version=$(podman buildx version 2>/dev/null | grep -o 'v[0-9.]*' | sed 's/v//')
-				check_version "buildx" "${version}" "${MIN_BUILDX_VERSION}"
+				version=$(podman buildx version 2>/dev/null | grep -o '[0-9][0-9.]*')
+				check_version "buildah" "${version}" "${MIN_BUILDX_VERSION}"
 				;;
 			podman)
 				command -v podman >/dev/null || die "Error: podman not found"
@@ -74,5 +74,5 @@ check_tools(){
 		esac
 	done
 }
-check_tools podman buildx;
+check_tools podman buildah;
 
