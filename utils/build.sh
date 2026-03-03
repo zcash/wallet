@@ -8,23 +8,26 @@ PLATFORM="linux/amd64"
 OCI_OUTPUT="$REPO_ROOT/build/oci"
 CONTAINERFILE="$REPO_ROOT/Containerfile"
 
-export CONTAINER_BUILDKIT=1
-export SOURCE_DATE_EPOCH=1
-
 echo $CONTAINERFILE
 mkdir -p $OCI_OUTPUT
 
 # Build runtime image for podman run
 echo "Building runtime image..."
-podman build -f "$CONTAINERFILE" "$REPO_ROOT" \
+podman buildx build -f "$CONTAINERFILE" "$REPO_ROOT" \
 	--platform "$PLATFORM" \
 	--target runtime \
-	--output type=oci,rewrite-timestamp=true,force-compression=true,dest=$OCI_OUTPUT/zallet.tar,name=zallet \
+	--source-date-epoch 1 \
+	--rewrite-timestamp \
+	--disable-compression=false \
+	--tag zallet:latest \
 	"$@"
+
+echo "Exporting OCI archive..."
+podman save --format oci-archive -o "$OCI_OUTPUT/zallet.tar" zallet:latest
 
 # Extract binary locally from export stage
 echo "Extracting binary..."
-podman build -f "$CONTAINERFILE" "$REPO_ROOT" --quiet \
+podman buildx build -f "$CONTAINERFILE" "$REPO_ROOT" --quiet \
 	--platform "$PLATFORM" \
 	--target export \
 	--output type=local,dest="$REPO_ROOT/build" \
