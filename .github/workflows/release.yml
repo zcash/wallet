@@ -72,8 +72,8 @@ jobs:
       oci-artifact-name: ${{ format('zallet-runtime-oci-{0}', github.run_id) }}
       dockerhub-namespace: zodl-inc
     secrets:
-      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-      dockerhub_password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      dockerhub_username: ${{ secrets.ZODLINC_DOCKERHUB_USERNAME }}
+      dockerhub_password: ${{ secrets.ZODLINC_DOCKERHUB_PASSWORD }}
 
   binaries_release:
     name: Build standalone binaries and Debian packages
