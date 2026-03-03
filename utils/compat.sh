@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 readonly MIN_BASH_VERSION=5
-readonly MIN_DOCKER_VERSION=26.0.0
-readonly MIN_BUILDX_VERSION=0.13
+readonly MIN_PODMAN_VERSION=5.8.0
+readonly MIN_BUILDX_VERSION=1.43.0
 ### Exit with error message
 die() {
 	echo "$@" >&2
@@ -61,21 +61,18 @@ check_tools(){
 	fi
 	for cmd in "$@"; do
 		case $cmd in
-			buildx)
-				docker buildx version >/dev/null 2>&1 || die "Error: buildx not found"
-				version=$(docker buildx version 2>/dev/null | grep -o 'v[0-9.]*' | sed 's/v//')
+			buildah)
+				podman buildx version >/dev/null 2>&1 || die "Error: buildx not found"
+				version=$(podman buildx version 2>/dev/null | grep -o 'v[0-9.]*' | sed 's/v//')
 				check_version "buildx" "${version}" "${MIN_BUILDX_VERSION}"
 				;;
-			docker)
-				command -v docker >/dev/null || die "Error: docker not found"
-				version=$(docker version -f '{{ .Server.Version }}')
-				check_version "docker" "${version}" "${MIN_DOCKER_VERSION}"
+			podman)
+				command -v podman >/dev/null || die "Error: podman not found"
+				version=$(podman version -f '{{ .Server.Version }}')
+				check_version "podman" "${version}" "${MIN_PODMAN_VERSION}"
 			;;
 		esac
 	done
 }
-check_tools docker buildx;
-docker info -f '{{ .DriverStatus }}' \
-    | grep "io.containerd.snapshotter.v1" >/dev/null \
-|| die "Error: Docker Engine is not using containerd for image storage"
+check_tools podman buildx;
 

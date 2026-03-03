@@ -6,17 +6,17 @@ DIR="$( cd "$( dirname "$0" )" && pwd )"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PLATFORM="linux/amd64"
 OCI_OUTPUT="$REPO_ROOT/build/oci"
-DOCKERFILE="$REPO_ROOT/Dockerfile"
+CONTAINERFILE="$REPO_ROOT/Containerfile"
 
-export DOCKER_BUILDKIT=1
+export CONTAINER_BUILDKIT=1
 export SOURCE_DATE_EPOCH=1
 
-echo $DOCKERFILE
+echo $CONTAINERFILE
 mkdir -p $OCI_OUTPUT
 
-# Build runtime image for docker run
+# Build runtime image for podman run
 echo "Building runtime image..."
-docker build -f "$DOCKERFILE" "$REPO_ROOT" \
+podman build -f "$CONTAINERFILE" "$REPO_ROOT" \
 	--platform "$PLATFORM" \
 	--target runtime \
 	--output type=oci,rewrite-timestamp=true,force-compression=true,dest=$OCI_OUTPUT/zallet.tar,name=zallet \
@@ -24,7 +24,7 @@ docker build -f "$DOCKERFILE" "$REPO_ROOT" \
 
 # Extract binary locally from export stage
 echo "Extracting binary..."
-docker build -f "$DOCKERFILE" "$REPO_ROOT" --quiet \
+podman build -f "$CONTAINERFILE" "$REPO_ROOT" --quiet \
 	--platform "$PLATFORM" \
 	--target export \
 	--output type=local,dest="$REPO_ROOT/build" \
