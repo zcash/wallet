@@ -15,7 +15,7 @@ Zallet’s release automation is designed to satisfy the latest [SLSA v1.0](http
 
 | Artifact | Where it ships | Integrity evidence |
 | --- | --- | --- |
-| Multi-arch OCI image (`docker.io/zodl-inc/zallet`) | Docker Hub | Cosign signature, Rekor entry, auto-pushed SLSA provenance, SBOM |
+| Multi-arch OCI image (`docker.io/zodlinc/zallet`) | Docker Hub | Cosign signature, Rekor entry, auto-pushed SLSA provenance, SBOM |
 | Exported runtime bundle | GitHub Actions artifact (`zallet-runtime-oci-*`) | Detached from release, referenced for auditing |
 | Standalone binaries (`zallet-${VERSION}-linux-{amd64,arm64}`) | GitHub Release assets | GPG `.asc`, SPDX SBOM, `intoto.jsonl` provenance |
 | Debian packages (`zallet_${VERSION}_{amd64,arm64}.deb`) | GitHub Release assets + apt.z.cash | GPG `.asc`, SPDX SBOM, `intoto.jsonl` provenance |
@@ -57,7 +57,7 @@ export PATH="$PATH:$HOME/go/bin"
 ```bash
 export VERSION=v1.2.3
 export REPO=zcash/zallet
-export IMAGE=docker.io/zodl-inc/zallet
+export IMAGE=docker.io/zodlinc/zallet
 export IMAGE_WORKFLOW="https://github.com/${REPO}/.github/workflows/build-and-push-docker-hub.yaml@refs/tags/${VERSION}"
 export BIN_WORKFLOW="https://github.com/${REPO}/.github/workflows/binaries-and-deb-release.yml@refs/tags/${VERSION}"
 export OIDC_ISSUER="https://token.actions.githubusercontent.com"
@@ -72,7 +72,7 @@ export PATH="$PATH:$HOME/go/bin"
 # but the snippets now return with `false` so an outer shell stays alive even without it.
 
 # Double-check that `${IMAGE}` points to the exact repository printed by the release workflow
-# (e.g. `docker.io/zodl-inc/zallet`). If the namespace is wrong, `cosign download`
+# (e.g. `docker.io/zodlinc/zallet`). If the namespace is wrong, `cosign download`
 # will look at a different repository and report "no signatures associated" even though the
 # tagged digest was signed under the real namespace.
 ```

@@ -70,7 +70,7 @@ jobs:
       image-tags: ${{ needs.set_env.outputs.tags }}
       platforms: ${{ needs.set_env.outputs.platforms }}
       oci-artifact-name: ${{ format('zallet-runtime-oci-{0}', github.run_id) }}
-      dockerhub-namespace: zodl-inc
+      dockerhub-namespace: zodlinc
     secrets:
       dockerhub_username: ${{ secrets.ZODLINC_DOCKERHUB_USERNAME }}
       dockerhub_password: ${{ secrets.ZODLINC_DOCKERHUB_PASSWORD }}
