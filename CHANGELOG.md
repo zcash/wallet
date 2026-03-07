@@ -8,6 +8,9 @@ be considered breaking changes.
 
 ## [0.1.0-alpha.4] - PLANNED
 
+### Changed
+- MSRV is now 1.89.0.
+
 ### Fixed
 - No longer crashes in regtest mode when an NU5 activation height is not defined.
 
