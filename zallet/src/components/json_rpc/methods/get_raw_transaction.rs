@@ -16,7 +16,7 @@ use zcash_protocol::{
 };
 use zcash_script::script::{Asm, Code};
 
-use super::decode_script::{TransparentScript, script_to_json, to_zcashd_asm};
+use super::decode_script::{TransparentScript, script_to_json};
 use crate::{
     components::{
         database::DbConnection,
@@ -684,7 +684,7 @@ impl TransparentInput {
             }
         } else {
             // For scriptSig, we pass `true` since there may be signatures
-            let asm = to_zcashd_asm(&Code(script_bytes.to_vec()).to_asm(true));
+            let asm = Code(script_bytes.to_vec()).to_asm(true);
 
             Self {
                 coinbase: None,
@@ -906,12 +906,12 @@ mod tests {
     fn asm_numeric_opcodes_match_zcashd() {
         // From decodescript.py:54 - script '5100' (OP_1 OP_0) should produce '1 0'
         let script = hex::decode("5100").unwrap();
-        let asm = to_zcashd_asm(&Code(script).to_asm(false));
+        let asm = Code(script).to_asm(false);
         assert_eq!(asm, "1 0");
 
         // OP_1NEGATE (0x4f) should produce '-1'
         let script = hex::decode("4f").unwrap();
-        let asm = to_zcashd_asm(&Code(script).to_asm(false));
+        let asm = Code(script).to_asm(false);
         assert_eq!(asm, "-1");
 
         // From decodescript.py:82 - 2-of-3 multisig pattern should use '2' and '3'
@@ -923,7 +923,7 @@ mod tests {
             push_public_key, push_public_key, push_public_key
         );
         let script = hex::decode(&script_hex).unwrap();
-        let asm = to_zcashd_asm(&Code(script).to_asm(false));
+        let asm = Code(script).to_asm(false);
         let expected = format!(
             "2 {} {} {} 3 OP_CHECKMULTISIG",
             public_key, public_key, public_key

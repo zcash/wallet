@@ -470,11 +470,11 @@ user-login = "conradoplg"
 user-name = "Conrado"
 
 [[publisher.zcash_script]]
-version = "0.4.2"
-when = "2025-10-24"
-user-id = 6289
-user-login = "str4d"
-user-name = "Jack Grigg"
+version = "0.4.3"
+when = "2026-02-23"
+user-id = 228785
+user-login = "oxarbitrage"
+user-name = "Alfredo Garcia"
 
 [[publisher.zcash_spec]]
 version = "0.2.1"

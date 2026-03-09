@@ -75,7 +75,7 @@ pub(crate) fn call(params: &Network, hexstring: &str) -> Response {
 
 /// Equivalent of `ScriptPubKeyToJSON` in `zcashd` with `fIncludeHex = false`.
 pub(super) fn script_to_json(params: &Network, script_code: &Code) -> TransparentScript {
-    let asm = to_zcashd_asm(&script_code.to_asm(false));
+    let asm = script_code.to_asm(false);
 
     let (kind, req_sigs, addresses) = detect_script_info(script_code, params);
 
@@ -85,42 +85,6 @@ pub(super) fn script_to_json(params: &Network, script_code: &Code) -> Transparen
         req_sigs,
         addresses,
     }
-}
-
-/// Converts zcash_script ASM output to zcashd-compatible format.
-///
-/// The zcash_script crate outputs "OP_1" through "OP_16" and "OP_1NEGATE",
-/// but zcashd outputs "1" through "16" and "-1" respectively.
-///
-/// Reference: https://github.com/zcash/zcash/blob/v6.11.0/src/script/script.cpp#L19-L40
-///
-/// TODO: Remove this function once zcash_script is upgraded past 0.4.x,
-///       as `to_asm()` will natively output zcashd-compatible format.
-///       See https://github.com/ZcashFoundation/zcash_script/pull/289
-pub(super) fn to_zcashd_asm(asm: &str) -> String {
-    asm.split(' ')
-        .map(|token| match token {
-            "OP_1NEGATE" => "-1",
-            "OP_1" => "1",
-            "OP_2" => "2",
-            "OP_3" => "3",
-            "OP_4" => "4",
-            "OP_5" => "5",
-            "OP_6" => "6",
-            "OP_7" => "7",
-            "OP_8" => "8",
-            "OP_9" => "9",
-            "OP_10" => "10",
-            "OP_11" => "11",
-            "OP_12" => "12",
-            "OP_13" => "13",
-            "OP_14" => "14",
-            "OP_15" => "15",
-            "OP_16" => "16",
-            other => other,
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 /// Computes the Hash160 of the given data.
