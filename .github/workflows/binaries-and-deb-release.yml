@@ -36,9 +36,9 @@ on:
         required: true
         type: string
     secrets:
-      GCP_SA_KEY:
+      AWS_ROLE_ARN:
         required: true
-      GCP_PROJECT_ID_PROD:
+      AWS_APT_BUCKET:
         required: true
   workflow_dispatch:
     inputs:
@@ -195,31 +195,18 @@ jobs:
             curl \
             wget
 
-      - name: Install gcloud SDK
-        run: |
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
-            | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-            | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-          sudo apt-get update
-          sudo apt-get install -y google-cloud-sdk
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
 
-      - name: Authenticate with gcloud using process substitution
+      - name: Retrieve GPG signing key from Secrets Manager
         run: |
-          gcloud auth activate-service-account --key-file=<(echo "${{ secrets.GCP_SA_KEY }}" | base64 -d)
-
-      - name: Download encrypted signing key
-        run: gsutil -q cp gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-packages/encrypted_gpg.kms encrypted_gpg.kms
-
-      - name: Decrypt signing key via KMS
-        run: |
-          gcloud kms decrypt \
-            --key gpg \
-            --project ${{ secrets.GCP_PROJECT_ID_PROD }} \
-            --keyring gpg \
-            --location global \
-            --plaintext-file private.pgp \
-            --ciphertext-file encrypted_gpg.kms
+          aws secretsmanager get-secret-value \
+            --secret-id /release/gpg-signing-key \
+            --query SecretString \
+            --output text > private.pgp
 
       - name: Import GPG keys
         run: |
@@ -480,8 +467,8 @@ jobs:
 
       - name: Upload snapshot to the apt.z.cash bucket for approval
         run: |
-          gsutil -q -m rsync -r $HOME/.aptly/public/pool/main/z/zallet/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/pool/main/z/zallet/
-          gsutil -q -m rsync -r $HOME/.aptly/public/dists/ gs://${{ secrets.GCP_PROJECT_ID_PROD }}-apt-server/dists/
+          aws s3 sync $HOME/.aptly/public/pool/main/z/zallet/ s3://${{ secrets.AWS_APT_BUCKET }}/pool/main/z/zallet/
+          aws s3 sync $HOME/.aptly/public/dists/ s3://${{ secrets.AWS_APT_BUCKET }}/dists/
 
       - name: GPG sign Debian package
         run: |

@@ -94,5 +94,5 @@ jobs:
       smoke-distro: ${{ needs.set_env.outputs.smoke_distro }}
       apt-distributions: ${{ needs.set_env.outputs.apt_distributions }}
     secrets:
-      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-      GCP_PROJECT_ID_PROD: ${{ secrets.GCP_PROJECT_ID_PROD }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      AWS_APT_BUCKET: ${{ secrets.AWS_APT_BUCKET }}
