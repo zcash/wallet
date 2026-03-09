@@ -4315,7 +4315,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -4335,7 +4335,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac6c3320f9abac597dcbc668774ef006702672474aad53c6d596b62e487b40b1"
 dependencies = [
  "heck",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -4355,7 +4355,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.108",
@@ -4368,7 +4368,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.108",
@@ -7490,7 +7490,7 @@ dependencies = [
  "zcash_primitives 0.26.3",
  "zcash_proofs 0.26.1",
  "zcash_protocol 0.7.2",
- "zcash_script 0.4.2",
+ "zcash_script 0.4.3",
  "zcash_transparent 0.6.2",
  "zebra-chain",
  "zebra-rpc",
@@ -7589,7 +7589,7 @@ dependencies = [
  "zcash_note_encryption",
  "zcash_primitives 0.26.3",
  "zcash_protocol 0.7.2",
- "zcash_script 0.4.2",
+ "zcash_script 0.4.3",
  "zcash_transparent 0.6.2",
  "zip32 0.2.1",
  "zip321",
@@ -7636,7 +7636,7 @@ dependencies = [
  "zcash_keys 0.12.0",
  "zcash_primitives 0.26.3",
  "zcash_protocol 0.7.2",
- "zcash_script 0.4.2",
+ "zcash_script 0.4.3",
  "zcash_transparent 0.6.2",
  "zip32 0.2.1",
 ]
@@ -7891,7 +7891,7 @@ dependencies = [
  "zcash_encoding 0.3.0",
  "zcash_note_encryption",
  "zcash_protocol 0.7.2",
- "zcash_script 0.4.2",
+ "zcash_script 0.4.3",
  "zcash_spec 0.2.1",
  "zcash_transparent 0.6.2",
  "zip32 0.2.1",
@@ -8000,9 +8000,9 @@ dependencies = [
 
 [[package]]
 name = "zcash_script"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bed6cf5b2b4361105d4ea06b2752f0c8af4641756c7fbc9858a80af186c234f"
+checksum = "c6ef9d04e0434a80b62ad06c5a610557be358ef60a98afa5dbc8ecaf19ad72e7"
 dependencies = [
  "bip32 0.6.0-pre.1",
  "bitflags 2.10.0",
@@ -8077,7 +8077,7 @@ dependencies = [
  "zcash_address 0.10.1",
  "zcash_encoding 0.3.0",
  "zcash_protocol 0.7.2",
- "zcash_script 0.4.2",
+ "zcash_script 0.4.3",
  "zcash_spec 0.2.1",
  "zip32 0.2.1",
 ]

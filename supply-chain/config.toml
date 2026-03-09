@@ -28,20 +28,6 @@ audit-as-crates-io = true
 [policy.age-core]
 audit-as-crates-io = true
 
-[policy.equihash]
-
-[policy.f4jumble]
-
-[policy.orchard]
-
-[policy.redjubjub]
-
-[policy.sapling-crypto]
-
-[policy.tower-batch-control]
-
-[policy.tower-fallback]
-
 [policy.zaino-fetch]
 audit-as-crates-io = true
 
@@ -51,43 +37,10 @@ audit-as-crates-io = true
 [policy.zaino-state]
 audit-as-crates-io = true
 
-[policy.zcash_address]
+[policy."zcash_encoding:0.2.2"]
 
-[policy.zcash_client_backend]
-
-[policy.zcash_client_sqlite]
-
-[policy.zcash_encoding]
-
-[policy.zcash_history]
-
-[policy.zcash_keys]
-
-[policy.zcash_primitives]
-
-[policy.zcash_proofs]
-
-[policy.zcash_protocol]
-
-[policy.zcash_transparent]
-
-[policy.zebra-chain]
-
-[policy.zebra-consensus]
-
-[policy.zebra-network]
-
-[policy.zebra-node-services]
-
-[policy.zebra-rpc]
-
-[policy.zebra-script]
-
-[policy.zebra-state]
-
-[policy.zip32]
-
-[policy.zip321]
+[policy."zcash_encoding:0.3.0@git:cf39300ffa47aca9f2dec1f55727d17a5301f2fe"]
+audit-as-crates-io = true
 
 [[exemptions.abscissa_core]]
 version = "0.9.0"
@@ -1939,6 +1892,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.zcash_encoding]]
 version = "0.2.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.zcash_encoding]]
+version = "0.3.0@git:cf39300ffa47aca9f2dec1f55727d17a5301f2fe"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_spec]]
