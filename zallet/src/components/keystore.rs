@@ -147,6 +147,9 @@ pub(super) mod db;
 mod error;
 pub(crate) use error::KeystoreError;
 
+#[cfg(test)]
+pub(crate) mod testing;
+
 type RelockTask = (SystemTime, JoinHandle<()>);
 
 #[derive(Clone)]
@@ -171,6 +174,23 @@ impl fmt::Debug for KeyStore {
 }
 
 impl KeyStore {
+    /// Creates a KeyStore for testing with pre-initialized identities.
+    ///
+    /// This bypasses the file-reading logic and allows tests to inject
+    /// identities directly.
+    #[cfg(test)]
+    pub(crate) fn new_for_testing(
+        db: Database,
+        identities: Vec<Box<dyn age::Identity + Send + Sync>>,
+    ) -> Self {
+        Self {
+            db,
+            encrypted_identities: None,
+            identities: Arc::new(RwLock::new(identities)),
+            relock_task: Arc::new(Mutex::new(None)),
+        }
+    }
+
     pub(crate) fn new(config: &ZalletConfig, db: Database) -> Result<Self, Error> {
         // TODO: Maybe support storing the identity in `zallet.toml` instead of as a
         //       separate file on disk?
@@ -873,4 +893,117 @@ fn decrypt_standalone_transparent_privkey(
         .map_err(|e| ErrorKind::Generic.context(e))?;
 
     Ok(secret_key)
+}
+
+#[cfg(test)]
+mod tests {
+    mod integration {
+        use bip0039::{English, Mnemonic};
+        use secrecy::ExposeSecret;
+        use zcash_protocol::consensus;
+
+        use crate::{
+            components::database::{Database, testing::TestDatabase},
+            network::Network,
+        };
+
+        use super::super::testing::test_keystore;
+
+        /// Test mnemonic lifecycle: encrypt, store, list, and decrypt.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        async fn mnemonic_lifecycle() {
+            let network = Network::Consensus(consensus::Network::MainNetwork);
+            let test_db = TestDatabase::new(network).await.unwrap();
+            let database = Database::from_pool(test_db.pool().clone());
+            let keystore = test_keystore(database).await.unwrap();
+
+            // Initially no seeds
+            let seed_fps = keystore.list_seed_fingerprints().await.unwrap();
+            assert!(seed_fps.is_empty(), "Should have no seeds initially");
+
+            // Create a mnemonic and store it
+            let mnemonic: Mnemonic<English> =
+                "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+                    .parse()
+                    .unwrap();
+
+            let stored_fp = keystore
+                .encrypt_and_store_mnemonic(mnemonic.clone())
+                .await
+                .unwrap();
+
+            // Verify seed is now listed
+            let seed_fps = keystore.list_seed_fingerprints().await.unwrap();
+            assert_eq!(seed_fps.len(), 1);
+            assert!(seed_fps.contains(&stored_fp));
+
+            // Decrypt the seed and verify it matches
+            let decrypted_seed = keystore.decrypt_seed(&stored_fp).await.unwrap();
+
+            // The seed should match what we get from the mnemonic
+            let expected_seed = mnemonic.to_seed("");
+            assert_eq!(decrypted_seed.expose_secret(), &expected_seed[..]);
+        }
+
+        /// Test storing multiple mnemonics.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        async fn multiple_mnemonics() {
+            let network = Network::Consensus(consensus::Network::MainNetwork);
+            let test_db = TestDatabase::new(network).await.unwrap();
+            let database = Database::from_pool(test_db.pool().clone());
+            let keystore = test_keystore(database).await.unwrap();
+
+            // Store first mnemonic
+            let mnemonic1: Mnemonic<English> =
+                "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+                    .parse()
+                    .unwrap();
+            let fp1 = keystore
+                .encrypt_and_store_mnemonic(mnemonic1)
+                .await
+                .unwrap();
+
+            // Store second mnemonic (different phrase)
+            let mnemonic2: Mnemonic<English> = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong"
+                .parse()
+                .unwrap();
+            let fp2 = keystore
+                .encrypt_and_store_mnemonic(mnemonic2)
+                .await
+                .unwrap();
+
+            // Fingerprints should be different
+            assert_ne!(
+                fp1, fp2,
+                "Different mnemonics should have different fingerprints"
+            );
+
+            // Both should be listed
+            let seed_fps = keystore.list_seed_fingerprints().await.unwrap();
+            assert_eq!(seed_fps.len(), 2);
+            assert!(seed_fps.contains(&fp1));
+            assert!(seed_fps.contains(&fp2));
+        }
+
+        /// Test that keystore is not locked when using test identities.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        async fn keystore_unlocked_for_testing() {
+            let network = Network::Consensus(consensus::Network::MainNetwork);
+            let test_db = TestDatabase::new(network).await.unwrap();
+            let database = Database::from_pool(test_db.pool().clone());
+            let keystore = test_keystore(database).await.unwrap();
+
+            // Test keystore should not be locked
+            assert!(
+                !keystore.is_locked().await,
+                "Test keystore should not be locked"
+            );
+
+            // Should not use encrypted identities
+            assert!(
+                !keystore.uses_encrypted_identities(),
+                "Test keystore should not use encrypted identities"
+            );
+        }
+    }
 }
