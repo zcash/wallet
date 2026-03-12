@@ -17,6 +17,7 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_INCREMENTAL=0
 ENV RUST_BACKTRACE=1
 ENV RUSTFLAGS="\
+-C codegen-units=1 \
 -C target-feature=+crt-static \
 -C linker=clang \
 -C link-arg=-fuse-ld=lld \
@@ -52,7 +53,6 @@ FROM builder AS build-deps
 COPY --from=deps /usr/local/cargo /usr/local/cargo
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --network=none \
     cargo build \
         --release \
         --locked \
@@ -69,7 +69,6 @@ RUN rm -f zallet/src/main.rs
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/src/app/target \
-    --network=none \
     cargo install \
         --locked \
         --path zallet \
