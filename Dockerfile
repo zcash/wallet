@@ -15,6 +15,7 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_INCREMENTAL=0
 ENV RUST_BACKTRACE=1
 ENV RUSTFLAGS="\
+-C codegen-units=1 \
 -C target-feature=+crt-static \
 -C linker=clang \
 -C link-arg=-fuse-ld=lld \
@@ -28,6 +29,7 @@ ENV RUSTFLAGS="\
 -C link-arg=-ldl \
 -C link-arg=-lm \
 -C link-arg=-Wl,--build-id=none"
+ENV SOURCE_DATE_EPOCH=1
 WORKDIR /usr/src/app/zallet/tests
 RUN touch cli_tests.rs
 WORKDIR /usr/src/app
@@ -48,7 +50,6 @@ FROM builder AS build-deps
 COPY --from=deps /usr/local/cargo /usr/local/cargo
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --network=none \
     cargo build \
 	--release \
 	--locked \
@@ -63,7 +64,6 @@ RUN rm -f zallet/src/main.rs
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/src/app/target \
-    --network=none \
     cargo install \
 	--locked \
         --path zallet \
