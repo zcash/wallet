@@ -14,6 +14,7 @@ ENV TARGET_ARCH=x86_64-unknown-linux-musl
 ENV CFLAGS=-target\ x86_64-unknown-linux-musl
 ENV CXXFLAGS=-stdlib=libc++
 ENV CARGO_HOME=/usr/local/cargo
+ENV CARGO_TARGET_DIR="/usr/src/zallet/target"
 ENV CARGO_INCREMENTAL=0
 ENV RUST_BACKTRACE=1
 ENV RUSTFLAGS="\
@@ -31,56 +32,30 @@ ENV RUSTFLAGS="\
 -C link-arg=-ldl \
 -C link-arg=-lm \
 -C link-arg=-Wl,--build-id=none"
+WORKDIR /usr/src/zallet
+COPY . .
 
-# Make a fake Rust app to keep a cached layer of compiled crates
-WORKDIR /usr/src/app/zallet/tests
-RUN touch cli_tests.rs
-WORKDIR /usr/src/app
-COPY Cargo.toml Cargo.lock ./
-COPY zallet/Cargo.toml ./zallet/
-# Needs at least a main.rs file with a main function
-WORKDIR zallet/src/bin/zallet
-RUN echo "fn main(){}" > main.rs
-
-FROM builder AS deps
+# Fetch dependencies
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     cargo fetch \
         --locked \
         --target ${TARGET_ARCH}
 
-FROM builder AS build-deps
-COPY --from=deps /usr/local/cargo /usr/local/cargo
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo build \
-        --release \
-        --locked \
-        --target ${TARGET_ARCH} \
-        --offline
-
-FROM builder AS zallet
-COPY --from=build-deps /usr/src/app/target /usr/src/app/target
-COPY --from=build-deps /usr/local/cargo /usr/local/cargo
-# Copy the rest
-COPY . .
-RUN rm -f zallet/src/main.rs
 # Build the zallet binary
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/usr/src/app/target \
+    --mount=type=cache,target=/usr/src/zallet/target \
     cargo install \
-        --locked \
+        --frozen \
         --path zallet \
         --bin zallet \
         --target ${TARGET_ARCH} \
-        --features rpc-cli,zcashd-import \
-        --root /usr/local \
-        --offline
+        --features rpc-cli,zcashd-import
 
 # --- Stage 2: layer for local binary extraction ---
 FROM scratch AS export
-COPY --from=zallet /usr/local/bin/zallet /zallet
+COPY --from=builder /usr/local/cargo/bin/zallet /zallet
 
 # --- Stage 3: Minimal runtime with stagex ---
 FROM scratch AS runtime
