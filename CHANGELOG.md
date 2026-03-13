@@ -14,6 +14,7 @@ be considered breaking changes.
   - `decodescript`
   - `verifymessage`
   - `z_converttex`
+  - `z_importaddress`
 
 ### Changed
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
