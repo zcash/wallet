@@ -41,7 +41,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
         --locked \
         --target ${TARGET_ARCH}
 
-ENV CACHE_BUST=1
 # Build Zallet
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
@@ -51,7 +50,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
         --path zallet \
         --bin zallet \
         --target ${TARGET_ARCH} \
-        --features rpc-cli,zcashd-import; find / -executable -name zallet
+        --features rpc-cli,zcashd-import
 
 FROM scratch AS export
 COPY --from=builder /usr/local/cargo/bin/zallet /zallet
