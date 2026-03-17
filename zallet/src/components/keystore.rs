@@ -741,14 +741,14 @@ impl KeyStore {
                 let addr_str = Address::Transparent(*address).encode(network);
                 let encrypted_key_bytes = conn
                     .query_row(
-                        "SELECT encrypted_key_bytes
+                        "SELECT encrypted_transparent_privkey
                          FROM ext_zallet_keystore_standalone_transparent_keys ztk
                          JOIN addresses a ON ztk.pubkey = a.imported_transparent_receiver_pubkey
                          WHERE a.cached_transparent_receiver_address = :address",
                         named_params! {
                             ":address": addr_str,
                         },
-                        |row| row.get::<_, Vec<u8>>("encrypted_key_bytes"),
+                        |row| row.get::<_, Vec<u8>>("encrypted_transparent_privkey"),
                     )
                     .map_err(|e| ErrorKind::Generic.context(e))?;
                 Ok(encrypted_key_bytes)
