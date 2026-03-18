@@ -23,5 +23,5 @@ build:
 
 .PHONY: import
 import:
-	docker load -i build/oci/zallet.tar
-	docker tag $(IMAGE_NAME):latest $(IMAGE_NAME):$(IMAGE_TAG)
+	podman load -i build/oci/zallet.tar
+	podman tag $(IMAGE_NAME):latest $(IMAGE_NAME):$(IMAGE_TAG)
