@@ -6,7 +6,8 @@ license.workspace = true
 description = "Core library for the zallet-rpc-diff parity harness"
 
 [dependencies]
+jsonrpsee.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-thiserror = "2"
+thiserror.workspace = true
 tracing.workspace = true
