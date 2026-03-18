@@ -106,8 +106,8 @@ tracing-subscriber = "0.3"
 zcash_protocol = "0.7"
 
 # Zcash payment protocols
-orchard = "0.11"
-sapling = { package = "sapling-crypto", version = "0.5" }
+orchard = "0.12"
+sapling = { package = "sapling-crypto", version = "0.6" }
 transparent = { package = "zcash_transparent", version = "0.6" }
 zcash_encoding = "0.3.0"
 zcash_keys = { version = "0.12", features = ["transparent-inputs", "sapling", "orchard", "transparent-key-encoding"] }
@@ -152,7 +152,19 @@ anyhow = "1.0"
 tonic = "0.14"
 
 [patch.crates-io]
-zcash_encoding ={git = "https://github.com/zcash/librustzcash.git", rev = "cf39300ffa47aca9f2dec1f55727d17a5301f2fe", package = "zcash_encoding"}
+equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "7038ff00277e308e641e3868f8c96cd5ea1b94db" }
+
 age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633bb70c91eef91142fd4" }
 
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "f84f80612813ba00a0a8a9a5f060bd217fa981cc" }

@@ -132,9 +132,11 @@ pub(crate) async fn call(
         let memo = amount.memo.as_deref().map(parse_memo).transpose()?;
         let value = zatoshis_from_value(&amount.amount)?;
 
-        let payment = Payment::new(addr, value, memo, None, None, vec![]).ok_or_else(|| {
-            LegacyCode::InvalidParameter.with_static("Cannot send memo to transparent recipient")
-        })?;
+        let payment =
+            Payment::new(addr, Some(value), memo, None, None, vec![]).ok_or_else(|| {
+                LegacyCode::InvalidParameter
+                    .with_static("Cannot send memo to transparent recipient")
+            })?;
 
         payments.push(payment);
         total_out = (total_out + value)
@@ -200,6 +202,10 @@ pub(crate) async fn call(
     let mut max_orchard_available = Zatoshis::const_from_u64(MAX_MONEY);
 
     for payment in request.payments().values() {
+        let value = payment
+            .amount()
+            .expect("We set this for every payment above");
+
         match Address::try_from_zcash_address(&params, payment.recipient_address().clone()) {
             Err(e) => return Err(LegacyCode::InvalidParameter.with_message(e.to_string())),
             Ok(Address::Transparent(_) | Address::Tex(_)) => {
@@ -210,7 +216,7 @@ pub(crate) async fn call(
             Ok(Address::Sapling(_)) => {
                 match (
                     privacy_policy.allow_revealed_amounts(),
-                    max_sapling_available - payment.amount(),
+                    max_sapling_available - value,
                 ) {
                     (false, None) => {
                         return Err(IncompatiblePrivacyPolicy::RevealingSaplingAmount.into());
@@ -224,11 +230,11 @@ pub(crate) async fn call(
                     privacy_policy.allow_revealed_amounts(),
                     (
                         ua.receiver_types().contains(&unified::Typecode::Orchard),
-                        max_orchard_available - payment.amount(),
+                        max_orchard_available - value,
                     ),
                     (
                         ua.receiver_types().contains(&unified::Typecode::Sapling),
-                        max_sapling_available - payment.amount(),
+                        max_sapling_available - value,
                     ),
                 ) {
                     // The preferred receiver is Orchard, and we either allow revealed
