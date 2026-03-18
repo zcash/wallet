@@ -55,10 +55,11 @@ impl Chain {
                 database: DatabaseConfig {
                     path: config.indexer_db_path().to_path_buf(),
                     // Setting this to as non-zero value causes start-up to block on
-                    // completely filling the cache. Zaino's DB currently only contains a
-                    // cache of CompactBlocks, so we make do for now with uncached queries.
+                    // completely filling the cache. But we cannot use uncached queries
+                    // due to a new bug causing `IndexerService::spawn` to hang.
                     // TODO: https://github.com/zingolabs/zaino/issues/249
-                    size: zaino_common::DatabaseSize(0),
+                    // TODO: https://github.com/zingolabs/zaino/issues/919
+                    size: zaino_common::DatabaseSize::default(),
                 },
             },
             config.consensus.network().to_zaino(),
@@ -70,6 +71,7 @@ impl Chain {
                 .await
                 .map_err(|e| ErrorKind::Init.context(e))?,
         )));
+        info!("Started Zaino indexer");
 
         let chain = Self {
             indexer: indexer.clone(),
