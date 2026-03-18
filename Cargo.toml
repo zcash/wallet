@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "zallet",
+    "tools/zallet-rpc-diff/crates/zallet-parity-core",
+    "tools/zallet-rpc-diff/crates/zallet-parity-cli",
+    "tools/zallet-rpc-diff/crates/zallet-parity-testkit",
 ]
 resolver = "2"
 
