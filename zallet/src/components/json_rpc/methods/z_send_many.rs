@@ -380,7 +380,7 @@ pub(crate) async fn call(
                             }
                             _ => LegacyCode::Database.with_message(e.to_string()),
                         })?;
-                    keys.insert(address, secret_key);
+                    keys.insert(address, vec![secret_key]);
                 }
             }
         }
