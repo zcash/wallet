@@ -9,6 +9,7 @@ pub enum ParityResult {
     Diff {
         upstream: Value,
         target: Value,
+        diff_message: String,
     },
     Missing {
         method: String,
@@ -43,10 +44,19 @@ impl ParityEngine {
 
                 let parity = match (res_u, res_t) {
                     (Ok(u), Ok(t)) => {
-                        if u == t {
-                            ParityResult::Match
-                        } else {
-                            ParityResult::Diff { upstream: u, target: t }
+                        let diff = assert_json_diff::assert_json_matches_no_panic(
+                            &u,
+                            &t,
+                            assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict),
+                        );
+                        
+                        match diff {
+                            Ok(_) => ParityResult::Match,
+                            Err(d) => ParityResult::Diff { 
+                                upstream: u, 
+                                target: t,
+                                diff_message: d 
+                            },
                         }
                     }
                     (Err(e), _) => ParityResult::Error(format!("Upstream error: {}", e)),
