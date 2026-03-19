@@ -9,7 +9,7 @@ pub enum Error {
     Rpc { code: i32, message: String },
 
     #[error("jsonrpsee error: {0}")]
-    JsonRpc(#[from] jsonrpsee::core::Error),
+    JsonRpc(#[from] jsonrpsee::core::client::Error),
 
     #[error("Manifest error: {0}")]
     Manifest(String),
