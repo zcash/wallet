@@ -8,6 +8,9 @@ pub enum Error {
     #[error("RPC error (code {code}): {message}")]
     Rpc { code: i32, message: String },
 
+    #[error("jsonrpsee error: {0}")]
+    JsonRpc(#[from] jsonrpsee::core::Error),
+
     #[error("Manifest error: {0}")]
     Manifest(String),
 
@@ -20,6 +23,8 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub mod client;
+pub mod engine;
 pub mod manifest;
 pub mod report;
 pub mod types;
