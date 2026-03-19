@@ -28,19 +28,20 @@ impl ParityEngine {
         Self { upstream, target }
     }
 
-    /// Runs the parity checks for a list of methods.
-    pub async fn run_all(&self, methods: Vec<String>) -> Vec<(String, ParityResult)> {
+    /// Runs the parity checks for a list of methods defined in the manifest.
+    pub async fn run_all(&self, methods: Vec<crate::manifest::MethodEntry>) -> Vec<(String, ParityResult)> {
         let mut set = JoinSet::new();
         let mut results = Vec::new();
 
-        for method in methods {
+        for entry in methods {
             let upstream = self.upstream.clone();
             let target = self.target.clone();
-            let m = method.clone();
+            let method_name = entry.name.clone();
+            let params = entry.params.unwrap_or(Value::Null);
 
             set.spawn(async move {
-                let res_u = upstream.call(&m, Value::Null).await;
-                let res_t = target.call(&m, Value::Null).await;
+                let res_u = upstream.call(&method_name, params.clone()).await;
+                let res_t = target.call(&method_name, params).await;
 
                 let parity = match (res_u, res_t) {
                     (Ok(u), Ok(t)) => {
@@ -63,7 +64,7 @@ impl ParityEngine {
                     (_, Err(e)) => ParityResult::Error(format!("Target error: {}", e)),
                 };
 
-                (m, parity)
+                (method_name, parity)
             });
         }
 
