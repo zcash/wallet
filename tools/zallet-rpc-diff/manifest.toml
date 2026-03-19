@@ -1,0 +1,8 @@
+[[methods]]
+name = "getblockchaininfo"
+
+[[methods]]
+name = "getnetworkinfo"
+
+[[methods]]
+name = "getwalletinfo"
