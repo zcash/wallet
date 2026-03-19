@@ -4,6 +4,7 @@ use serde_json::Value;
 use crate::{Result, Error};
 
 /// A high-level RPC client wrapper for parity testing.
+#[derive(Clone)]
 pub struct RpcClient {
     inner: HttpClient,
     url: String,
