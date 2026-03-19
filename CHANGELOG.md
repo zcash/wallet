@@ -14,7 +14,9 @@ be considered breaking changes.
   - `decodescript`
   - `verifymessage`
   - `z_converttex`
+  - `z_exportkey` (Sapling extended spending keys only)
   - `z_importaddress`
+  - `z_importkey` (Sapling extended spending keys only)
   - `z_shieldcoinbase`
 
 ### Changed
