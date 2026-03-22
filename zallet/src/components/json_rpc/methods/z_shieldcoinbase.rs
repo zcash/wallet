@@ -42,19 +42,22 @@ use crate::{
     prelude::*,
 };
 
-#[cfg(feature = "transparent-key-import")]
+#[cfg(feature = "zcashd-import")]
 use zcash_script::script;
 
 pub(crate) type ResultType = OperationId;
 pub(crate) type Response = RpcResult<ResultType>;
 
-pub(super) const PARAM_FROMADDRESS_DESC: &str =
-    "The transparent address to sweep from, or \"*\" to sweep from all wallet taddrs.";
-pub(super) const PARAM_TOADDRESS_DESC: &str = "The shielded address to receive the funds.";
-pub(super) const PARAM_FEE_DESC: &str = "If set, it must be null.";
-pub(super) const PARAM_LIMIT_DESC: &str = "Limit on the maximum number of UTXOs to shield. Set to 0 to use as many as will fit in the transaction.";
-pub(super) const PARAM_MEMO_DESC: &str =
-    "Encoded as hex. This will be stored in the memo field of the new note.";
+pub(super) const PARAM_FROMADDRESS_DESC: &str = "A wallet-owned transparent address to sweep from, or \"*\" to sweep from all taddrs \
+     belonging to the same account as toaddress. Must belong to the same account as toaddress.";
+pub(super) const PARAM_TOADDRESS_DESC: &str = "A wallet-owned shielded address used to identify the account. Funds are shielded into \
+     the account's internal shielded address, which may differ from this address.";
+pub(super) const PARAM_FEE_DESC: &str =
+    "If provided, must be null. Zallet always calculates and applies the ZIP-317 fee internally.";
+pub(super) const PARAM_LIMIT_DESC: &str = "Accepted for compatibility but currently ignored; does not constrain how many UTXOs are \
+     shielded.";
+pub(super) const PARAM_MEMO_DESC: &str = "Accepted for compatibility but currently ignored; not stored in the memo field of any new \
+     note.";
 pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
     "Policy for what information leakage is acceptable.";
 
@@ -129,7 +132,10 @@ pub(crate) async fn call(
     }
 
     // Look up the account that owns the destination address.
-    let account = get_account_for_address(wallet.as_ref(), &to_address)?;
+    let account = get_account_for_address(wallet.as_ref(), &to_address).map_err(|_| {
+        LegacyCode::InvalidAddressOrKey
+            .with_static("Invalid parameter: toaddress does not belong to this wallet.")
+    })?;
 
     // Resolve the transparent source addresses.
     // TODO(schell): When fromaddress is "*", we currently only sweep transparent
@@ -288,7 +294,7 @@ pub(crate) async fn call(
     )
     .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
 
-    #[cfg(feature = "transparent-key-import")]
+    #[cfg(feature = "zcashd-import")]
     let standalone_keys = {
         let mut keys = std::collections::HashMap::new();
         for step in proposal.steps() {
@@ -298,22 +304,20 @@ pub(crate) async fn call(
                     .as_ref()
                     .and_then(TransparentAddress::from_script_from_chain)
                 {
-                    // Try to look up a standalone imported key for this address.
-                    // If the address is HD-derived (not standalone imported), this
-                    // will fail because there's no entry in the standalone keys table.
-                    // In that case, skip it — the USK handles HD-derived keys.
-                    match keystore.decrypt_standalone_transparent_key(&address).await {
-                        Ok(secret_key) => {
-                            keys.insert(address, secret_key);
-                        }
-                        Err(e) if e.to_string() == "Wallet is locked" => {
-                            return Err(LegacyCode::WalletUnlockNeeded.with_message(e.to_string()));
-                        }
-                        Err(_) => {
-                            // Not a standalone imported key; HD-derived key will be
-                            // provided via the USK.
-                        }
-                    }
+                    let secret_key = keystore
+                        .decrypt_standalone_transparent_key(&address)
+                        .await
+                        .map_err(|e| match e.kind() {
+                            // TODO: Improve internal error types.
+                            //       https://github.com/zcash/wallet/issues/256
+                            crate::error::ErrorKind::Generic
+                                if e.to_string() == "Wallet is locked" =>
+                            {
+                                LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
+                            }
+                            _ => LegacyCode::Database.with_message(e.to_string()),
+                        })?;
+                    keys.insert(address, secret_key);
                 }
             }
         }

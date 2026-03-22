@@ -543,26 +543,37 @@ pub(crate) trait WalletRpc {
     ) -> z_send_many::Response;
 
     /// Shields coinbase UTXOs by sending them from a transparent address (or all
-    /// wallet taddrs) to a shielded address.
+    /// wallet taddrs) to a shielded address within the same account.
     ///
     /// This is an asynchronous operation; it returns an operation ID that can
     /// be used with `z_getoperationstatus` or `z_getoperationresult`.
-    ///                                                                                                                     
-    /// # Arguments                                                                                                         
-    /// - `fromaddress` (string, required): The transparent address to sweep
-    ///   from, or `"*"` to sweep from all wallet taddrs.
-    /// - `toaddress` (string, required): The shielded address to receive the funds.                                        
-    /// - `fee` (numeric, optional): The fee amount in ZEC to attach to this
-    ///   transaction. If not provided, the default ZIP-317 fee is used.                                                                                                            
-    /// - `limit` (numeric, optional): Limit on the maximum number of UTXOs to
-    ///   shield. Set to 0 to use as many as will fit in the transaction.                                                                                                         
-    /// - `memo` (string, optional): Encoded as hex. This will be stored in the
-    ///   memo field of the new note.
+    ///
+    /// **Note:** This method's behavior differs from `zcashd`. The `toaddress`
+    /// must be a wallet-owned shielded address and is used to select the account
+    /// whose transparent UTXOs will be shielded. The resulting transaction sends
+    /// funds to the account's internal shielded address, which may differ from
+    /// `toaddress`. The `fromaddress` must also belong to the same account.
+    ///
+    /// # Arguments
+    /// - `fromaddress` (string, required): A wallet-owned transparent address to
+    ///   sweep from, or `"*"` to sweep from all taddrs belonging to the same
+    ///   account as `toaddress`. Must belong to the same account as `toaddress`.
+    /// - `toaddress` (string, required): A wallet-owned shielded address (Sapling,
+    ///   Orchard, or Unified with shielded receivers) used to identify the account.
+    ///   Funds are shielded into the account's internal shielded address, which may
+    ///   differ from this address.
+    /// - `fee` (optional): If provided, this parameter must be `null`; any
+    ///   non-null value will be rejected. The value of this field is ignored,
+    ///   as Zallet always calculates and applies the ZIP-317 fee internally.
+    /// - `limit` (numeric, optional): Accepted for compatibility but currently
+    ///   ignored; it does not constrain how many UTXOs are shielded.
+    /// - `memo` (string, optional): Accepted for compatibility but currently
+    ///   ignored; it is not stored in the memo field of any new note.
     /// - `privacy_policy` (string, optional): Policy for what information
-    ///   leakage is acceptable.                           
-    ///                                                                                                                     
-    /// # Returns                                                                                                           
-    /// - An operation ID for tracking the async operation.                                                                 
+    ///   leakage is acceptable.
+    ///
+    /// # Returns
+    /// - An operation ID for tracking the async operation.
     #[method(name = "z_shieldcoinbase")]
     async fn z_shieldcoinbase(
         &self,
