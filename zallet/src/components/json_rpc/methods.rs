@@ -24,6 +24,8 @@ mod decode_script;
 mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
+mod get_balances;
+#[cfg(zallet_build = "wallet")]
 mod get_new_account;
 #[cfg(zallet_build = "wallet")]
 mod get_notes_count;
@@ -51,6 +53,7 @@ mod recover_accounts;
 mod stop;
 #[cfg(zallet_build = "wallet")]
 mod unlock_wallet;
+mod validate_address;
 mod verify_message;
 mod view_transaction;
 #[cfg(zallet_build = "wallet")]
@@ -217,6 +220,13 @@ pub(crate) trait Rpc {
     #[method(name = "stop")]
     async fn stop(&self) -> stop::Response;
 
+    /// Validate a transparent Zcash address, returning information about it.
+    ///
+    /// # Arguments
+    /// - `address` (string, required): The transparent address to validate.
+    #[method(name = "validateaddress")]
+    async fn validate_address(&self, address: &str) -> validate_address::Response;
+
     /// Verify a signed message.
     ///
     /// # Arguments
@@ -376,6 +386,21 @@ pub(crate) trait WalletRpc {
         &self,
         accounts: Vec<recover_accounts::AccountParameter<'_>>,
     ) -> recover_accounts::Response;
+
+    /// Returns the balances available for each independent spending authority held by the
+    /// wallet, and optionally the balances and received amounts associated with imported
+    /// watch-only addresses and viewing keys.
+    ///
+    /// This includes funds held by each HD-derived Unified Account in the wallet,
+    /// spending keys imported with `z_importkey`, and (if enabled) the legacy transparent
+    /// pool of funds.
+    ///
+    /// # Arguments
+    ///
+    /// - `minconf` (numeric, optional, default=1) Only include unspent outputs in
+    ///   transactions confirmed at least this many times.
+    #[method(name = "z_getbalances")]
+    async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response;
 
     /// Returns the total value of funds stored in the node's wallet.
     ///
@@ -666,7 +691,7 @@ impl RpcServer for RpcImpl {
     }
 
     async fn decode_raw_transaction(&self, hexstring: &str) -> decode_raw_transaction::Response {
-        decode_raw_transaction::call(hexstring)
+        decode_raw_transaction::call(self.wallet().await?.params(), hexstring)
     }
 
     async fn view_transaction(&self, txid: &str) -> view_transaction::Response {
@@ -675,6 +700,10 @@ impl RpcServer for RpcImpl {
 
     async fn stop(&self) -> stop::Response {
         stop::call(self.wallet().await?)
+    }
+
+    async fn validate_address(&self, address: &str) -> validate_address::Response {
+        validate_address::call(self.wallet().await?.params(), address)
     }
 
     async fn verify_message(
@@ -765,6 +794,10 @@ impl WalletRpcServer for WalletRpcImpl {
             accounts,
         )
         .await
+    }
+
+    async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response {
+        get_balances::call(self.wallet().await?.as_ref(), minconf)
     }
 
     async fn z_get_total_balance(

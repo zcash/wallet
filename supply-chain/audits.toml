@@ -645,6 +645,12 @@ user-id = 6289 # Jack Grigg (str4d)
 start = "2021-09-22"
 end = "2026-03-04"
 
+[[trusted.halo2_gadgets]]
+criteria = "safe-to-deploy"
+user-id = 6289 # Jack Grigg (str4d)
+start = "2022-02-15"
+end = "2027-03-17"
+
 [[trusted.halo2_proofs]]
 criteria = "safe-to-deploy"
 user-id = 6289 # Jack Grigg (str4d)
@@ -665,6 +671,12 @@ end = "2026-04-09"
 
 [[trusted.orchard]]
 criteria = "safe-to-deploy"
+user-id = 6289 # Jack Grigg (str4d)
+start = "2021-01-07"
+end = "2027-03-17"
+
+[[trusted.orchard]]
+criteria = "safe-to-deploy"
 user-id = 169181 # Kris Nuttycombe (nuttycom)
 start = "2024-08-12"
 end = "2026-03-04"
@@ -674,6 +686,12 @@ criteria = "safe-to-deploy"
 user-id = 199950 # Daira-Emma Hopwood (daira)
 start = "2023-03-30"
 end = "2026-03-04"
+
+[[trusted.sapling-crypto]]
+criteria = "safe-to-deploy"
+user-id = 6289 # Jack Grigg (str4d)
+start = "2024-01-26"
+end = "2027-03-17"
 
 [[trusted.sapling-crypto]]
 criteria = "safe-to-deploy"
@@ -896,6 +914,12 @@ criteria = "safe-to-deploy"
 user-id = 159631 # Conrado (conradoplg)
 start = "2022-08-31"
 end = "2026-04-08"
+
+[[trusted.zcash_script]]
+criteria = "safe-to-deploy"
+user-id = 228785 # Alfredo Garcia (oxarbitrage)
+start = "2023-10-18"
+end = "2027-03-09"
 
 [[trusted.zcash_spec]]
 criteria = "safe-to-deploy"
