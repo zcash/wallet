@@ -323,7 +323,7 @@ jobs:
         env:
           BINARY_SUFFIX: ${{ matrix.binary_suffix }}
         run: |
-          gpg -u sysadmin@z.cash --armor --digest-algo SHA256 --detach-sign "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
+          gpg -u sysadmin@zodl.com --armor --digest-algo SHA256 --detach-sign "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
 
       - name: Generate SPDX SBOM for standalone binary
         env:
@@ -458,7 +458,7 @@ jobs:
       - name: Sign & publish snapshot of local apt repository
         run: |
           set -euo pipefail
-          export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@z.cash | head -n 2 | grep -v sec)
+          export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@zodl.com | head -n 2 | grep -v sec)
           mapfile -t dists < build/apt-dists.txt
           for dist in "${dists[@]}"; do
             snap_combined="snapshot_combined_${dist}"
@@ -472,7 +472,7 @@ jobs:
 
       - name: GPG sign Debian package
         run: |
-          gpg -u sysadmin@z.cash --armor --digest-algo SHA256 --detach-sign "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
+          gpg -u sysadmin@zodl.com --armor --digest-algo SHA256 --detach-sign "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
 
       - name: Generate provenance chain metadata for .deb
         env:
