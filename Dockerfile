@@ -51,11 +51,25 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
         --path zallet \
         --bin zallet \
         --target ${TARGET_ARCH} \
-        --features rpc-cli,zcashd-import
+        --features rpc-cli,zcashd-import \
+    && OUT="/usr/src/zallet/target/${TARGET_ARCH}/release" \
+    \
+    # Copy completions, manpages and metadata out of the cache mount
+    && install -d /usr/local/share/zallet \
+    && cp -a "${OUT}/completions" /usr/local/share/zallet/completions \
+    && cp -a "${OUT}/manpages"  /usr/local/share/zallet/manpages \
+    && install -D -m 0644 \
+         "${OUT}/debian-copyright" \
+         /usr/local/share/zallet/debian-copyright
 
 # --- Stage 2: layer for local binary extraction ---
 FROM scratch AS export
+
+# Binary at the root for easy extraction
 COPY --from=builder /usr/local/cargo/bin/zallet /zallet
+
+# Export the whole zallet share tree (completions, manpages, metadata, etc.)
+COPY --from=builder /usr/local/share/zallet /usr/local/share/zallet
 
 # --- Stage 3: Minimal runtime with stagex ---
 FROM scratch AS runtime
