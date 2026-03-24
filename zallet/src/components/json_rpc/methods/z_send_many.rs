@@ -132,11 +132,11 @@ pub(crate) async fn call(
         let memo = amount.memo.as_deref().map(parse_memo).transpose()?;
         let value = zatoshis_from_value(&amount.amount)?;
 
-        let payment =
-            Payment::new(addr, Some(value), memo, None, None, vec![]).ok_or_else(|| {
-                LegacyCode::InvalidParameter
-                    .with_static("Cannot send memo to transparent recipient")
-            })?;
+         let payment =
+             Payment::new(addr, Some(value), memo, None, None, vec![]).map_err(|_| {
+                 LegacyCode::InvalidParameter
+                     .with_static("Cannot send memo to transparent recipient")
+             })?;
 
         payments.push(payment);
         total_out = (total_out + value)

@@ -12,8 +12,8 @@ use transparent::keys::TransparentKeyScope;
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
-        Account, AccountPurpose, InputSource, WalletRead,
         wallet::{ConfirmationsPolicy, TargetHeight},
+        Account, AccountPurpose, InputSource, TransparentOutputFilter, WalletRead,
     },
     encoding::AddressCodec,
     fees::{orchard::InputView as _, sapling::InputView as _},
@@ -27,7 +27,7 @@ use crate::components::{
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
-        utils::{JsonZec, parse_as_of_height, parse_minconf, value_from_zatoshis},
+        utils::{parse_as_of_height, parse_minconf, value_from_zatoshis, JsonZec},
     },
 };
 
@@ -192,7 +192,12 @@ pub(crate) fn call(
             .iter()
             .try_fold(vec![], |mut acc, (addr, _)| {
                 let mut outputs = wallet
-                    .get_spendable_transparent_outputs(addr, target_height, confirmations_policy)
+                    .get_spendable_transparent_outputs(
+                        addr,
+                        target_height,
+                        confirmations_policy,
+                        TransparentOutputFilter::All,
+                    )
                     .map_err(|e| {
                         RpcError::owned(
                             LegacyCode::Database.into(),

@@ -6,7 +6,8 @@ use std::time::SystemTime;
 use rand::rngs::OsRng;
 use secrecy::SecretVec;
 use shardtree::{ShardTree, error::ShardTreeError};
-use transparent::{address::TransparentAddress, bundle::OutPoint, keys::TransparentKeyScope};
+use transparent::{address::TransparentAddress, bundle::OutPoint};
+use zcash_client_backend::data_api::{TransparentKeyOrigin, TransparentOutputFilter};
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
@@ -335,7 +336,7 @@ impl WalletRead for DbConnection {
         account: Self::AccountId,
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
-    ) -> Result<HashMap<TransparentAddress, (TransparentKeyScope, Balance)>, Self::Error> {
+    ) -> Result<HashMap<TransparentAddress, (TransparentKeyOrigin, Balance)>, Self::Error> {
         self.with(|db_data| {
             db_data.get_transparent_balances(account, target_height, confirmations_policy)
         })
@@ -427,15 +428,16 @@ impl InputSource for DbConnection {
     }
 
     fn get_spendable_transparent_outputs(
-        &self,
-        address: &TransparentAddress,
-        target_height: TargetHeight,
-        confirmations_policy: ConfirmationsPolicy,
-    ) -> Result<Vec<WalletUtxo>, Self::Error> {
-        self.with(|db_data| {
-            db_data.get_spendable_transparent_outputs(address, target_height, confirmations_policy)
-        })
-    }
+         &self,
+         address: &TransparentAddress,
+         target_height: TargetHeight,
+         confirmations_policy: ConfirmationsPolicy,
+         output_filter: TransparentOutputFilter,
+     ) -> Result<Vec<WalletUtxo>, Self::Error> {
+          self.with(|db_data| {
+              db_data.get_spendable_transparent_outputs(address, target_height, confirmations_policy, output_filter)
+          })
+      }
 
     fn get_account_metadata(
         &self,

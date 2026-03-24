@@ -11,7 +11,7 @@ use zaino_state::FetchServiceSubscriber;
 use zcash_address::unified;
 use zcash_client_backend::{
     data_api::{
-        Account, WalletRead,
+        Account, TransparentOutputFilter, WalletRead,
         wallet::{
             SpendingKeys, create_proposed_transactions, input_selection::GreedyInputSelector,
             propose_shielding,
@@ -206,18 +206,20 @@ pub(crate) async fn call(
 
     let input_selector = GreedyInputSelector::new();
 
-    // Create the shielding proposal. Uses Zatoshis::ZERO as the shielding threshold
-    // to shield all available coinbase UTXOs.
-    let proposal = propose_shielding::<_, _, _, _, Infallible>(
-        wallet.as_mut(),
-        &params,
-        &input_selector,
-        &change_strategy,
-        Zatoshis::ZERO,
-        &from_addrs,
-        account.id(),
-        confirmations_policy,
-    )
+     // Create the shielding proposal. Uses Zatoshis::ZERO as the shielding threshold
+     // to shield all available coinbase UTXOs. Passes TransparentOutputFilter::CoinbaseOnly
+     // to ensure only coinbase UTXOs are selected for shielding.
+     let proposal = propose_shielding::<_, _, _, _, Infallible>(
+         wallet.as_mut(),
+         &params,
+         &input_selector,
+         &change_strategy,
+         Zatoshis::ZERO,
+         &from_addrs,
+         account.id(),
+         confirmations_policy,
+         TransparentOutputFilter::CoinbaseOnly,
+     )
     // TODO: Map errors to `zcashd` shape.
     .map_err(|e| {
         LegacyCode::Wallet.with_message(format!("Failed to propose shielding transaction: {e}"))
