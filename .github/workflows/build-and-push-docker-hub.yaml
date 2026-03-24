@@ -33,7 +33,7 @@ on:
         required: true
         type: string
       dockerhub-namespace:
-        description: "Docker Hub namespace/organization (e.g. electriccoinco)"
+        description: "Docker Hub namespace/organization (e.g. zodlinc)"
         required: true
         type: string
     secrets:
