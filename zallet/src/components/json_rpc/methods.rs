@@ -21,6 +21,8 @@ use {
 mod convert_tex;
 mod decode_raw_transaction;
 mod decode_script;
+#[cfg(zallet_build = "wallet")]
+mod export_key;
 mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
@@ -36,6 +38,8 @@ mod get_raw_transaction;
 mod get_wallet_info;
 #[cfg(zallet_build = "wallet")]
 mod help;
+#[cfg(zallet_build = "wallet")]
+mod import_key;
 mod list_accounts;
 mod list_addresses;
 #[cfg(zallet_build = "wallet")]
@@ -470,6 +474,38 @@ pub(crate) trait WalletRpc {
         as_of_height: Option<i64>,
     ) -> get_notes_count::Response;
 
+    /// Exports the spending key for a Sapling payment address.
+    ///
+    /// The wallet must be unlocked to use this method.
+    ///
+    /// # Arguments
+    ///
+    /// - `address` (string, required) The Sapling payment address corresponding to the
+    ///   spending key to export.
+    #[method(name = "z_exportkey")]
+    async fn export_key(&self, address: &str) -> export_key::Response;
+
+    /// Imports a spending key into the wallet.
+    ///
+    /// Only Sapling extended spending keys are supported.
+    ///
+    /// # Arguments
+    ///
+    /// - `key` (string, required) The spending key to import.
+    /// - `rescan` (string, optional, default="whenkeyisnew") Whether to rescan the
+    ///   blockchain for transactions ("yes", "no", or "whenkeyisnew"). When rescan is
+    ///   enabled, the wallet's background sync engine will scan for historical
+    ///   transactions from the given start height.
+    /// - `startHeight` (numeric, optional, default=0) Block height from which to begin
+    ///   the rescan. Only used when rescan is "yes" or "whenkeyisnew" (for a new key).
+    #[method(name = "z_importkey")]
+    async fn import_key(
+        &self,
+        key: &str,
+        rescan: Option<&str>,
+        start_height: Option<u64>,
+    ) -> import_key::Response;
+
     /// Send a transaction with multiple recipients.
     ///
     /// This is an async operation; it returns an operation ID string that you can pass to
@@ -832,6 +868,27 @@ impl WalletRpcServer for WalletRpcImpl {
         as_of_height: Option<i64>,
     ) -> get_notes_count::Response {
         get_notes_count::call(self.wallet().await?.as_ref(), minconf, as_of_height)
+    }
+
+    async fn export_key(&self, address: &str) -> export_key::Response {
+        export_key::call(self.wallet().await?.as_ref(), &self.keystore, address).await
+    }
+
+    async fn import_key(
+        &self,
+        key: &str,
+        rescan: Option<&str>,
+        start_height: Option<u64>,
+    ) -> import_key::Response {
+        import_key::call(
+            self.wallet().await?.as_mut(),
+            &self.keystore,
+            self.chain().await?,
+            key,
+            rescan,
+            start_height,
+        )
+        .await
     }
 
     async fn z_send_many(
