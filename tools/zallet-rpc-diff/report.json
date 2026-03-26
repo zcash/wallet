@@ -6,17 +6,17 @@
     "errors": 3
   },
   "details": {
-    "getwalletinfo": {
+    "getnetworkinfo": {
       "type": "error",
-      "message": "Upstream error: jsonrpsee error: ErrorObject { code: MethodNotFound, message: \"Method not found\", data: None }"
+      "message": "Target error: jsonrpsee error: client error (SendRequest)"
     },
     "getblockchaininfo": {
       "type": "error",
       "message": "Target error: jsonrpsee error: client error (SendRequest)"
     },
-    "getnetworkinfo": {
+    "getwalletinfo": {
       "type": "error",
-      "message": "Target error: jsonrpsee error: client error (SendRequest)"
+      "message": "Upstream error: jsonrpsee error: ErrorObject { code: MethodNotFound, message: \"Method not found\", data: None }"
     }
   }
 }

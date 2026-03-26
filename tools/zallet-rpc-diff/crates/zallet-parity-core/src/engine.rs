@@ -78,3 +78,62 @@ impl ParityEngine {
         results
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zallet_parity_testkit::MockNode;
+    use crate::manifest::MethodEntry;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_parity_match() {
+        let upstream_node = MockNode::spawn().await;
+        let target_node = MockNode::spawn().await;
+
+        let method = "test_method";
+        let params = json!({"hello": "world"});
+        let response = json!({"result": "ok"});
+
+        upstream_node.mock_response(method, params.clone(), response.clone()).await;
+        target_node.mock_response(method, params.clone(), response).await;
+
+        let engine = ParityEngine::new(
+            RpcClient::new(&upstream_node.url()).unwrap(),
+            RpcClient::new(&target_node.url()).unwrap(),
+        );
+
+        let results = engine.run_all(vec![MethodEntry {
+            name: method.to_string(),
+            params: Some(params),
+        }]).await;
+
+        assert_eq!(results.len(), 1);
+        assert!(matches!(results[0].1, ParityResult::Match));
+    }
+
+    #[tokio::test]
+    async fn test_parity_diff() {
+        let upstream_node = MockNode::spawn().await;
+        let target_node = MockNode::spawn().await;
+
+        let method = "test_method";
+        let params = json!({"hello": "world"});
+        
+        upstream_node.mock_response(method, params.clone(), json!({"data": 1})).await;
+        target_node.mock_response(method, params.clone(), json!({"data": 2})).await;
+
+        let engine = ParityEngine::new(
+            RpcClient::new(&upstream_node.url()).unwrap(),
+            RpcClient::new(&target_node.url()).unwrap(),
+        );
+
+        let results = engine.run_all(vec![MethodEntry {
+            name: method.to_string(),
+            params: Some(params),
+        }]).await;
+
+        assert_eq!(results.len(), 1);
+        assert!(matches!(results[0].1, ParityResult::Diff { .. }));
+    }
+}
