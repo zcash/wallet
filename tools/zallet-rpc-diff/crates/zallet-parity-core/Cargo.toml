@@ -14,3 +14,6 @@ thiserror.workspace = true
 tokio.workspace = true
 toml.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+zallet-parity-testkit = { path = "../zallet-parity-testkit" }

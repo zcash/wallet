@@ -2125,6 +2125,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "zallet-parity-testkit",
 ]
 
 [[package]]
