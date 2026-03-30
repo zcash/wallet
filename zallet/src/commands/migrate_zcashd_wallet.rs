@@ -1,7 +1,7 @@
 #![allow(deprecated)] // For zaino
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     path::PathBuf,
 };
 
@@ -12,8 +12,8 @@ use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
 use transparent::address::TransparentAddress;
-use zaino_proto::proto::service::TxFilter;
-use zaino_state::{FetchServiceError, LightWalletIndexer};
+use zaino_fetch::jsonrpsee::response::block_header::GetBlockHeader;
+use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
 use zcash_client_backend::data_api::{
     Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
     Zip32Derivation, wallet::decrypt_and_store_transaction,
@@ -26,7 +26,7 @@ use zcash_keys::{
         zcashd::{PathParseError, ZcashdHdDerivation},
     },
 };
-use zcash_primitives::transaction::Transaction;
+use zcash_primitives::{block::BlockHash, transaction::Transaction};
 use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
 use zewif_zcashd::{BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet};
 use zip32::{AccountId, fingerprint::SeedFingerprint};
@@ -281,43 +281,40 @@ impl MigrateZcashdWalletCmd {
             "Wallet contains {} transactions",
             wallet.transactions().len(),
         );
-        let mut tx_heights = HashMap::new();
-        for (i, (txid, _)) in wallet.transactions().iter().enumerate() {
-            if i % 100 == 0 && i > 0 {
-                info!("Processed {} transactions", i);
-            }
-            let tx_filter = TxFilter {
-                hash: txid.as_ref().to_vec(),
-                ..Default::default()
-            };
-            #[allow(unused_must_use)]
-            match chain_subscriber.get_transaction(tx_filter).await {
-                Ok(raw_tx) => {
-                    let tx_height =
-                        BlockHeight::from(u32::try_from(raw_tx.height).map_err(|e| {
-                            // TODO: this error should go away when we have a better chain data API
-                            ErrorKind::Generic.context(fl!(
-                                "err-migrate-wallet-invalid-chain-data",
-                                err = e.to_string()
-                            ))
-                        })?);
-                    tx_heights.insert(
-                        txid,
-                        (tx_height, buffer_wallet_transactions.then_some(raw_tx)),
-                    );
-                }
-                Err(FetchServiceError::TonicStatusError(status))
-                    if (status.code() as isize) == (tonic::Code::NotFound as isize) =>
-                {
-                    // Ignore any transactions that are not in the main chain.
-                }
-                other => {
-                    // FIXME: we should be able to propagate this error, but at present Zaino is
-                    // returning all sorts of errors as 500s.
-                    dbg!(other);
+        let mut main_chain_block_heights = HashMap::new();
+        for (_, wallet_tx) in wallet.transactions().iter() {
+            let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+            // Skip transactions that were unmined when the zcashd wallet was last written.
+            if block_hash.0 != [0; 32] {
+                if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
+                    match chain_subscriber
+                        .get_block_header(block_hash.to_string(), true)
+                        .await?
+                    {
+                        GetBlockHeader::Verbose(header) => {
+                            entry.insert(BlockHeight::from_u32(header.height));
+                        }
+                        // Ignore any blocks that are not in the main chain.
+                        _ => (),
+                    };
                 }
             }
         }
+        let mut tx_heights = HashMap::new();
+        for (txid, wallet_tx) in wallet.transactions().iter() {
+            let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+            tx_heights.insert(
+                txid,
+                (
+                    main_chain_block_heights.get(&block_hash).cloned(),
+                    buffer_wallet_transactions.then_some(wallet_tx),
+                ),
+            );
+        }
+        info!(
+            "Wallet contains {} mined transactions",
+            tx_heights.values().filter(|(h, _)| h.is_some()).count(),
+        );
 
         // Since zcashd scans in linear order, we can reliably choose the earliest wallet
         // transaction's mined height as the birthday height, so long as it is in the "stable"
@@ -331,7 +328,7 @@ impl MigrateZcashdWalletCmd {
             // minimum possible wallet birthday that is relevant to future recovery scenarios.
             tx_heights
                 .values()
-                .map(|(h, _)| h)
+                .flat_map(|(h, _)| h)
                 .min()
                 .copied()
                 .or(chain_tip)
@@ -587,15 +584,52 @@ impl MigrateZcashdWalletCmd {
         // access to balance & to set priorities in the scan queue.
         if buffer_wallet_transactions {
             info!("Importing transactions");
-            for (i, (h, raw_tx)) in tx_heights.values().enumerate() {
+
+            // Assume that the zcashd wallet was shut down immediately after its last
+            // transaction was mined. This will be accurate except in the following case:
+            // - User mines a transaction in any older epoch.
+            // - A network upgrade activates.
+            // - User creates a transaction.
+            // - User shuts down the wallet before the transaction is mined.
+            let assumed_mempool_height = tx_heights
+                .values()
+                .flat_map(|(h, _)| h)
+                .max()
+                .map(|h| *h + 1);
+
+            let mut buf = vec![];
+            for (i, (h, wallet_tx)) in tx_heights.values().enumerate() {
                 if i % 100 == 0 && i > 0 {
                     info!("Processed {} transactions", i);
                 }
-                let branch_id = BranchId::for_height(&network_params, *h);
-                if let Some(raw_tx) = raw_tx {
-                    let tx = Transaction::read(&raw_tx.data[..], branch_id)?;
+                if let Some(wallet_tx) = wallet_tx {
+                    let consensus_height = match h {
+                        Some(h) => *h,
+                        None => {
+                            let expiry_height = u32::from(wallet_tx.transaction().expiry_height());
+                            if expiry_height == 0 {
+                                // Transaction is unmined and unexpired, use fallback.
+                                assumed_mempool_height.ok_or_else(|| {
+                                    ErrorKind::Generic
+                                        .context(fl!("err-migrate-wallet-all-unmined"))
+                                })?
+                            } else {
+                                // A transaction's expiry height is always in same epoch
+                                // as its eventual mined height.
+                                BlockHeight::from_u32(expiry_height)
+                            }
+                        }
+                    };
+                    let consensus_branch_id =
+                        BranchId::for_height(&network_params, consensus_height);
+                    // TODO: Use the same zcash_primitives version in zewif-zcashd
+                    let tx = {
+                        buf.clear();
+                        wallet_tx.transaction().write(&mut buf)?;
+                        Transaction::read(buf.as_slice(), consensus_branch_id)?
+                    };
                     db_data.with_mut(|mut db| {
-                        decrypt_and_store_transaction(&network_params, &mut db, &tx, Some(*h))
+                        decrypt_and_store_transaction(&network_params, &mut db, &tx, *h)
                     })?;
                 }
             }
