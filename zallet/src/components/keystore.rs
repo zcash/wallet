@@ -442,7 +442,7 @@ impl KeyStore {
     /// Constructs the encryptor for this wallet using the recipients from the database.
     ///
     /// Returns an error if there are no age recipients.
-    async fn encryptor(&self) -> Result<Encryptor, Error> {
+    pub(crate) async fn encryptor(&self) -> Result<Encryptor, Error> {
         let encryptor = self.maybe_encryptor().await?;
         if encryptor.is_empty() {
             Err(ErrorKind::Generic
@@ -620,23 +620,49 @@ impl KeyStore {
         &self,
         key: &zcash_keys::keys::transparent::Key,
     ) -> Result<(), Error> {
-        let encryptor = self.encryptor().await?;
+        self.store_encrypted_standalone_transparent_keys(&[self
+            .encryptor()
+            .await?
+            .encrypt_standalone_transparent_key(key)?])
+            .await
+    }
 
-        let encrypted_transparent_key = encryptor
-            .encrypt_standalone_transparent_privkey(key.secret())
-            .map_err(|e| ErrorKind::Generic.context(e))?;
-
+    /// Stores a batch of encrypted standalone transparent keys produced by
+    /// [`Encryptor::encrypt_standalone_transparent_key`].
+    ///
+    /// This creates a single database transaction for all inserts, significantly reducing
+    /// overhead for large migrated wallets.
+    #[cfg(feature = "zcashd-import")]
+    pub(crate) async fn store_encrypted_standalone_transparent_keys(
+        &self,
+        keys: &[EncryptedStandaloneTransparentKey],
+    ) -> Result<(), Error> {
         self.with_db_mut(|conn, _| {
-            conn.execute(
-                "INSERT INTO ext_zallet_keystore_standalone_transparent_keys
-                VALUES (:pubkey, :encrypted_key_bytes)
-                ON CONFLICT (pubkey) DO NOTHING ",
-                named_params! {
-                    ":pubkey": &key.pubkey().serialize(),
-                    ":encrypted_key_bytes": encrypted_transparent_key,
-                },
-            )
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+            // Use an explicit transaction to avoid autocommit mode and reduce overhead.
+            let tx = conn
+                .transaction()
+                .map_err(|e| ErrorKind::Generic.context(e))?;
+
+            {
+                let mut stmt = tx
+                    .prepare(
+                        "INSERT INTO ext_zallet_keystore_standalone_transparent_keys
+                        VALUES (:pubkey, :encrypted_key_bytes)
+                        ON CONFLICT (pubkey) DO NOTHING ",
+                    )
+                    .map_err(|e| ErrorKind::Generic.context(e))?;
+
+                for key in keys {
+                    stmt.execute(named_params! {
+                        ":pubkey": &key.pubkey.serialize(),
+                        ":encrypted_key_bytes": key.encrypted_key_bytes,
+                    })
+                    .map_err(|e| ErrorKind::Generic.context(e))?;
+                }
+            }
+
+            tx.commit().map_err(|e| ErrorKind::Generic.context(e))?;
+
             Ok(())
         })
         .await?;
@@ -791,6 +817,21 @@ impl Encryptor {
     }
 
     #[cfg(feature = "zcashd-import")]
+    pub(crate) fn encrypt_standalone_transparent_key(
+        &self,
+        key: &zcash_keys::keys::transparent::Key,
+    ) -> Result<EncryptedStandaloneTransparentKey, Error> {
+        let encrypted_key_bytes = self
+            .encrypt_standalone_transparent_privkey(key.secret())
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+
+        Ok(EncryptedStandaloneTransparentKey {
+            pubkey: key.pubkey(),
+            encrypted_key_bytes,
+        })
+    }
+
+    #[cfg(feature = "zcashd-import")]
     fn encrypt_legacy_seed_bytes(
         &self,
         seed: &SecretVec<u8>,
@@ -815,6 +856,12 @@ impl Encryptor {
         let secret = SecretVec::new(key.secret_bytes().to_vec());
         encrypt_secret(&self.recipients, &secret)
     }
+}
+
+#[cfg(feature = "transparent-key-import")]
+pub(crate) struct EncryptedStandaloneTransparentKey {
+    pubkey: secp256k1::PublicKey,
+    encrypted_key_bytes: Vec<u8>,
 }
 
 fn encrypt_string(
