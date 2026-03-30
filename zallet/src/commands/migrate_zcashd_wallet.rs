@@ -66,7 +66,9 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db.clone())?;
 
+        info!("Dumping zcashd wallet");
         let wallet = self.dump_wallet()?;
+        info!("Wallet dumped");
 
         Self::migrate_zcashd_wallet(
             db,
@@ -275,8 +277,15 @@ impl MigrateZcashdWalletCmd {
 
         // Collect an index from txid to block height for all transactions known to the wallet that
         // appear in the main chain.
+        info!(
+            "Wallet contains {} transactions",
+            wallet.transactions().len(),
+        );
         let mut tx_heights = HashMap::new();
-        for (txid, _) in wallet.transactions().iter() {
+        for (i, (txid, _)) in wallet.transactions().iter().enumerate() {
+            if i % 100 == 0 && i > 0 {
+                info!("Processed {} transactions", i);
+            }
             let tx_filter = TxFilter {
                 hash: txid.as_ref().to_vec(),
                 ..Default::default()
@@ -309,7 +318,6 @@ impl MigrateZcashdWalletCmd {
                 }
             }
         }
-        info!("Wallet contains {} transactions", tx_heights.len());
 
         // Since zcashd scans in linear order, we can reliably choose the earliest wallet
         // transaction's mined height as the birthday height, so long as it is in the "stable"
@@ -464,6 +472,9 @@ impl MigrateZcashdWalletCmd {
         // * Zcashd Sapling spending key import
         info!("Importing legacy Sapling keys"); // TODO: Expose how many there are in zewif-zcashd.
         for (idx, key) in wallet.sapling_keys().keypairs().enumerate() {
+            if idx % 100 == 0 && idx > 0 {
+                info!("Processed {} legacy Sapling keys", idx);
+            }
             // `zewif_zcashd` parses to an earlier version of the `sapling` types, so we
             // must roundtrip through the byte representation into the version we need.
             let extsk = sapling::zip32::ExtendedSpendingKey::from_bytes(&key.extsk().to_bytes())
@@ -552,6 +563,9 @@ impl MigrateZcashdWalletCmd {
 
         info!("Importing legacy standalone transparent keys"); // TODO: Expose how many there are in zewif-zcashd.
         for (i, key) in wallet.keys().keypairs().enumerate() {
+            if i % 100 == 0 && i > 0 {
+                info!("Processed {} standalone transparent keys", i);
+            }
             let key = convert_key(key)?;
             let pubkey = key.pubkey();
             debug!(
@@ -573,7 +587,10 @@ impl MigrateZcashdWalletCmd {
         // access to balance & to set priorities in the scan queue.
         if buffer_wallet_transactions {
             info!("Importing transactions");
-            for (h, raw_tx) in tx_heights.values() {
+            for (i, (h, raw_tx)) in tx_heights.values().enumerate() {
+                if i % 100 == 0 && i > 0 {
+                    info!("Processed {} transactions", i);
+                }
                 let branch_id = BranchId::for_height(&network_params, *h);
                 if let Some(raw_tx) = raw_tx {
                     let tx = Transaction::read(&raw_tx.data[..], branch_id)?;
