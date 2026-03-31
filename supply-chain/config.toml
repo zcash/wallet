@@ -34,6 +34,9 @@ audit-as-crates-io = true
 [policy.f4jumble]
 audit-as-crates-io = true
 
+[policy.zaino-common]
+audit-as-crates-io = true
+
 [policy.zaino-fetch]
 audit-as-crates-io = true
 
@@ -43,7 +46,7 @@ audit-as-crates-io = true
 [policy.zaino-state]
 audit-as-crates-io = true
 
-[policy."zcash_address:0.10.1@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"]
+[policy."zcash_address:0.10.1@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"]
 audit-as-crates-io = true
 
 [policy."zcash_address:0.6.3"]
@@ -58,7 +61,7 @@ audit-as-crates-io = true
 
 [policy."zcash_encoding:0.2.2"]
 
-[policy."zcash_encoding:0.3.0@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"]
+[policy."zcash_encoding:0.3.0@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"]
 audit-as-crates-io = true
 
 [policy.zcash_history]
@@ -66,7 +69,7 @@ audit-as-crates-io = true
 
 [policy."zcash_keys:0.10.1"]
 
-[policy."zcash_keys:0.12.0@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"]
+[policy."zcash_keys:0.12.0@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"]
 audit-as-crates-io = true
 
 [policy."zcash_keys:0.4.1"]
@@ -75,24 +78,24 @@ audit-as-crates-io = true
 
 [policy."zcash_primitives:0.24.1"]
 
-[policy."zcash_primitives:0.26.4@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"]
+[policy."zcash_primitives:0.26.4@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"]
 audit-as-crates-io = true
 
 [policy."zcash_proofs:0.24.0"]
 
-[policy."zcash_proofs:0.26.1@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"]
+[policy."zcash_proofs:0.26.1@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"]
 audit-as-crates-io = true
 
 [policy."zcash_protocol:0.4.3"]
 
 [policy."zcash_protocol:0.6.2"]
 
-[policy."zcash_protocol:0.7.2@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"]
+[policy."zcash_protocol:0.7.2@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"]
 audit-as-crates-io = true
 
 [policy."zcash_transparent:0.4.0"]
 
-[policy."zcash_transparent:0.6.3@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"]
+[policy."zcash_transparent:0.6.3@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"]
 audit-as-crates-io = true
 
 [policy.zip321]
@@ -635,7 +638,7 @@ version = "0.7.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.equihash]]
-version = "0.2.2@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.2.2@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.eyre]]
@@ -643,7 +646,7 @@ version = "0.6.12"
 criteria = "safe-to-deploy"
 
 [[exemptions.f4jumble]]
-version = "0.1.1@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.1.1@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.fallible-iterator]]
@@ -1942,6 +1945,10 @@ criteria = "safe-to-deploy"
 version = "3.0.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.zaino-common]]
+version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
+criteria = "safe-to-deploy"
+
 [[exemptions.zaino-fetch]]
 version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 criteria = "safe-to-deploy"
@@ -1955,15 +1962,15 @@ version = "0.1.2@git:15b81f110349b34090341b3ab8b7cd58c7b9aeef"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_address]]
-version = "0.10.1@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.10.1@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_client_backend]]
-version = "0.21.2@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.21.2@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_client_sqlite]]
-version = "0.19.5@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.19.5@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_encoding]]
@@ -1971,27 +1978,27 @@ version = "0.2.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_encoding]]
-version = "0.3.0@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.3.0@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_history]]
-version = "0.4.0@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.4.0@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_keys]]
-version = "0.12.0@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.12.0@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_primitives]]
-version = "0.26.4@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.26.4@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_proofs]]
-version = "0.26.1@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.26.1@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_protocol]]
-version = "0.7.2@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.7.2@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_spec]]
@@ -1999,7 +2006,7 @@ version = "0.1.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_transparent]]
-version = "0.6.3@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.6.3@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-chain]]
@@ -2051,5 +2058,5 @@ version = "0.11.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.zip321]]
-version = "0.6.0@git:7038ff00277e308e641e3868f8c96cd5ea1b94db"
+version = "0.6.0@git:2adfa402d9f9ae3563e5e7b7d96703c92c5a99cd"
 criteria = "safe-to-deploy"
