@@ -214,6 +214,9 @@ err-migrate-wallet-data-parse=
 err-migrate-wallet-invalid-account-id =
     Error encountered in wallet migration: '{$account_id}' is not a valid ZIP
     32 account identifier.
+err-migrate-wallet-all-unmined =
+    All transactions in the wallet are unmined; cannot determine effective
+    consensus branch ID for pre-v5 transactions.
 
 err-ux-A = Did {-zallet} not do what you expected? Could the error be more useful?
 err-ux-B = Tell us
