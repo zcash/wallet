@@ -616,6 +616,7 @@ impl KeyStore {
     }
 
     #[cfg(feature = "zcashd-import")]
+    #[allow(dead_code)]
     pub(crate) async fn encrypt_and_store_standalone_transparent_key(
         &self,
         key: &zcash_keys::keys::transparent::Key,
@@ -862,6 +863,13 @@ impl Encryptor {
 pub(crate) struct EncryptedStandaloneTransparentKey {
     pubkey: secp256k1::PublicKey,
     encrypted_key_bytes: Vec<u8>,
+}
+
+#[cfg(feature = "transparent-key-import")]
+impl EncryptedStandaloneTransparentKey {
+    pub(crate) fn pubkey(&self) -> &secp256k1::PublicKey {
+        &self.pubkey
+    }
 }
 
 fn encrypt_string(

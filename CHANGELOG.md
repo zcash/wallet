@@ -20,6 +20,7 @@ be considered breaking changes.
   and `addresses` for transparent outputs.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
   `zcashd` didn't include in its response.
+- Significant performance improvements to `zallet migrate-zcashd-wallet`.
 
 ### Fixed
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is

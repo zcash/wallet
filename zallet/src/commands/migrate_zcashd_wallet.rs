@@ -11,20 +11,19 @@ use bip0039::{English, Mnemonic};
 use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
-use transparent::address::TransparentAddress;
 use zaino_fetch::jsonrpsee::response::block_header::GetBlockHeader;
 use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
-use zcash_client_backend::data_api::{
-    Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
-    Zip32Derivation, wallet::decrypt_and_store_transaction,
+use zcash_client_backend::{
+    data_api::{
+        Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
+        Zip32Derivation,
+    },
+    decrypt_transaction,
 };
 use zcash_client_sqlite::error::SqliteClientError;
-use zcash_keys::{
-    encoding::AddressCodec,
-    keys::{
-        DerivationError, UnifiedFullViewingKey,
-        zcashd::{PathParseError, ZcashdHdDerivation},
-    },
+use zcash_keys::keys::{
+    DerivationError, UnifiedFullViewingKey,
+    zcashd::{PathParseError, ZcashdHdDerivation},
 };
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
 use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
@@ -558,32 +557,38 @@ impl MigrateZcashdWalletCmd {
             Ok(key)
         }
 
-        info!("Importing legacy standalone transparent keys"); // TODO: Expose how many there are in zewif-zcashd.
-        for (i, key) in wallet.keys().keypairs().enumerate() {
-            if i % 100 == 0 && i > 0 {
-                info!("Processed {} standalone transparent keys", i);
-            }
-            let key = convert_key(key)?;
-            let pubkey = key.pubkey();
-            debug!(
-                "[{i}] Importing key for address {}",
-                TransparentAddress::from_pubkey(&pubkey).encode(&network_params),
-            );
-
-            keystore
-                .encrypt_and_store_standalone_transparent_key(&key)
-                .await?;
-
-            db_data.import_standalone_transparent_pubkey(
-                legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?,
-                pubkey,
-            )?;
-        }
+        let encryptor = keystore.encryptor().await?;
+        let transparent_keypairs = wallet.keys().keypairs().collect::<Vec<_>>();
+        info!(
+            "Importing {} legacy standalone transparent keys",
+            transparent_keypairs.len(),
+        ); // TODO: Expose how many there are in zewif-zcashd.
+        let encrypted_transparent_keys = transparent_keypairs
+            .into_iter()
+            .map(|key| {
+                let key = convert_key(key)?;
+                encryptor.encrypt_standalone_transparent_key(&key)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        keystore
+            .store_encrypted_standalone_transparent_keys(&encrypted_transparent_keys)
+            .await?;
+        db_data.import_standalone_transparent_pubkeys(
+            legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?,
+            encrypted_transparent_keys
+                .into_iter()
+                .map(|key| *key.pubkey()),
+        )?;
 
         // Since we've retrieved the raw transaction data anyway, preemptively store it for faster
         // access to balance & to set priorities in the scan queue.
         if buffer_wallet_transactions {
             info!("Importing transactions");
+
+            // Fetch the UnifiedFullViewingKeys we are tracking
+            let ufvks = db_data.get_unified_full_viewing_keys()?;
+
+            let chain_tip_height = db_data.chain_height()?;
 
             // Assume that the zcashd wallet was shut down immediately after its last
             // transaction was mined. This will be accurate except in the following case:
@@ -598,41 +603,62 @@ impl MigrateZcashdWalletCmd {
                 .map(|h| *h + 1);
 
             let mut buf = vec![];
-            for (i, (h, wallet_tx)) in tx_heights.values().enumerate() {
-                if i % 100 == 0 && i > 0 {
-                    info!("Processed {} transactions", i);
-                }
-                if let Some(wallet_tx) = wallet_tx {
-                    let consensus_height = match h {
-                        Some(h) => *h,
-                        None => {
-                            let expiry_height = u32::from(wallet_tx.transaction().expiry_height());
-                            if expiry_height == 0 {
-                                // Transaction is unmined and unexpired, use fallback.
-                                assumed_mempool_height.ok_or_else(|| {
-                                    ErrorKind::Generic
-                                        .context(fl!("err-migrate-wallet-all-unmined"))
-                                })?
-                            } else {
-                                // A transaction's expiry height is always in same epoch
-                                // as its eventual mined height.
-                                BlockHeight::from_u32(expiry_height)
+            let decoded_txs = tx_heights
+                .values()
+                .flat_map(|(h, wallet_tx)| {
+                    wallet_tx.map(|wallet_tx| {
+                        let consensus_height = match h {
+                            Some(h) => *h,
+                            None => {
+                                let expiry_height =
+                                    u32::from(wallet_tx.transaction().expiry_height());
+                                if expiry_height == 0 {
+                                    // Transaction is unmined and unexpired, use fallback.
+                                    assumed_mempool_height.ok_or_else(|| {
+                                        ErrorKind::Generic
+                                            .context(fl!("err-migrate-wallet-all-unmined"))
+                                    })?
+                                } else {
+                                    // A transaction's expiry height is always in same epoch
+                                    // as its eventual mined height.
+                                    BlockHeight::from_u32(expiry_height)
+                                }
                             }
-                        }
-                    };
-                    let consensus_branch_id =
-                        BranchId::for_height(&network_params, consensus_height);
-                    // TODO: Use the same zcash_primitives version in zewif-zcashd
-                    let tx = {
-                        buf.clear();
-                        wallet_tx.transaction().write(&mut buf)?;
-                        Transaction::read(buf.as_slice(), consensus_branch_id)?
-                    };
-                    db_data.with_mut(|mut db| {
-                        decrypt_and_store_transaction(&network_params, &mut db, &tx, *h)
-                    })?;
-                }
-            }
+                        };
+                        let consensus_branch_id =
+                            BranchId::for_height(&network_params, consensus_height);
+                        // TODO: Use the same zcash_primitives version in zewif-zcashd
+                        let tx = {
+                            buf.clear();
+                            wallet_tx.transaction().write(&mut buf)?;
+                            Transaction::read(buf.as_slice(), consensus_branch_id)?
+                        };
+                        Ok((tx, *h))
+                    })
+                })
+                .collect::<Result<Vec<_>, MigrateError>>()?;
+
+            info!("Decrypting {} transactions", decoded_txs.len());
+            let decrypted_txs = decoded_txs
+                .iter()
+                .enumerate()
+                .map(|(i, (tx, mined_height))| {
+                    if i % 1000 == 0 && i > 0 {
+                        tracing::info!("Decrypted {i}/{} transactions", decoded_txs.len());
+                    }
+                    decrypt_transaction(
+                        &network_params,
+                        *mined_height,
+                        chain_tip_height,
+                        tx,
+                        &ufvks,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            info!("Storing {} decrypted transactions", decrypted_txs.len());
+            // TODO: Use chunking here if we add support for resuming migrations.
+            db_data.store_decrypted_txs(decrypted_txs)?;
         } else {
             info!("Not importing transactions (--buffer-wallet-transactions not set)");
         }
