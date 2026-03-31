@@ -6,14 +6,14 @@ use std::time::SystemTime;
 use rand::rngs::OsRng;
 use secrecy::SecretVec;
 use shardtree::{ShardTree, error::ShardTreeError};
-use transparent::{address::TransparentAddress, bundle::OutPoint, keys::TransparentKeyScope};
+use transparent::{address::TransparentAddress, bundle::OutPoint};
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
         AccountBirthday, AccountMeta, AddressInfo, Balance, DecryptedTransaction, InputSource,
         NoteFilter, ORCHARD_SHARD_HEIGHT, ReceivedNotes, ReceivedTransactionOutput,
-        SAPLING_SHARD_HEIGHT, TargetValue, WalletCommitmentTrees, WalletRead, WalletUtxo,
-        WalletWrite, Zip32Derivation,
+        SAPLING_SHARD_HEIGHT, TargetValue, TransparentKeyOrigin, WalletCommitmentTrees, WalletRead,
+        WalletUtxo, WalletWrite, Zip32Derivation,
         chain::ChainState,
         wallet::{ConfirmationsPolicy, TargetHeight},
     },
@@ -335,7 +335,7 @@ impl WalletRead for DbConnection {
         account: Self::AccountId,
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
-    ) -> Result<HashMap<TransparentAddress, (TransparentKeyScope, Balance)>, Self::Error> {
+    ) -> Result<HashMap<TransparentAddress, (TransparentKeyOrigin, Balance)>, Self::Error> {
         self.with(|db_data| {
             db_data.get_transparent_balances(account, target_height, confirmations_policy)
         })
@@ -494,13 +494,22 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| db_data.delete_account(account))
     }
 
-    #[cfg(feature = "zcashd-import")]
+    #[cfg(feature = "transparent-key-import")]
     fn import_standalone_transparent_pubkey(
         &mut self,
         account: Self::AccountId,
         pubkey: secp256k1::PublicKey,
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.import_standalone_transparent_pubkey(account, pubkey))
+    }
+
+    #[cfg(feature = "transparent-key-import")]
+    fn import_standalone_transparent_script(
+        &mut self,
+        account: Self::AccountId,
+        script: zcash_script::script::Redeem,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.import_standalone_transparent_script(account, script))
     }
 
     fn get_next_available_address(
