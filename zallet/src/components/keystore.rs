@@ -408,7 +408,7 @@ impl KeyStore {
     ) -> Result<(), Error> {
         // If the wallet has any existing recipients, fail (we would instead need to
         // re-encrypt the wallet).
-        if !self.maybe_recipients().await?.is_empty() {
+        if !self.maybe_encryptor().await?.is_empty() {
             return Err(ErrorKind::Generic
                 .context(fl!("err-keystore-already-initialized"))
                 .into());
@@ -439,24 +439,24 @@ impl KeyStore {
         Ok(())
     }
 
-    /// Fetches the age recipients for this wallet from the database.
+    /// Constructs the encryptor for this wallet using the recipients from the database.
     ///
-    /// Returns an error if there are none.
-    async fn recipients(&self) -> Result<Vec<Box<dyn age::Recipient + Send>>, Error> {
-        let recipients = self.maybe_recipients().await?;
-        if recipients.is_empty() {
+    /// Returns an error if there are no age recipients.
+    pub(crate) async fn encryptor(&self) -> Result<Encryptor, Error> {
+        let encryptor = self.maybe_encryptor().await?;
+        if encryptor.is_empty() {
             Err(ErrorKind::Generic
                 .context(KeystoreError::MissingRecipients)
                 .into())
         } else {
-            Ok(recipients)
+            Ok(encryptor)
         }
     }
 
-    /// Fetches the age recipients for this wallet from the database.
+    /// Constructs the encryptor for this wallet using the recipients from the database.
     ///
-    /// Unlike [`Self::recipients`], this might return an empty vec.
-    async fn maybe_recipients(&self) -> Result<Vec<Box<dyn age::Recipient + Send>>, Error> {
+    /// Unlike [`Self::encryptor`], this might return an empty encryptor.
+    async fn maybe_encryptor(&self) -> Result<Encryptor, Error> {
         self.with_db(|conn, _| {
             let mut stmt = conn
                 .prepare(
@@ -472,18 +472,7 @@ impl KeyStore {
                 .collect::<Result<_, _>>()
                 .map_err(|e| ErrorKind::Generic.context(e))?;
 
-            // TODO: Replace with a helper with configurable callbacks.
-            let mut stdin_guard = age::cli_common::StdinGuard::new(false);
-            let recipients = age::cli_common::read_recipients(
-                recipient_strings,
-                vec![],
-                vec![],
-                None,
-                &mut stdin_guard,
-            )
-            .map_err(|e| ErrorKind::Generic.context(e))?;
-
-            Ok(recipients)
+            Encryptor::from_recipient_strings(recipient_strings)
         })
         .await
     }
@@ -536,19 +525,15 @@ impl KeyStore {
         &self,
         mnemonic: Mnemonic,
     ) -> Result<SeedFingerprint, Error> {
-        let recipients = self.recipients().await?;
+        let encryptor = self.encryptor().await?;
 
         let seed_bytes = SecretVec::new(mnemonic.to_seed("").to_vec());
         let seed_fp = SeedFingerprint::from_seed(seed_bytes.expose_secret()).expect("valid length");
 
         // Take ownership of the memory of the mnemonic to ensure it will be correctly zeroized on drop
         let mnemonic = SecretString::new(mnemonic.into_phrase());
-        let encrypted_mnemonic = encrypt_string(
-            &recipients,
-            mnemonic.expose_secret(),
-            age::armor::Format::Binary,
-        )
-        .map_err(|e| ErrorKind::Generic.context(e))?;
+        let encrypted_mnemonic =
+            encryptor.encrypt_string(mnemonic.expose_secret(), age::armor::Format::Binary)?;
 
         self.with_db_mut(|conn, _| {
             conn.execute(
@@ -573,12 +558,13 @@ impl KeyStore {
         &self,
         legacy_seed: &SecretVec<u8>,
     ) -> Result<SeedFingerprint, Error> {
-        let recipients = self.recipients().await?;
+        let encryptor = self.encryptor().await?;
 
         let legacy_seed_fp = SeedFingerprint::from_seed(legacy_seed.expose_secret())
             .ok_or_else(|| ErrorKind::Generic.context(fl!("err-failed-seed-fingerprinting")))?;
 
-        let encrypted_legacy_seed = encrypt_legacy_seed_bytes(&recipients, legacy_seed)
+        let encrypted_legacy_seed = encryptor
+            .encrypt_legacy_seed_bytes(legacy_seed)
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
         self.with_db_mut(|conn, _| {
@@ -604,10 +590,11 @@ impl KeyStore {
         &self,
         sapling_key: &ExtendedSpendingKey,
     ) -> Result<DiversifiableFullViewingKey, Error> {
-        let recipients = self.recipients().await?;
+        let encryptor = self.encryptor().await?;
 
         let dfvk = sapling_key.to_diversifiable_full_viewing_key();
-        let encrypted_sapling_extsk = encrypt_standalone_sapling_key(&recipients, sapling_key)
+        let encrypted_sapling_extsk = encryptor
+            .encrypt_standalone_sapling_key(sapling_key)
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
         self.with_db_mut(|conn, _| {
@@ -629,27 +616,54 @@ impl KeyStore {
     }
 
     #[cfg(feature = "zcashd-import")]
+    #[allow(dead_code)]
     pub(crate) async fn encrypt_and_store_standalone_transparent_key(
         &self,
         key: &zcash_keys::keys::transparent::Key,
     ) -> Result<(), Error> {
-        let recipients = self.recipients().await?;
+        self.store_encrypted_standalone_transparent_keys(&[self
+            .encryptor()
+            .await?
+            .encrypt_standalone_transparent_key(key)?])
+            .await
+    }
 
-        let encrypted_transparent_key =
-            encrypt_standalone_transparent_privkey(&recipients, key.secret())
+    /// Stores a batch of encrypted standalone transparent keys produced by
+    /// [`Encryptor::encrypt_standalone_transparent_key`].
+    ///
+    /// This creates a single database transaction for all inserts, significantly reducing
+    /// overhead for large migrated wallets.
+    #[cfg(feature = "zcashd-import")]
+    pub(crate) async fn store_encrypted_standalone_transparent_keys(
+        &self,
+        keys: &[EncryptedStandaloneTransparentKey],
+    ) -> Result<(), Error> {
+        self.with_db_mut(|conn, _| {
+            // Use an explicit transaction to avoid autocommit mode and reduce overhead.
+            let tx = conn
+                .transaction()
                 .map_err(|e| ErrorKind::Generic.context(e))?;
 
-        self.with_db_mut(|conn, _| {
-            conn.execute(
-                "INSERT INTO ext_zallet_keystore_standalone_transparent_keys
-                VALUES (:pubkey, :encrypted_key_bytes)
-                ON CONFLICT (pubkey) DO NOTHING ",
-                named_params! {
-                    ":pubkey": &key.pubkey().serialize(),
-                    ":encrypted_key_bytes": encrypted_transparent_key,
-                },
-            )
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+            {
+                let mut stmt = tx
+                    .prepare(
+                        "INSERT INTO ext_zallet_keystore_standalone_transparent_keys
+                        VALUES (:pubkey, :encrypted_key_bytes)
+                        ON CONFLICT (pubkey) DO NOTHING ",
+                    )
+                    .map_err(|e| ErrorKind::Generic.context(e))?;
+
+                for key in keys {
+                    stmt.execute(named_params! {
+                        ":pubkey": &key.pubkey.serialize(),
+                        ":encrypted_key_bytes": key.encrypted_key_bytes,
+                    })
+                    .map_err(|e| ErrorKind::Generic.context(e))?;
+                }
+            }
+
+            tx.commit().map_err(|e| ErrorKind::Generic.context(e))?;
+
             Ok(())
         })
         .await?;
@@ -707,20 +721,18 @@ impl KeyStore {
         seed_fp: &SeedFingerprint,
         armor: bool,
     ) -> Result<Vec<u8>, Error> {
-        let recipients = self.recipients().await?;
+        let encryptor = self.encryptor().await?;
 
         let mnemonic = self.decrypt_mnemonic(seed_fp).await?;
 
-        let encrypted_mnemonic = encrypt_string(
-            &recipients,
+        let encrypted_mnemonic = encryptor.encrypt_string(
             mnemonic.expose_secret(),
             if armor {
                 age::armor::Format::AsciiArmor
             } else {
                 age::armor::Format::Binary
             },
-        )
-        .map_err(|e| ErrorKind::Generic.context(e))?;
+        )?;
 
         Ok(encrypted_mnemonic)
     }
@@ -759,6 +771,104 @@ impl KeyStore {
             decrypt_standalone_transparent_privkey(&identities, &encrypted_key_bytes[..])?;
 
         Ok(secret_key)
+    }
+}
+
+pub(crate) struct Encryptor {
+    recipient_strings: Vec<String>,
+    recipients: Vec<Box<dyn age::Recipient + Send>>,
+}
+
+impl Encryptor {
+    fn from_recipient_strings(recipient_strings: Vec<String>) -> Result<Self, Error> {
+        let recipients = Self::parse_recipient_strings(recipient_strings.clone())?;
+        Ok(Self {
+            recipient_strings,
+            recipients,
+        })
+    }
+
+    fn parse_recipient_strings(
+        recipient_strings: Vec<String>,
+    ) -> Result<Vec<Box<dyn age::Recipient + Send>>, Error> {
+        // TODO: Replace with a helper with configurable callbacks.
+        let mut stdin_guard = age::cli_common::StdinGuard::new(false);
+        let recipients = age::cli_common::read_recipients(
+            recipient_strings,
+            vec![],
+            vec![],
+            None,
+            &mut stdin_guard,
+        )
+        .map_err(|e| ErrorKind::Generic.context(e))?;
+        Ok(recipients)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.recipient_strings.is_empty()
+    }
+
+    fn encrypt_string(
+        &self,
+        plaintext: &str,
+        format: age::armor::Format,
+    ) -> Result<Vec<u8>, Error> {
+        encrypt_string(&self.recipients, plaintext, format)
+            .map_err(|e| ErrorKind::Generic.context(e).into())
+    }
+
+    #[cfg(feature = "zcashd-import")]
+    pub(crate) fn encrypt_standalone_transparent_key(
+        &self,
+        key: &zcash_keys::keys::transparent::Key,
+    ) -> Result<EncryptedStandaloneTransparentKey, Error> {
+        let encrypted_key_bytes = self
+            .encrypt_standalone_transparent_privkey(key.secret())
+            .map_err(|e| ErrorKind::Generic.context(e))?;
+
+        Ok(EncryptedStandaloneTransparentKey {
+            pubkey: key.pubkey(),
+            encrypted_key_bytes,
+        })
+    }
+
+    #[cfg(feature = "zcashd-import")]
+    fn encrypt_legacy_seed_bytes(
+        &self,
+        seed: &SecretVec<u8>,
+    ) -> Result<Vec<u8>, age::EncryptError> {
+        encrypt_secret(&self.recipients, seed)
+    }
+
+    #[cfg(feature = "zcashd-import")]
+    fn encrypt_standalone_sapling_key(
+        &self,
+        key: &ExtendedSpendingKey,
+    ) -> Result<Vec<u8>, age::EncryptError> {
+        let secret = SecretVec::new(key.to_bytes().to_vec());
+        encrypt_secret(&self.recipients, &secret)
+    }
+
+    #[cfg(feature = "transparent-key-import")]
+    fn encrypt_standalone_transparent_privkey(
+        &self,
+        key: &secp256k1::SecretKey,
+    ) -> Result<Vec<u8>, age::EncryptError> {
+        let secret = SecretVec::new(key.secret_bytes().to_vec());
+        encrypt_secret(&self.recipients, &secret)
+    }
+}
+
+#[cfg(feature = "transparent-key-import")]
+pub(crate) struct EncryptedStandaloneTransparentKey {
+    pubkey: secp256k1::PublicKey,
+    encrypted_key_bytes: Vec<u8>,
+}
+
+#[cfg(feature = "transparent-key-import")]
+impl EncryptedStandaloneTransparentKey {
+    pub(crate) fn pubkey(&self) -> &secp256k1::PublicKey {
+        &self.pubkey
     }
 }
 
@@ -818,32 +928,6 @@ fn encrypt_secret(
     writer.finish()?;
 
     Ok(ciphertext)
-}
-
-#[cfg(feature = "zcashd-import")]
-fn encrypt_legacy_seed_bytes(
-    recipients: &[Box<dyn age::Recipient + Send>],
-    seed: &SecretVec<u8>,
-) -> Result<Vec<u8>, age::EncryptError> {
-    encrypt_secret(recipients, seed)
-}
-
-#[cfg(feature = "zcashd-import")]
-fn encrypt_standalone_sapling_key(
-    recipients: &[Box<dyn age::Recipient + Send>],
-    key: &ExtendedSpendingKey,
-) -> Result<Vec<u8>, age::EncryptError> {
-    let secret = SecretVec::new(key.to_bytes().to_vec());
-    encrypt_secret(recipients, &secret)
-}
-
-#[cfg(feature = "transparent-key-import")]
-fn encrypt_standalone_transparent_privkey(
-    recipients: &[Box<dyn age::Recipient + Send>],
-    key: &secp256k1::SecretKey,
-) -> Result<Vec<u8>, age::EncryptError> {
-    let secret = SecretVec::new(key.secret_bytes().to_vec());
-    encrypt_secret(recipients, &secret)
 }
 
 #[cfg(feature = "transparent-key-import")]
