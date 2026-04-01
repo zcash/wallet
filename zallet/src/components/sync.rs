@@ -154,7 +154,6 @@ impl WalletSync {
         let poll_transparent_task = crate::spawn!("Poll transparent", async move {
             poll_transparent(
                 chain_subscriber,
-                &params,
                 db_data.as_mut(),
                 poll_tip_change_signal_receiver,
             )
@@ -503,13 +502,63 @@ async fn recover_history(
     }
 }
 
+/// Fetches all mined UTXOs for the wallet's non-ephemeral transparent addresses and
+/// stores them in the wallet database.
+pub(crate) async fn fetch_transparent_utxos(
+    chain: &FetchServiceSubscriber,
+    db_data: &mut DbConnection,
+) -> Result<(), SyncError> {
+    let params = db_data.params();
+
+    // Collect all of the wallet's non-ephemeral transparent addresses.
+    //
+    // TODO: This is likely to be append-only unless we add support for removing an
+    // account from the wallet, so we could implement a more efficient strategy here
+    // with some changes to the `WalletRead` API. For now this is fine.
+    let addresses = db_data
+        .get_account_ids()?
+        .into_iter()
+        .map(|account| db_data.get_transparent_receivers(account, true, true))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flat_map(|m| m.into_keys().map(|addr| addr.encode(params)))
+        .collect();
+
+    // Fetch all mined UTXOs.
+    // TODO: I really want to use the chaininfo-aware version (which Zaino doesn't
+    // implement) or an equivalent Zaino index (once it exists).
+    info!("Fetching mined UTXOs");
+    let utxos = chain
+        .z_get_address_utxos(AddressStrings::new(addresses))
+        .await?;
+
+    // Notify the wallet about all mined UTXOs.
+    for utxo in utxos {
+        let (address, txid, index, script, value_zat, mined_height) = utxo.into_parts();
+        debug!("{address} has UTXO in tx {txid} at index {}", index.index());
+
+        let output = WalletTransparentOutput::from_parts(
+            OutPoint::new(txid.0, index.index()),
+            TxOut::new(
+                Zatoshis::const_from_u64(value_zat),
+                Script(script::Code(script.as_raw_bytes().to_vec())),
+            ),
+            Some(BlockHeight::from_u32(mined_height.0)),
+        )
+        .expect("the UTXO was detected via a supported address kind");
+
+        db_data.put_received_transparent_utxo(&output)?;
+    }
+
+    Ok(())
+}
+
 /// Polls the non-ephemeral transparent addresses in the wallet for UTXOs.
 ///
 /// Ephemeral addresses are handled by [`data_requests`].
 #[tracing::instrument(skip_all)]
 async fn poll_transparent(
     chain: FetchServiceSubscriber,
-    params: &Network,
     db_data: &mut DbConnection,
     tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
@@ -519,46 +568,7 @@ async fn poll_transparent(
         // Wait for the chain tip to advance
         tip_change_signal.notified().await;
 
-        // Collect all of the wallet's non-ephemeral transparent addresses. We do this
-        // fresh every loop to ensure we incorporate changes to the address set.
-        //
-        // TODO: This is likely to be append-only unless we add support for removing an
-        // account from the wallet, so we could implement a more efficient strategy here
-        // with some changes to the `WalletRead` API. For now this is fine.
-        let addresses = db_data
-            .get_account_ids()?
-            .into_iter()
-            .map(|account| db_data.get_transparent_receivers(account, true, true))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flat_map(|m| m.into_keys().map(|addr| addr.encode(params)))
-            .collect();
-
-        // Fetch all mined UTXOs.
-        // TODO: I really want to use the chaininfo-aware version (which Zaino doesn't
-        // implement) or an equivalent Zaino index (once it exists).
-        info!("Fetching mined UTXOs");
-        let utxos = chain
-            .z_get_address_utxos(AddressStrings::new(addresses))
-            .await?;
-
-        // Notify the wallet about all mined UTXOs.
-        for utxo in utxos {
-            let (address, txid, index, script, value_zat, mined_height) = utxo.into_parts();
-            debug!("{address} has UTXO in tx {txid} at index {}", index.index());
-
-            let output = WalletTransparentOutput::from_parts(
-                OutPoint::new(txid.0, index.index()),
-                TxOut::new(
-                    Zatoshis::const_from_u64(value_zat),
-                    Script(script::Code(script.as_raw_bytes().to_vec())),
-                ),
-                Some(BlockHeight::from_u32(mined_height.0)),
-            )
-            .expect("the UTXO was detected via a supported address kind");
-
-            db_data.put_received_transparent_utxo(&output)?;
-        }
+        fetch_transparent_utxos(&chain, db_data).await?;
         // TODO: Once Zaino has an index over the mempool, monitor it for changes to the
         // unmined UTXO set (which we can't get directly from the stream without building
         // an index because existing mempool txs can be spent within the mempool).

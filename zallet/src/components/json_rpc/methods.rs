@@ -59,6 +59,8 @@ mod view_transaction;
 #[cfg(zallet_build = "wallet")]
 mod z_get_total_balance;
 #[cfg(zallet_build = "wallet")]
+mod z_import_address;
+#[cfg(zallet_build = "wallet")]
 mod z_send_many;
 
 /// The general JSON-RPC interface, containing the methods provided in all Zallet builds.
@@ -402,6 +404,27 @@ pub(crate) trait WalletRpc {
     #[method(name = "z_getbalances")]
     async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response;
 
+    /// Imports a transparent address into the wallet for a given account.
+    ///
+    /// The hex data can be either:
+    /// - A compressed or uncompressed public key (imports as P2PKH).
+    /// - A redeem script (imports as P2SH).
+    ///
+    /// Returns the type of address imported and the corresponding transparent address.
+    ///
+    /// # Arguments
+    /// - `account` (string, required) The account UUID.
+    /// - `hex_data` (string, required) Hex-encoded public key or redeem script.
+    /// - `rescan` (boolean, optional, default=true) If true, rescan the chain for UTXOs
+    ///   belonging to all wallet transparent addresses after importing.
+    #[method(name = "z_importaddress")]
+    async fn import_address(
+        &self,
+        account: &str,
+        hex_data: &str,
+        rescan: Option<bool>,
+    ) -> z_import_address::Response;
+
     /// Returns the total value of funds stored in the node's wallet.
     ///
     /// TODO: Currently watchonly addresses cannot be omitted; `include_watchonly` must be
@@ -479,14 +502,14 @@ pub(crate) trait WalletRpc {
     ///
     /// Change generated from one or more transparent addresses flows to a new transparent
     /// address, while change generated from a legacy Sapling address returns to itself.
-    /// TODO: https://github.com/zcash/wallet/issues/138
+    /// TODO: <https://github.com/zcash/wallet/issues/138>
     ///
     /// When sending from a unified address, change is returned to the internal-only
     /// address for the associated unified account.
     ///
     /// When spending coinbase UTXOs, only shielded recipients are permitted and change is
     /// not allowed; the entire value of the coinbase UTXO(s) must be consumed.
-    /// TODO: https://github.com/zcash/wallet/issues/137
+    /// TODO: <https://github.com/zcash/wallet/issues/137>
     ///
     /// # Arguments
     ///
@@ -798,6 +821,22 @@ impl WalletRpcServer for WalletRpcImpl {
 
     async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response {
         get_balances::call(self.wallet().await?.as_ref(), minconf)
+    }
+
+    async fn import_address(
+        &self,
+        account: &str,
+        hex_data: &str,
+        rescan: Option<bool>,
+    ) -> z_import_address::Response {
+        z_import_address::call(
+            self.wallet().await?.as_mut(),
+            self.chain().await?,
+            account,
+            hex_data,
+            rescan,
+        )
+        .await
     }
 
     async fn z_get_total_balance(

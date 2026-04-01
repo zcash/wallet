@@ -1,10 +1,8 @@
 use documented::Documented;
 use jsonrpsee::core::RpcResult;
-use ripemd::Ripemd160;
 use schemars::JsonSchema;
 use secp256k1::PublicKey;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 use transparent::address::TransparentAddress;
 use zcash_keys::encoding::AddressCodec;
 use zcash_script::{
@@ -13,6 +11,8 @@ use zcash_script::{
 };
 
 use crate::{components::json_rpc::server::LegacyCode, network::Network};
+
+use super::super::utils::hash160;
 
 pub(crate) type Response = RpcResult<ResultType>;
 
@@ -85,12 +85,6 @@ pub(super) fn script_to_json(params: &Network, script_code: &Code) -> Transparen
         req_sigs,
         addresses,
     }
-}
-
-/// Computes the Hash160 of the given data.
-fn hash160(data: &[u8]) -> [u8; 20] {
-    let sha_hash = Sha256::digest(data);
-    Ripemd160::digest(sha_hash).into()
 }
 
 /// Converts a raw public key to its P2PKH address.
