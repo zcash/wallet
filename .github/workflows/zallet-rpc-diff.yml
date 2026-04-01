@@ -1,0 +1,31 @@
+name: Zallet RPC Diff CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'tools/zallet-rpc-diff/**'
+      - '.github/workflows/zallet-rpc-diff.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'tools/zallet-rpc-diff/**'
+      - '.github/workflows/zallet-rpc-diff.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Build
+        run: cargo build -p zallet-parity-cli -p zallet-parity-core -p zallet-parity-testkit
+      - name: Test
+        run: cargo test -p zallet-parity-cli -p zallet-parity-core -p zallet-parity-testkit
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy -p zallet-parity-cli -p zallet-parity-core -p zallet-parity-testkit -- -D warnings
