@@ -117,13 +117,13 @@ zcash_script = "0.4.3"
 secp256k1 = { version = "0.29", features = ["recovery"] }
 
 # Zcash chain state
-zaino-common = "0.1"
-zaino-fetch = "0.1"
-zaino-proto = "0.1"
-zaino-state = "0.1"
-zebra-chain = "2.0"
-zebra-rpc = "2.0.1"
-zebra-state = "2.0"
+zaino-common = "0.2"
+zaino-fetch = "0.2"
+zaino-proto = "0.2"
+zaino-state = "0.2"
+zebra-chain = "6"
+zebra-rpc = "6"
+zebra-state = "5"
 
 # Zcash wallet
 deadpool = "0.12"
@@ -170,10 +170,14 @@ age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "f84f80612813ba00a0a8a9a5f060bd217fa981cc" }
 zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "9c72d1805c269f88ea5caa4eb33c6d38013b9776" }
 
-zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "15b81f110349b34090341b3ab8b7cd58c7b9aeef" }
-zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "15b81f110349b34090341b3ab8b7cd58c7b9aeef" }
-zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "15b81f110349b34090341b3ab8b7cd58c7b9aeef" }
-zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "15b81f110349b34090341b3ab8b7cd58c7b9aeef" }
+zaino-common = { git = "https://github.com/str4d/zaino.git", rev = "1803c0007eef05b4b99907044886eb3c1e3d1d2e" }
+zaino-fetch = { git = "https://github.com/str4d/zaino.git", rev = "1803c0007eef05b4b99907044886eb3c1e3d1d2e" }
+zaino-proto = { git = "https://github.com/str4d/zaino.git", rev = "1803c0007eef05b4b99907044886eb3c1e3d1d2e" }
+zaino-state = { git = "https://github.com/str4d/zaino.git", rev = "1803c0007eef05b4b99907044886eb3c1e3d1d2e" }
+
+zebra-chain = { git = "https://github.com/str4d/zebra.git", rev = "7200eaa2b9255c39ac422e59344c5225f317ccb9" }
+zebra-rpc = { git = "https://github.com/str4d/zebra.git", rev = "7200eaa2b9255c39ac422e59344c5225f317ccb9" }
+zebra-state = { git = "https://github.com/str4d/zebra.git", rev = "7200eaa2b9255c39ac422e59344c5225f317ccb9" }
 
 [profile.release]
 debug = "line-tables-only"
