@@ -223,7 +223,7 @@ mod tests {
     fn p2sh_address_is_hash160_of_script() {
         let script_bytes = hex::decode(P2PKH_REDEEM_SCRIPT).unwrap();
         let expected_address =
-            TransparentAddress::ScriptHash(hash160(&script_bytes)).encode(&mainnet());
+            TransparentAddress::ScriptHash(hash160::hash(&script_bytes)).encode(&mainnet());
 
         let parsed = parse_import(&mainnet(), P2PKH_REDEEM_SCRIPT).unwrap();
         match parsed {

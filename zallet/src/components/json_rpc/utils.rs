@@ -16,8 +16,6 @@ use zcash_protocol::{
 };
 use zip32::DiversifierIndex;
 
-use sha2::{Digest, Sha256};
-
 use super::server::LegacyCode;
 
 #[cfg(zallet_build = "wallet")]
