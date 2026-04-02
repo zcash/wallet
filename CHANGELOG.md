@@ -22,6 +22,9 @@ be considered breaking changes.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
   `zcashd` didn't include in its response.
 - Significant performance improvements to `zallet migrate-zcashd-wallet`.
+- `zallet migrate-zcashd-wallet` now accepts `--keys-only` to import only keys
+  and accounts without querying the chain for transaction data or tree state.
+  Useful when chain data is not available (e.g., regtest testing).
 
 ### Fixed
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is

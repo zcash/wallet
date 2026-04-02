@@ -16,7 +16,7 @@ use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
 use zcash_client_backend::{
     data_api::{
         Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
-        Zip32Derivation,
+        Zip32Derivation, chain::ChainState,
     },
     decrypt_transaction,
 };
@@ -76,6 +76,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             wallet,
             self.buffer_wallet_transactions,
             self.allow_multiple_wallet_imports,
+            self.keys_only,
         )
         .await?;
 
@@ -218,6 +219,7 @@ impl MigrateZcashdWalletCmd {
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
+        keys_only: bool,
     ) -> Result<(), MigrateError> {
         let mut db_data = db.handle().await?;
         let network_params = *db_data.params();
@@ -266,75 +268,88 @@ impl MigrateZcashdWalletCmd {
             }
         }
 
-        // Obtain information about the current state of the chain, so that we can set the recovery
-        // height properly.
-        let chain_subscriber = chain.subscribe().await?.inner();
-        let chain_tip = Self::chain_tip(&chain_subscriber).await?;
         let sapling_activation = network_params
             .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)
             .expect("Sapling activation height is defined.");
 
-        // Collect an index from txid to block height for all transactions known to the wallet that
-        // appear in the main chain.
-        info!(
-            "Wallet contains {} transactions",
-            wallet.transactions().len(),
-        );
-        let mut main_chain_block_heights = HashMap::new();
-        for (_, wallet_tx) in wallet.transactions().iter() {
-            let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
-            // Skip transactions that were unmined when the zcashd wallet was last written.
-            if block_hash.0 != [0; 32] {
-                if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
-                    match chain_subscriber
-                        .get_block_header(block_hash.to_string(), true)
-                        .await?
-                    {
-                        GetBlockHeader::Verbose(header) => {
-                            entry.insert(BlockHeight::from_u32(header.height));
-                        }
-                        // Ignore any blocks that are not in the main chain.
-                        _ => (),
-                    };
+        let (tx_heights, wallet_birthday) = if keys_only {
+            info!("Keys-only mode: skipping transaction lookup and using fallback birthday");
+            let wallet_birthday = AccountBirthday::from_parts(
+                ChainState::empty(sapling_activation, BlockHash([0; 32])),
+                None,
+            );
+            (HashMap::new(), wallet_birthday)
+        } else {
+            // Obtain information about the current state of the chain, so that we can set the
+            // recovery height properly.
+            let chain_subscriber = chain.subscribe().await?.inner();
+            let chain_tip = Self::chain_tip(&chain_subscriber).await?;
+
+            // Collect an index from txid to block height for all transactions known to the wallet
+            // that appear in the main chain.
+            info!(
+                "Wallet contains {} transactions",
+                wallet.transactions().len(),
+            );
+            let mut main_chain_block_heights = HashMap::new();
+            for (_, wallet_tx) in wallet.transactions().iter() {
+                let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+                // Skip transactions that were unmined when the zcashd wallet was last written.
+                if block_hash.0 != [0; 32] {
+                    if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
+                        match chain_subscriber
+                            .get_block_header(block_hash.to_string(), true)
+                            .await?
+                        {
+                            GetBlockHeader::Verbose(header) => {
+                                entry.insert(BlockHeight::from_u32(header.height));
+                            }
+                            // Ignore any blocks that are not in the main chain.
+                            _ => (),
+                        };
+                    }
                 }
             }
-        }
-        let mut tx_heights = HashMap::new();
-        for (txid, wallet_tx) in wallet.transactions().iter() {
-            let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
-            tx_heights.insert(
-                txid,
-                (
-                    main_chain_block_heights.get(&block_hash).cloned(),
-                    buffer_wallet_transactions.then_some(wallet_tx),
-                ),
+            let mut tx_heights = HashMap::new();
+            for (txid, wallet_tx) in wallet.transactions().iter() {
+                let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+                tx_heights.insert(
+                    txid,
+                    (
+                        main_chain_block_heights.get(&block_hash).cloned(),
+                        buffer_wallet_transactions.then_some(wallet_tx),
+                    ),
+                );
+            }
+            info!(
+                "Wallet contains {} mined transactions",
+                tx_heights.values().filter(|(h, _)| h.is_some()).count(),
             );
-        }
-        info!(
-            "Wallet contains {} mined transactions",
-            tx_heights.values().filter(|(h, _)| h.is_some()).count(),
-        );
 
-        // Since zcashd scans in linear order, we can reliably choose the earliest wallet
-        // transaction's mined height as the birthday height, so long as it is in the "stable"
-        // range. We don't have a good source of individual per-account birthday information at
-        // this point; once we've imported all of the transaction data into the wallet then we'll
-        // be able to choose per-account birthdays without difficulty.
-        let wallet_birthday = Self::get_birthday(
-            &chain_subscriber,
-            // Fall back to the chain tip height, and then Sapling activation as a last resort. If
-            // we have a birthday height, max() that with sapling activation; that will be the
-            // minimum possible wallet birthday that is relevant to future recovery scenarios.
-            tx_heights
-                .values()
-                .flat_map(|(h, _)| h)
-                .min()
-                .copied()
-                .or(chain_tip)
-                .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation)),
-            chain_tip,
-        )
-        .await?;
+            // Since zcashd scans in linear order, we can reliably choose the earliest wallet
+            // transaction's mined height as the birthday height, so long as it is in the "stable"
+            // range. We don't have a good source of individual per-account birthday information at
+            // this point; once we've imported all of the transaction data into the wallet then
+            // we'll be able to choose per-account birthdays without difficulty.
+            let wallet_birthday = Self::get_birthday(
+                &chain_subscriber,
+                // Fall back to the chain tip height, and then Sapling activation as a last resort.
+                // If we have a birthday height, max() that with sapling activation; that will be
+                // the minimum possible wallet birthday that is relevant to future recovery
+                // scenarios.
+                tx_heights
+                    .values()
+                    .flat_map(|(h, _)| h)
+                    .min()
+                    .copied()
+                    .or(chain_tip)
+                    .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation)),
+                chain_tip,
+            )
+            .await?;
+
+            (tx_heights, wallet_birthday)
+        };
         info!(
             "Setting the wallet birthday to height {}",
             wallet_birthday.height(),
