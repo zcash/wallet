@@ -16,15 +16,9 @@ use zcash_protocol::{
 };
 use zip32::DiversifierIndex;
 
-use ripemd::Ripemd160;
 use sha2::{Digest, Sha256};
 
 use super::server::LegacyCode;
-
-/// Computes the Hash160 (RIPEMD-160 of SHA-256) of the given data.
-pub(super) fn hash160(data: &[u8]) -> [u8; 20] {
-    Ripemd160::digest(Sha256::digest(data)).into()
-}
 
 #[cfg(zallet_build = "wallet")]
 use {
