@@ -159,7 +159,8 @@ pub(crate) fn call(wallet: &DbConnection) -> Response {
             match addr {
                 Address::Transparent(_) | Address::Tex(_) => {
                     match address_info.source().transparent_key_scope() {
-                        Some(&TransparentKeyScope::EXTERNAL) => {
+                        Some(&TransparentKeyScope::EXTERNAL) | None => {
+                            // 'None' scope keys are imported, which must be treated as external
                             transparent_addresses.push(addr.encode(wallet.params()));
                         }
                         Some(&TransparentKeyScope::INTERNAL) => {
