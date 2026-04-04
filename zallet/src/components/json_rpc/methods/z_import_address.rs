@@ -8,10 +8,10 @@ use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
 
 #[cfg(feature = "transparent-key-import")]
 use {
-    crate::{components::json_rpc::utils::hash160, network::Network},
+    crate::network::Network,
     jsonrpsee::types::ErrorCode as RpcErrorCode,
     secp256k1::PublicKey,
-    transparent::address::TransparentAddress,
+    transparent::{address::TransparentAddress, util::hash160},
     zcash_client_backend::data_api::WalletWrite,
     zcash_client_sqlite::AccountUuid,
     zcash_keys::encoding::AddressCodec,
@@ -117,7 +117,7 @@ fn parse_import(params: &Network, hex_data: &str) -> RpcResult<ParsedImport> {
         })
     } else {
         // Otherwise treat as a redeem script (P2SH import).
-        let address = TransparentAddress::ScriptHash(hash160(&bytes)).encode(params);
+        let address = TransparentAddress::ScriptHash(hash160::hash(&bytes)).encode(params);
         let code = Code(bytes);
         let script = Redeem::parse(&code).map_err(|_| {
             LegacyCode::InvalidParameter.with_message(format!(
@@ -223,7 +223,7 @@ mod tests {
     fn p2sh_address_is_hash160_of_script() {
         let script_bytes = hex::decode(P2PKH_REDEEM_SCRIPT).unwrap();
         let expected_address =
-            TransparentAddress::ScriptHash(hash160(&script_bytes)).encode(&mainnet());
+            TransparentAddress::ScriptHash(hash160::hash(&script_bytes)).encode(&mainnet());
 
         let parsed = parse_import(&mainnet(), P2PKH_REDEEM_SCRIPT).unwrap();
         match parsed {

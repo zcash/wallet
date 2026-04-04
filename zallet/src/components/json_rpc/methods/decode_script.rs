@@ -3,7 +3,7 @@ use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use secp256k1::PublicKey;
 use serde::Serialize;
-use transparent::address::TransparentAddress;
+use transparent::{address::TransparentAddress, util::hash160};
 use zcash_keys::encoding::AddressCodec;
 use zcash_script::{
     script::{Asm, Code},
@@ -11,8 +11,6 @@ use zcash_script::{
 };
 
 use crate::{components::json_rpc::server::LegacyCode, network::Network};
-
-use super::super::utils::hash160;
 
 pub(crate) type Response = RpcResult<ResultType>;
 
@@ -96,7 +94,7 @@ fn pubkey_to_p2pkh_address(pubkey_bytes: &[u8], params: &Network) -> Option<Stri
 
 /// Calculates the P2SH address for a given script.
 fn calculate_p2sh_address(script_bytes: &[u8], params: &Network) -> String {
-    let hash = hash160(script_bytes);
+    let hash = hash160::hash(script_bytes);
     TransparentAddress::ScriptHash(hash).encode(params)
 }
 

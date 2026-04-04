@@ -9,9 +9,9 @@ use secp256k1::{
 use serde::Serialize;
 use std::io::Write;
 use transparent::address::TransparentAddress;
+use transparent::util::sha256d::HashWriter;
 use zcash_encoding::CompactSize;
 use zcash_keys::encoding::AddressCodec;
-use zcash_primitives::transaction::util::sha256d::HashWriter;
 
 use crate::{components::json_rpc::server::LegacyCode, network::Network};
 
