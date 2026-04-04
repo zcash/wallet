@@ -16,7 +16,7 @@ use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
 use zcash_client_backend::{
     data_api::{
         Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
-        Zip32Derivation,
+        Zip32Derivation, chain::ChainState,
     },
     decrypt_transaction,
 };
@@ -60,8 +60,13 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             return Err(ErrorKind::Generic.context(fl!("migrate-alpha-code")).into());
         }
 
-        // Start monitoring the chain.
-        let (chain, _chain_indexer_task_handle) = Chain::new(&config).await?;
+        // Start monitoring the chain (skip if --no-scan).
+        let (chain, _chain_indexer_task_handle) = if self.no_scan {
+            (None, None)
+        } else {
+            let (c, h) = Chain::new(&config).await?;
+            (Some(c), Some(h))
+        };
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db.clone())?;
 
@@ -214,7 +219,7 @@ impl MigrateZcashdWalletCmd {
     async fn migrate_zcashd_wallet(
         db: Database,
         keystore: KeyStore,
-        chain: Chain,
+        chain: Option<Chain>,
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
@@ -268,8 +273,14 @@ impl MigrateZcashdWalletCmd {
 
         // Obtain information about the current state of the chain, so that we can set the recovery
         // height properly.
-        let chain_subscriber = chain.subscribe().await?.inner();
-        let chain_tip = Self::chain_tip(&chain_subscriber).await?;
+        let (chain_subscriber, chain_tip) = if let Some(chain) = &chain {
+            let subscriber = chain.subscribe().await?.inner();
+            let tip = Self::chain_tip(&subscriber).await?;
+            (Some(subscriber), tip)
+        } else {
+            info!("No-scan mode: skipping chain scanning");
+            (None, None)
+        };
         let sapling_activation = network_params
             .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)
             .expect("Sapling activation height is defined.");
@@ -281,21 +292,23 @@ impl MigrateZcashdWalletCmd {
             wallet.transactions().len(),
         );
         let mut main_chain_block_heights = HashMap::new();
-        for (_, wallet_tx) in wallet.transactions().iter() {
-            let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
-            // Skip transactions that were unmined when the zcashd wallet was last written.
-            if block_hash.0 != [0; 32] {
-                if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
-                    match chain_subscriber
-                        .get_block_header(block_hash.to_string(), true)
-                        .await?
-                    {
-                        GetBlockHeader::Verbose(header) => {
-                            entry.insert(BlockHeight::from_u32(header.height));
-                        }
-                        // Ignore any blocks that are not in the main chain.
-                        _ => (),
-                    };
+        if let Some(chain_subscriber) = chain_subscriber.as_ref() {
+            for (_, wallet_tx) in wallet.transactions().iter() {
+                let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+                // Skip transactions that were unmined when the zcashd wallet was last written.
+                if block_hash.0 != [0; 32] {
+                    if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
+                        match chain_subscriber
+                            .get_block_header(block_hash.to_string(), true)
+                            .await?
+                        {
+                            GetBlockHeader::Verbose(header) => {
+                                entry.insert(BlockHeight::from_u32(header.height));
+                            }
+                            // Ignore any blocks that are not in the main chain.
+                            _ => (),
+                        };
+                    }
                 }
             }
         }
@@ -320,21 +333,43 @@ impl MigrateZcashdWalletCmd {
         // range. We don't have a good source of individual per-account birthday information at
         // this point; once we've imported all of the transaction data into the wallet then we'll
         // be able to choose per-account birthdays without difficulty.
-        let wallet_birthday = Self::get_birthday(
-            &chain_subscriber,
-            // Fall back to the chain tip height, and then Sapling activation as a last resort. If
-            // we have a birthday height, max() that with sapling activation; that will be the
-            // minimum possible wallet birthday that is relevant to future recovery scenarios.
-            tx_heights
+        let wallet_birthday = if let Some(chain_subscriber) = chain_subscriber.as_ref() {
+            Self::get_birthday(
+                chain_subscriber,
+                // Fall back to the chain tip height, and then Sapling activation as a last resort.
+                // If we have a birthday height, max() that with sapling activation; that will be
+                // the minimum possible wallet birthday that is relevant to future recovery
+                // scenarios.
+                tx_heights
+                    .values()
+                    .flat_map(|(h, _)| h)
+                    .min()
+                    .copied()
+                    .or(chain_tip)
+                    .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation)),
+                chain_tip,
+            )
+            .await?
+        } else {
+            // In no-scan mode, approximate the wallet birthday from transaction expiry
+            // heights. Expiry heights are typically creation_height + 40 (the default
+            // TX_EXPIRY_DELTA in zcashd). Subtracting 1000 gives a conservative lower
+            // bound on the earliest mined height.
+            let birthday_height = wallet
+                .transactions()
                 .values()
-                .flat_map(|(h, _)| h)
+                .map(|tx| u32::from(tx.transaction().expiry_height()))
+                .filter(|&h| h > 0)
                 .min()
-                .copied()
-                .or(chain_tip)
-                .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation)),
-            chain_tip,
-        )
-        .await?;
+                .map(|h| BlockHeight::from_u32(h.saturating_sub(1000)))
+                .map(|h| std::cmp::max(h, sapling_activation))
+                .unwrap_or(sapling_activation);
+
+            AccountBirthday::from_parts(
+                ChainState::empty(birthday_height, BlockHash([0; 32])),
+                None,
+            )
+        };
         info!(
             "Setting the wallet birthday to height {}",
             wallet_birthday.height(),
