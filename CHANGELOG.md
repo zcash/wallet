@@ -24,6 +24,8 @@ be considered breaking changes.
 - Significant performance improvements to `zallet migrate-zcashd-wallet`.
 
 ### Fixed
+- `listaddresses` no longer returns an internal error when the wallet contains
+  standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
   not defined.
 
