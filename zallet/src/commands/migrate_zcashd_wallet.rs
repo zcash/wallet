@@ -311,6 +311,61 @@ impl MigrateZcashdWalletCmd {
                     }
                 }
             }
+        } else {
+            // In no-scan mode, we don't have a chain subscriber to resolve block
+            // hashes to heights. Instead, we estimate block heights from the
+            // transaction data available in the wallet.dat file.
+            //
+            // A transaction's expiry height is always in the same consensus epoch as
+            // its mined height (this is enforced by zcashd's consensus rules), which
+            // makes it a safe proxy for:
+            //   - Deriving the correct `BranchId` for transaction deserialization.
+            //   - Providing a `Some(height)` to `store_decrypted_txs`, which marks
+            //     the transaction as mined rather than mempool. This is what causes
+            //     `update_gap_limits` to set `exposed_at_height` for each address
+            //     involved in the transaction, enabling `listaddresses` to return
+            //     all addresses that have received payments.
+
+            // Pass 1: Estimate block heights from expiry heights.
+            for (_, wallet_tx) in wallet.transactions().iter() {
+                let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+                // Skip transactions that were unmined when the zcashd wallet was
+                // last written.
+                if block_hash.0 != [0; 32] {
+                    let expiry_height = u32::from(wallet_tx.transaction().expiry_height());
+                    if expiry_height > 0 {
+                        if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
+                            entry.insert(BlockHeight::from_u32(expiry_height));
+                        }
+                    }
+                }
+            }
+
+            // Pass 2: Handle mined transactions with zero expiry height. These are
+            // pre-Overwinter transactions or coinbase transactions, which predate the
+            // expiry mechanism. Their branch ID is embedded in the serialized
+            // transaction data (not derived from block height), so the height value
+            // here only affects address exposure tracking — any `Some` height
+            // suffices. We use the minimum known height from Pass 1, falling back to
+            // the wallet birthday as a conservative last resort.
+            let fallback_height = main_chain_block_heights
+                .values()
+                .min()
+                .copied()
+                .unwrap_or(wallet_birthday.height());
+            for (_, wallet_tx) in wallet.transactions().iter() {
+                let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+                if block_hash.0 != [0; 32] {
+                    if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
+                        entry.insert(fallback_height);
+                    }
+                }
+            }
+
+            info!(
+                "No-scan mode: estimated block heights for {} distinct blocks",
+                main_chain_block_heights.len(),
+            );
         }
         let mut tx_heights = HashMap::new();
         for (txid, wallet_tx) in wallet.transactions().iter() {
