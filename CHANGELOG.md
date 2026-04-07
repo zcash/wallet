@@ -22,6 +22,11 @@ be considered breaking changes.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
   `zcashd` didn't include in its response.
 - Significant performance improvements to `zallet migrate-zcashd-wallet`.
+- `zallet migrate-zcashd-wallet` now accepts `--no-scan` to skip chain scanning
+  during migration. Keys, accounts, and transaction data are still imported, but
+  block heights and tree state are not resolved from the chain. Cannot be
+  combined with `--buffer-wallet-transactions`. Useful when chain data is not
+  available.
 
 ### Fixed
 - `listaddresses` no longer returns an internal error when the wallet contains
