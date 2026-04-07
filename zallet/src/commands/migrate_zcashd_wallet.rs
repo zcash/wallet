@@ -11,6 +11,7 @@ use bip0039::{English, Mnemonic};
 use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
+use transparent::address::TransparentAddress;
 use zaino_fetch::jsonrpsee::response::block_header::GetBlockHeader;
 use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
 use zcash_client_backend::{
@@ -25,8 +26,11 @@ use zcash_keys::keys::{
     DerivationError, UnifiedFullViewingKey,
     zcashd::{PathParseError, ZcashdHdDerivation},
 };
-use zcash_primitives::{block::BlockHash, transaction::Transaction};
-use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
+use zcash_primitives::{
+    block::BlockHash,
+    transaction::{Transaction, TxVersion},
+};
+use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, NetworkUpgrade, Parameters};
 use zewif_zcashd::{BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet};
 use zip32::{AccountId, fingerprint::SeedFingerprint};
 
@@ -60,12 +64,29 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             return Err(ErrorKind::Generic.context(fl!("migrate-alpha-code")).into());
         }
 
-        // Start monitoring the chain (skip if --no-scan).
+        // Decide whether to connect to the chain. `--no-scan` is an explicit opt-in to
+        // "migrate without a chain connection"; in that mode we populate address exposure
+        // from wallet transaction data alone. Without `--no-scan` we expect a reachable
+        // chain, but soft-degrade if it isn't, with a hint pointing advanced users at
+        // `--no-scan` as an escape hatch. Note that in the soft-degrade case, address
+        // exposure is NOT marked upfront — the user implicitly asked for the default
+        // flow, and we leave the chain-scan path to populate it when a node is available.
         let (chain, _chain_indexer_task_handle) = if self.no_scan {
             (None, None)
         } else {
-            let (c, h) = Chain::new(&config).await?;
-            (Some(c), Some(h))
+            match Chain::new(&config).await {
+                Ok((c, h)) => (Some(c), Some(h)),
+                Err(e) => {
+                    warn!(
+                        "Chain is unreachable; proceeding without a chain subscriber. \
+                         Transaction heights and address exposure will be resolved by a \
+                         later scan. If you cannot connect a node at all, consider re-running \
+                         with `--no-scan` to seed address exposure from wallet-local data. \
+                         (cause: {e})"
+                    );
+                    (None, None)
+                }
+            }
         };
         let db = Database::open(&config).await?;
         let keystore = KeyStore::new(&config, db.clone())?;
@@ -81,6 +102,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             wallet,
             self.buffer_wallet_transactions,
             self.allow_multiple_wallet_imports,
+            self.no_scan,
         )
         .await?;
 
@@ -223,6 +245,7 @@ impl MigrateZcashdWalletCmd {
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
+        no_scan: bool,
     ) -> Result<(), MigrateError> {
         let mut db_data = db.handle().await?;
         let network_params = *db_data.params();
@@ -278,15 +301,24 @@ impl MigrateZcashdWalletCmd {
             let tip = Self::chain_tip(&subscriber).await?;
             (Some(subscriber), tip)
         } else {
-            info!("No-scan mode: skipping chain scanning");
+            if no_scan {
+                info!(
+                    "--no-scan: skipping chain queries, exposures will be seeded from wallet data"
+                );
+            } else {
+                info!("No chain subscriber available; proceeding without chain-derived heights");
+            }
             (None, None)
         };
         let sapling_activation = network_params
-            .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)
+            .activation_height(NetworkUpgrade::Sapling)
             .expect("Sapling activation height is defined.");
 
-        // Collect an index from txid to block height for all transactions known to the wallet that
-        // appear in the main chain.
+        // Collect an index from block hash to block height for all transactions known to the
+        // wallet that appear in the main chain. This only runs when we have a chain subscriber;
+        // without one, all transactions are stored as unmined and a later scan will assign
+        // accurate heights. Address exposure is handled separately via
+        // `mark_transparent_addresses_exposed` below.
         info!(
             "Wallet contains {} transactions",
             wallet.transactions().len(),
@@ -351,7 +383,7 @@ impl MigrateZcashdWalletCmd {
             )
             .await?
         } else {
-            // In no-scan mode, approximate the wallet birthday from transaction expiry
+            // Chain is unreachable: approximate the wallet birthday from transaction expiry
             // heights. Expiry heights are typically creation_height + 40 (the default
             // TX_EXPIRY_DELTA in zcashd). Subtracting 1000 gives a conservative lower
             // bound on the earliest mined height.
@@ -615,6 +647,105 @@ impl MigrateZcashdWalletCmd {
                 .map(|key| *key.pubkey()),
         )?;
 
+        // In `--no-scan` mode, seed `addresses.exposed_at_height` from wallet transaction
+        // data so that addresses become visible in `listaddresses` and the HD derivation process
+        // knows to update the gap_limit, without relying on a chain subscriber.
+        if no_scan {
+            let mut exposure_estimates: HashMap<TransparentAddress, BlockHeight> = HashMap::new();
+            let mut buf = vec![];
+            let birthday_height = wallet_birthday.height();
+            for (_, wallet_tx) in wallet.transactions().iter() {
+                let expiry = u32::from(wallet_tx.transaction().expiry_height());
+                let is_mined = wallet_tx.hash_block().as_ref() != &[0u8; 32];
+
+                // Choose a branch_id for the round-trip deserialization. For v5+ the tx
+                // carries its own branch_id, which overrides whatever we pass here. For
+                // earlier versions, the passed value is only stored on the resulting
+                // `Transaction`; it doesn't affect how the bytes are parsed, so `Sprout`
+                // is a safe default for non-expiring transactions.
+                let deser_branch = if expiry > 0 {
+                    BranchId::for_height(&network_params, BlockHeight::from_u32(expiry))
+                } else {
+                    BranchId::Sprout
+                };
+                buf.clear();
+                wallet_tx.transaction().write(&mut buf)?;
+                let tx = Transaction::read(buf.as_slice(), deser_branch)?;
+
+                // Pick an exposure-height estimate:
+                //   - If an expiry height is present, it is in the same consensus epoch
+                //     as the eventual mined height, so it is a safe proxy (and an upper
+                //     bound on the actual mined height).
+                //   - Otherwise, `expiry_height == 0` means "non-expiring" and is valid
+                //     for any transaction — not just pre-Overwinter. For mined transactions
+                //     of this shape we fall back to the activation height of the earliest
+                //     consensus epoch in which the tx version is valid: the tx could only
+                //     have been accepted by the network at or after that height, making it
+                //     a conservative lower bound on the true mined (and exposure) height.
+                //   - Unmined non-expiring transactions are skipped: we have no anchor.
+                let estimated_height = if expiry > 0 {
+                    BlockHeight::from_u32(expiry)
+                } else if is_mined {
+                    zero_expiry_epoch_floor(&network_params, &tx)
+                } else {
+                    continue;
+                };
+
+                // Exposure cannot predate the wallet birthday (the earliest height this
+                // wallet is expected to scan from), so clamp up.
+                let estimated_height = std::cmp::max(estimated_height, birthday_height);
+
+                let Some(bundle) = tx.transparent_bundle() else {
+                    continue;
+                };
+                for vout in &bundle.vout {
+                    if let Some(addr) = vout
+                        .script_kind()
+                        .as_ref()
+                        .and_then(TransparentAddress::from_script_kind)
+                    {
+                        exposure_estimates
+                            .entry(addr)
+                            .and_modify(|existing| {
+                                if estimated_height < *existing {
+                                    *existing = estimated_height;
+                                }
+                            })
+                            .or_insert(estimated_height);
+                    }
+                }
+            }
+
+            if !exposure_estimates.is_empty() {
+                // The upstream API is atomic: if any address in the batch is not tracked
+                // by the wallet, the whole call rolls back. We therefore pre-filter to
+                // just the addresses the wallet knows about. External counterparties and
+                // outputs to self-managed-but-not-yet-derived diversifiers are silently
+                // dropped; they'll be picked up by a later chain scan if relevant.
+                let mut known_addresses: HashSet<TransparentAddress> = HashSet::new();
+                for account_id in db_data.get_account_ids()? {
+                    let receivers = db_data.get_transparent_receivers(account_id, true, true)?;
+                    known_addresses.extend(receivers.into_keys());
+                }
+
+                let total = exposure_estimates.len();
+                let filtered: Vec<(TransparentAddress, BlockHeight)> = exposure_estimates
+                    .into_iter()
+                    .filter(|(addr, _)| known_addresses.contains(addr))
+                    .collect();
+                let unknown = total - filtered.len();
+
+                if !filtered.is_empty() {
+                    db_data.mark_transparent_addresses_exposed(&filtered)?;
+                }
+                info!(
+                    "Marked {} transparent addresses as exposed ({} observed but not tracked by the wallet)",
+                    filtered.len(),
+                    unknown,
+                );
+            }
+        }
+
         // Since we've retrieved the raw transaction data anyway, preemptively store it for faster
         // access to balance & to set priorities in the scan queue.
         if buffer_wallet_transactions {
@@ -706,6 +837,62 @@ impl Runnable for MigrateZcashdWalletCmd {
     fn run(&self) {
         self.run_on_runtime();
     }
+}
+
+/// Returns a conservative lower-bound height at which a non-expiring mined transaction
+/// (`expiry_height == 0`) could have been accepted by consensus, based on its version.
+///
+/// The returned height is the activation of the earliest network upgrade in which a
+/// transaction of this version is valid under consensus rules. For v5+ transactions the
+/// embedded `consensus_branch_id` identifies the specific epoch; for earlier versions we
+/// use the earliest epoch in the version's valid range (Overwinter for v3, Sapling for v4,
+/// genesis for Sprout). Callers are expected to clamp further against the wallet birthday.
+fn zero_expiry_epoch_floor<P: Parameters>(params: &P, tx: &Transaction) -> BlockHeight {
+    // Used as a last-resort fallback when a requested network upgrade's activation height
+    // is unavailable on this network (e.g., regtest). Any caller will subsequently clamp
+    // this against the wallet birthday, which is itself floored at Sapling activation.
+    let one = BlockHeight::from_u32(1);
+    match tx.version() {
+        TxVersion::Sprout(_) => one,
+        TxVersion::V3 => params
+            .activation_height(NetworkUpgrade::Overwinter)
+            .unwrap_or(one),
+        TxVersion::V4 => params
+            .activation_height(NetworkUpgrade::Sapling)
+            .unwrap_or(one),
+        TxVersion::V5 => activation_height_for_branch(params, tx.consensus_branch_id())
+            .or_else(|| params.activation_height(NetworkUpgrade::Nu5))
+            .unwrap_or(one),
+        // Any future variants enabled by unstable features: fall back to the most recent
+        // known-good activation height we can resolve.
+        #[allow(unreachable_patterns)]
+        _ => params
+            .activation_height(NetworkUpgrade::Nu6_1)
+            .or_else(|| params.activation_height(NetworkUpgrade::Nu6))
+            .or_else(|| params.activation_height(NetworkUpgrade::Nu5))
+            .unwrap_or(one),
+    }
+}
+
+/// Returns the activation height of the network upgrade whose branch id matches `branch`,
+/// or `None` if no configured upgrade maps to it on this network.
+fn activation_height_for_branch<P: Parameters>(
+    params: &P,
+    branch: BranchId,
+) -> Option<BlockHeight> {
+    [
+        NetworkUpgrade::Overwinter,
+        NetworkUpgrade::Sapling,
+        NetworkUpgrade::Blossom,
+        NetworkUpgrade::Heartwood,
+        NetworkUpgrade::Canopy,
+        NetworkUpgrade::Nu5,
+        NetworkUpgrade::Nu6,
+        NetworkUpgrade::Nu6_1,
+    ]
+    .into_iter()
+    .filter_map(|nu| params.activation_height(nu))
+    .find(|&h| BranchId::for_height(params, h) == branch)
 }
 
 #[derive(Debug)]

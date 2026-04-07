@@ -151,19 +151,25 @@ anyhow = "1.0"
 # lightwalletd (temporary)
 tonic = "0.14"
 
+# NOTE: temporary local path overrides pointing at the `exposure-reporting` branch
+# (commit ffdb5f1afd, "Add WalletWrite::mark_transparent_address_exposed"). Once that
+# change lands upstream, revert these back to git refs with an updated `rev`.
 [patch.crates-io]
-equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "eb70164b0ea72f87dba8ae54e5e0fd5f5be44029" }
+equihash = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/components/equihash" }
+f4jumble = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/components/f4jumble" }
+transparent = { package = "zcash_transparent", path = "/home/zodldev/Projects/librustzcash/exposure-reporting/zcash_transparent" }
+zcash_address = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/components/zcash_address" }
+zcash_client_backend = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/zcash_client_backend" }
+zcash_client_sqlite = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/zcash_client_sqlite" }
+zcash_encoding = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/components/zcash_encoding" }
+zcash_history = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/zcash_history" }
+zcash_keys = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/zcash_keys" }
+zcash_primitives = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/zcash_primitives" }
+zcash_proofs = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/zcash_proofs" }
+zcash_protocol = { path = "/home/zodldev/Projects/librustzcash/exposure-reporting/components/zcash_protocol" }
+# Mirror librustzcash's own pins so version resolution matches the local checkout.
+sapling = { package = "sapling-crypto", git = "https://github.com/zcash/sapling-crypto.git", rev = "b8a81c22f034d68f9bbd6cba728aab807b9ba2ea" }
+orchard = { package = "orchard", git = "https://github.com/zcash/orchard.git", rev = "b0bf2670e248958c6ce7c1deed466032e0dbd4d9" }
 
 age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633bb70c91eef91142fd4" }
 
