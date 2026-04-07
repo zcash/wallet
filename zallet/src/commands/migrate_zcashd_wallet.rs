@@ -311,6 +311,59 @@ impl MigrateZcashdWalletCmd {
                     }
                 }
             }
+        } else {
+            // In no-scan mode, we don't have a chain subscriber to resolve block hashes to
+            // heights. Instead, we estimate block heights from the transaction data available in
+            // the wallet.dat file.
+            //
+            // A transaction's expiry height is always in the same consensus epoch as its mined
+            // height, which makes it a safe proxy for:
+            //   - Deriving the correct `BranchId` for transaction deserialization.
+            //   - Estimating an `exposed_at_height`, to allow HD derivation tracking
+            //
+            // The estimated heights written to `transactions.mined_height` by
+            // `store_decrypted_txs` are cleared via `clear_estimated_mined_heights` after
+            // the store completes, so they cannot interfere with a later real-chain scan.
+
+            // Pass 1: Estimate block heights from expiry heights.
+            for (_, wallet_tx) in wallet.transactions().iter() {
+                let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+                // Skip transactions that were unmined when the zcashd wallet was
+                // last written.
+                if block_hash.0 != [0; 32] {
+                    let expiry_height = u32::from(wallet_tx.transaction().expiry_height());
+                    if expiry_height > 0 {
+                        if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
+                            entry.insert(BlockHeight::from_u32(expiry_height));
+                        }
+                    }
+                }
+            }
+
+            // Pass 2: Handle mined transactions with zero expiry height. These are pre-Overwinter
+            // transactions or coinbase transactions, which predate the expiry mechanism. Their
+            // branch ID is embedded in the serialized transaction data (not derived from block
+            // height). We use the minimum known height from Pass 1, falling back to Sapling
+            // activation as a conservative last resort (pre-Overwinter transactions necessarily
+            // predate Sapling activation).
+            let fallback_height = main_chain_block_heights
+                .values()
+                .min()
+                .copied()
+                .unwrap_or(sapling_activation);
+            for (_, wallet_tx) in wallet.transactions().iter() {
+                let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
+                if block_hash.0 != [0; 32] {
+                    if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
+                        entry.insert(fallback_height);
+                    }
+                }
+            }
+
+            info!(
+                "No-scan mode: estimated block heights for {} distinct blocks",
+                main_chain_block_heights.len(),
+            );
         }
         let mut tx_heights = HashMap::new();
         for (txid, wallet_tx) in wallet.transactions().iter() {
@@ -694,6 +747,28 @@ impl MigrateZcashdWalletCmd {
             info!("Storing {} decrypted transactions", decrypted_txs.len());
             // TODO: Use chunking here if we add support for resuming migrations.
             db_data.store_decrypted_txs(decrypted_txs)?;
+
+            // In no-scan mode, the mined heights we just wrote are estimates derived
+            // from transaction expiry heights. They served their purpose of triggering
+            // `update_gap_limits` (which populates `addresses.exposed_at_height`), but
+            // we must not leave them in `transactions.mined_height`: `put_block`'s
+            // fix-up UPDATE trusts that column and would spuriously associate a
+            // transaction with the wrong block if a later scan happens to reach a
+            // block at an estimated height. Clear them now so the next real scan can
+            // populate them with accurate values.
+            if chain_subscriber.is_none() {
+                let estimated_mined_txids = decoded_txs
+                    .iter()
+                    .filter_map(|(tx, h)| h.map(|_| tx.txid()))
+                    .collect::<Vec<_>>();
+                if !estimated_mined_txids.is_empty() {
+                    info!(
+                        "No-scan mode: clearing estimated mined heights for {} transactions",
+                        estimated_mined_txids.len(),
+                    );
+                    db_data.clear_estimated_mined_heights(&estimated_mined_txids)?;
+                }
+            }
         } else {
             info!("Not importing transactions (--buffer-wallet-transactions not set)");
         }
