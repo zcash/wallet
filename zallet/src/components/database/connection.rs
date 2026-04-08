@@ -213,6 +213,37 @@ impl DbConnection {
             })
         })
     }
+
+    /// Clears estimated `mined_height` values written by `store_decrypted_txs` after performing a
+    /// zcashd migration in no-scan mode. The estimated heights are useful during wallet recovery,
+    /// but we need the ability to clear them, so they do not interfere with scanning later.
+    #[cfg(feature = "zcashd-import")]
+    pub(crate) fn clear_estimated_mined_heights(
+        &mut self,
+        txids: &[zcash_protocol::TxId],
+    ) -> Result<
+        (),
+        <WalletDb<rusqlite::Connection, Network, SystemClock, OsRng> as WalletRead>::Error,
+    > {
+        self.with_raw_mut(|conn, _| {
+            let tx = conn.transaction()?;
+            {
+                let mut stmt = tx.prepare_cached(
+                    "UPDATE transactions
+                     SET mined_height = NULL
+                     WHERE txid = :txid
+                       AND block IS NULL",
+                )?;
+                for txid in txids {
+                    stmt.execute(rusqlite::named_params! {
+                        ":txid": txid.as_ref(),
+                    })?;
+                }
+            }
+            tx.commit()?;
+            Ok(())
+        })
+    }
 }
 
 impl WalletRead for DbConnection {
