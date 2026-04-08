@@ -1,0 +1,29 @@
+[package]
+name = "zallet-parity-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "CLI binary for the zallet-rpc-diff parity harness"
+
+[[bin]]
+name = "zallet-rpc-diff"
+path = "src/main.rs"
+
+[dependencies]
+zallet-parity-core = { path = "../zallet-parity-core" }
+tokio = { version = "1", features = ["full"] }
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+color-eyre.workspace = true
+anyhow.workspace = true
+indicatif.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+jsonrpsee.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+zallet-parity-testkit = { path = "../zallet-parity-testkit" }
+tempfile = "3"
