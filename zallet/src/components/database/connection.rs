@@ -12,8 +12,8 @@ use zcash_client_backend::{
     data_api::{
         AccountBirthday, AccountMeta, AddressInfo, Balance, DecryptedTransaction, InputSource,
         NoteFilter, ORCHARD_SHARD_HEIGHT, ReceivedNotes, ReceivedTransactionOutput,
-        SAPLING_SHARD_HEIGHT, TargetValue, TransparentKeyOrigin, WalletCommitmentTrees, WalletRead,
-        WalletUtxo, WalletWrite, Zip32Derivation,
+        SAPLING_SHARD_HEIGHT, TargetValue, TransparentKeyOrigin, TransparentOutputFilter,
+        WalletCommitmentTrees, WalletRead, WalletUtxo, WalletWrite, Zip32Derivation,
         chain::ChainState,
         wallet::{ConfirmationsPolicy, TargetHeight},
     },
@@ -498,9 +498,15 @@ impl InputSource for DbConnection {
         address: &TransparentAddress,
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
+        output_filter: TransparentOutputFilter,
     ) -> Result<Vec<WalletUtxo>, Self::Error> {
         self.with(|db_data| {
-            db_data.get_spendable_transparent_outputs(address, target_height, confirmations_policy)
+            db_data.get_spendable_transparent_outputs(
+                address,
+                target_height,
+                confirmations_policy,
+                output_filter,
+            )
         })
     }
 
