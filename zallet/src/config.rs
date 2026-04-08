@@ -217,6 +217,7 @@ impl BuilderSection {
             NonZeroU32::new(self.untrusted_confirmations()).unwrap_or(NonZeroU32::MIN),
             allow_zero_conf_shielding,
         )
+        .map_err(|_| ())
     }
 }
 

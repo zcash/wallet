@@ -12,7 +12,7 @@ use transparent::keys::TransparentKeyScope;
 use zcash_client_backend::{
     address::UnifiedAddress,
     data_api::{
-        Account, AccountPurpose, InputSource, WalletRead,
+        Account, AccountPurpose, InputSource, TransparentOutputFilter, WalletRead,
         wallet::{ConfirmationsPolicy, TargetHeight},
     },
     encoding::AddressCodec,
@@ -192,7 +192,12 @@ pub(crate) fn call(
             .iter()
             .try_fold(vec![], |mut acc, (addr, _)| {
                 let mut outputs = wallet
-                    .get_spendable_transparent_outputs(addr, target_height, confirmations_policy)
+                    .get_spendable_transparent_outputs(
+                        addr,
+                        target_height,
+                        confirmations_policy,
+                        TransparentOutputFilter::All,
+                    )
                     .map_err(|e| {
                         RpcError::owned(
                             LegacyCode::Database.into(),
