@@ -27,7 +27,11 @@ use zcash_keys::keys::{
 };
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
 use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
-use zewif_zcashd::{BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet};
+use zcash_script::script::{Code, Redeem};
+use zewif_zcashd::{
+    BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet,
+    parser::prelude::{Parse, Parser},
+};
 use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
@@ -71,7 +75,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
         let keystore = KeyStore::new(&config, db.clone())?;
 
         info!("Dumping zcashd wallet");
-        let wallet = self.dump_wallet()?;
+        let (wallet, dump) = self.dump_wallet()?;
         info!("Wallet dumped");
 
         Self::migrate_zcashd_wallet(
@@ -79,6 +83,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             keystore,
             chain,
             wallet,
+            dump,
             self.buffer_wallet_transactions,
             self.allow_multiple_wallet_imports,
         )
@@ -89,7 +94,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
 }
 
 impl MigrateZcashdWalletCmd {
-    fn dump_wallet(&self) -> Result<ZcashdWallet, MigrateError> {
+    fn dump_wallet(&self) -> Result<(ZcashdWallet, ZcashdDump), MigrateError> {
         let wallet_path = if self.path.is_relative() {
             if let Some(datadir) = self.zcashd_datadir.as_ref() {
                 datadir.join(&self.path)
@@ -139,7 +144,7 @@ impl MigrateZcashdWalletCmd {
                     }
                 })?;
 
-            Ok(zcashd_wallet)
+            Ok((zcashd_wallet, zcashd_dump))
         } else {
             Err(MigrateError::Wrapped(
                 ErrorKind::Generic
@@ -216,17 +221,86 @@ impl MigrateZcashdWalletCmd {
             .transpose()
     }
 
+    /// Extracts watch-only transparent imports from the raw `zcashd` dump.
+    ///
+    /// `zcashd` stores `importaddress` / `importpubkey` data in two BDB record types
+    /// that `zewif-zcashd` does not currently parse:
+    /// * `watchs` records hold every watched `scriptPubKey`. We recover a pubkey from
+    ///   each P2PK-form script (added by `importpubkey`); other forms (P2PKH, P2SH,
+    ///   etc.) are skipped here because the P2PKH side-effect of `importpubkey` is
+    ///   redundant with its P2PK record, and raw-hash watch-only records from
+    ///   `importaddress <address>` cannot currently be represented in the Zallet
+    ///   wallet schema.
+    /// * `cscript` records hold redeem scripts imported via
+    ///   `importaddress <redeemScript> "" true`, keyed by their CScriptID. The
+    ///   redeem-script bytes are returned directly as parsed `Redeem` scripts.
+    fn parse_zcashd_watchonly(
+        dump: &ZcashdDump,
+    ) -> Result<(Vec<PublicKey>, Vec<Redeem>), MigrateError> {
+        // In BDB, the key is `compactsize("watchs") + "watchs" + CScript`, where
+        // `CScript` serializes as `compactsize(len) + script_bytes`. `zewif_zcashd`
+        // already strips the `"watchs"` prefix for us, leaving the CScript in
+        // `DBKey::data`. The record's value is just the byte `'1'` and contains no
+        // information we need.
+        let mut pubkeys = Vec::new();
+        if dump.has_keys_for_keyname("watchs") {
+            let records = dump
+                .records_for_keyname("watchs")
+                .map_err(|e| watchonly_parse_error("watchs", e))?;
+            for (key, _value) in records {
+                let script_bytes = parse_length_prefixed(key.data.as_ref())
+                    .map_err(|e| watchonly_parse_error("watchs script", e))?;
+                if let Some(pubkey) = extract_p2pk_pubkey(&script_bytes) {
+                    pubkeys.push(pubkey);
+                }
+                // All other `scriptPubKey` forms are intentionally ignored; see doc
+                // comment on `parse_zcashd_watchonly`.
+            }
+        }
+
+        // For `cscript`, the key is `compactsize("cscript") + "cscript" + 20-byte CScriptID`
+        // (the hash is serialized raw, without a length prefix) and the value is the
+        // full redeem script (`compactsize(len) + script_bytes`).
+        let mut scripts = Vec::new();
+        if dump.has_keys_for_keyname("cscript") {
+            let records = dump
+                .records_for_keyname("cscript")
+                .map_err(|e| watchonly_parse_error("cscript", e))?;
+            for (_key, value) in records {
+                let script_bytes = parse_length_prefixed(value.as_ref())
+                    .map_err(|e| watchonly_parse_error("cscript redeem script", e))?;
+                match Redeem::parse(&Code(script_bytes)) {
+                    Ok(script) => scripts.push(script),
+                    Err(e) => tracing::warn!(
+                        "Skipping unparseable `zcashd` imported redeem script: {e:?}"
+                    ),
+                }
+            }
+        }
+
+        Ok((pubkeys, scripts))
+    }
+
     async fn migrate_zcashd_wallet(
         db: Database,
         keystore: KeyStore,
         chain: Option<Chain>,
         wallet: ZcashdWallet,
+        dump: ZcashdDump,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
     ) -> Result<(), MigrateError> {
         let mut db_data = db.handle().await?;
         let network_params = *db_data.params();
         Self::check_network(wallet.network(), network_params.network_type())?;
+
+        // Extract scripts imported via `importaddress`/`importpubkey` that `zewif-zcashd` does
+        // not surface through `ZcashdWallet`. `watchs` records store watched scriptPubKeys
+        // (from `importaddress <address>`, the P2PK/P2PKH scripts added by `importpubkey`, and
+        // the P2SH scriptPubKey side-effect of `importaddress <redeemScript> "" true`);
+        // `cscript` records store the redeem scripts themselves keyed by CScriptID.
+        let (watchonly_pubkeys, watchonly_scripts) = Self::parse_zcashd_watchonly(&dump)?;
+        let has_watchonly_imports = !watchonly_pubkeys.is_empty() || !watchonly_scripts.is_empty();
 
         let existing_zcash_sourced_accounts = db_data.get_account_ids()?.into_iter().try_fold(
             HashSet::new(),
@@ -377,8 +451,9 @@ impl MigrateZcashdWalletCmd {
 
         let mnemonic_seed_fp = mnemonic_seed_data.as_ref().map(|(_, fp)| *fp);
         let legacy_transparent_account_uuid = if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
-            // If there are any legacy transparent keys, create the legacy account.
-            if !wallet.keys().is_empty() {
+            // Create the legacy account if there are any legacy transparent keys or any
+            // imported watch-only transparent pubkeys / redeem scripts to store.
+            if !wallet.keys().is_empty() || has_watchonly_imports {
                 let (account, _) = db_data.import_account_hd(
                     &format!(
                         "zcashd post-v4.7.0 legacy transparent account {}",
@@ -424,7 +499,7 @@ impl MigrateZcashdWalletCmd {
                     // account, so we don't need to do anything.
                     Some(uuid)
                 }
-                (None, Some((seed, _))) if !wallet.keys().is_empty() => {
+                (None, Some((seed, _))) if !wallet.keys().is_empty() || has_watchonly_imports => {
                     // In this case, we have the legacy seed, but no mnemonic seed was ever derived
                     // from it, so this is a pre-v4.7.0 wallet. We construct the mnemonic in the same
                     // fashion as zcashd, by using the legacy seed as entropy in the generation of the
@@ -615,6 +690,49 @@ impl MigrateZcashdWalletCmd {
                 .map(|key| *key.pubkey()),
         )?;
 
+        // Import transparent addresses that were added to the `zcashd` wallet via
+        // `importaddress` / `importpubkey` (i.e. watch-only imports). These are stored as
+        // `watchs` and `cscript` records in `wallet.dat`, and `zewif-zcashd` does not
+        // currently surface them through its parsed `ZcashdWallet` type.
+        if has_watchonly_imports {
+            let target_account =
+                legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?;
+
+            info!(
+                "Importing {} watch-only transparent pubkey{}",
+                watchonly_pubkeys.len(),
+                if watchonly_pubkeys.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+            );
+            for pubkey in watchonly_pubkeys {
+                db_data.import_standalone_transparent_pubkey(target_account, pubkey)?;
+            }
+
+            info!(
+                "Importing {} watch-only transparent redeem script{}",
+                watchonly_scripts.len(),
+                if watchonly_scripts.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+            );
+            for script in watchonly_scripts {
+                // `import_standalone_transparent_script` currently only accepts multisig
+                // redeem scripts. Log and skip anything else so that a single unsupported
+                // script does not abort the migration.
+                if let Err(e) = db_data.import_standalone_transparent_script(target_account, script)
+                {
+                    tracing::warn!(
+                        "Skipping unsupported `zcashd` imported P2SH redeem script: {e}"
+                    );
+                }
+            }
+        }
+
         // Since we've retrieved the raw transaction data anyway, preemptively store it for faster
         // access to balance & to set priorities in the scan queue.
         if buffer_wallet_transactions {
@@ -700,6 +818,46 @@ impl MigrateZcashdWalletCmd {
 
         Ok(())
     }
+}
+
+/// Reads a Bitcoin `CompactSize` length prefix followed by that many bytes.
+///
+/// Used to peel the `CScript` length prefix off `watchs` record keys and
+/// `cscript` record values.
+fn parse_length_prefixed(bytes: &[u8]) -> Result<Vec<u8>, anyhow::Error> {
+    let mut parser = Parser::new(&bytes);
+    let data = zewif::Data::parse(&mut parser)?;
+    parser.check_finished()?;
+    Ok(data.to_vec())
+}
+
+/// Returns the pubkey embedded in a `scriptPubKey` of the form
+/// `<push33/65> <pubkey> OP_CHECKSIG`, if the script parses as one.
+///
+/// Returns `None` for any other script shape (P2PKH, P2SH, multisig, etc.).
+fn extract_p2pk_pubkey(script: &[u8]) -> Option<PublicKey> {
+    const OP_CHECKSIG: u8 = 0xac;
+    const PUSH_33: u8 = 0x21;
+    const PUSH_65: u8 = 0x41;
+
+    let pubkey_len: usize = match *script.first()? {
+        PUSH_33 => 33,
+        PUSH_65 => 65,
+        _ => return None,
+    };
+    if script.len() != 2 + pubkey_len || *script.last()? != OP_CHECKSIG {
+        return None;
+    }
+    PublicKey::from_slice(&script[1..1 + pubkey_len]).ok()
+}
+
+fn watchonly_parse_error(context: &'static str, err: anyhow::Error) -> MigrateError {
+    ErrorKind::Generic
+        .context(fl!(
+            "err-migrate-wallet-data-parse",
+            err = format!("{context}: {err}")
+        ))
+        .into()
 }
 
 impl Runnable for MigrateZcashdWalletCmd {
@@ -886,5 +1044,70 @@ impl From<PathParseError> for MigrateError {
 impl From<secp256k1::Error> for MigrateError {
     fn from(value: secp256k1::Error) -> Self {
         MigrateError::KeyError(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_p2pk_pubkey, parse_length_prefixed};
+
+    // Compressed P2PK script: OP_PUSHBYTES_33 <33-byte compressed pubkey> OP_CHECKSIG.
+    // Pubkey from the `z_importaddress` test vectors.
+    const COMPRESSED_P2PK: &[u8] = &[
+        0x21, 0x03, 0xb0, 0xda, 0x74, 0x97, 0x30, 0xdc, 0x9b, 0x4b, 0x1f, 0x4a, 0x14, 0xd6, 0x90,
+        0x28, 0x77, 0xa9, 0x25, 0x41, 0xf5, 0x36, 0x87, 0x78, 0x85, 0x3d, 0x9c, 0x4a, 0x0c, 0xb7,
+        0x80, 0x2d, 0xcf, 0xb2, 0xac,
+    ];
+
+    #[test]
+    fn extract_p2pk_pubkey_accepts_compressed() {
+        let pubkey = extract_p2pk_pubkey(COMPRESSED_P2PK).expect("should parse compressed P2PK");
+        assert_eq!(&pubkey.serialize()[..], &COMPRESSED_P2PK[1..34]);
+    }
+
+    #[test]
+    fn extract_p2pk_pubkey_rejects_p2pkh() {
+        // P2PKH: OP_DUP OP_HASH160 OP_PUSHBYTES_20 <hash> OP_EQUALVERIFY OP_CHECKSIG
+        let p2pkh = hex::decode("76a91411695b6cd891484c2d49ec5aa738ec2b2f89777788ac").unwrap();
+        assert!(extract_p2pk_pubkey(&p2pkh).is_none());
+    }
+
+    #[test]
+    fn extract_p2pk_pubkey_rejects_p2sh() {
+        // P2SH: OP_HASH160 OP_PUSHBYTES_20 <hash> OP_EQUAL
+        let p2sh = hex::decode("a91400112233445566778899aabbccddeeff0011223387").unwrap();
+        assert!(extract_p2pk_pubkey(&p2sh).is_none());
+    }
+
+    #[test]
+    fn extract_p2pk_pubkey_rejects_wrong_length() {
+        // Correct leading push opcode but the wrong total length.
+        let mut bad = COMPRESSED_P2PK.to_vec();
+        bad.pop();
+        assert!(extract_p2pk_pubkey(&bad).is_none());
+    }
+
+    #[test]
+    fn extract_p2pk_pubkey_rejects_missing_checksig() {
+        let mut bad = COMPRESSED_P2PK.to_vec();
+        let last = bad.len() - 1;
+        bad[last] = 0x00;
+        assert!(extract_p2pk_pubkey(&bad).is_none());
+    }
+
+    #[test]
+    fn parse_length_prefixed_roundtrips() {
+        // `0x03` is a CompactSize(3) prefix for `[0xaa, 0xbb, 0xcc]`.
+        let encoded = [0x03, 0xaa, 0xbb, 0xcc];
+        assert_eq!(
+            parse_length_prefixed(&encoded).unwrap(),
+            vec![0xaa, 0xbb, 0xcc]
+        );
+    }
+
+    #[test]
+    fn parse_length_prefixed_rejects_trailing_data() {
+        let encoded = [0x01, 0xaa, 0xbb];
+        assert!(parse_length_prefixed(&encoded).is_err());
     }
 }
