@@ -9,6 +9,7 @@ be considered breaking changes.
 ## [0.1.0-alpha.4] - PLANNED
 
 ### Added
+
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`
@@ -18,6 +19,7 @@ be considered breaking changes.
   - `z_shieldcoinbase`
 
 ### Changed
+
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
   and `addresses` for transparent outputs.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
@@ -27,6 +29,7 @@ be considered breaking changes.
   during migration.
 
 ### Fixed
+
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
@@ -47,24 +50,33 @@ be considered breaking changes.
   The keystore's standalone-key decryption is now invoked only for addresses
   that were imported standalone; HD-derived addresses are signed for using
   the account's unified spending key.
+- `zallet migrate-zcashd-wallet` now migrates transparent addresses that were
+  added to the `zcashd` wallet via `importpubkey` or `importaddress <redeemScript>`.
+- `zallet migrate-zcashd-wallet` now migrates view-only Sapling keys that were
+  added to the `zcashd` wallet via `z_importviewingkey`. Each imported viewing
+  key becomes its own view-only account.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 
 ### Changed
+
 - Finished implementing the following stubbed-out JSON-RPC methods:
   - `z_listaccounts`
 
 ### Fixed
+
 - `zallet rpc` can communicate with Zallet again, by using a username and
   password from `zallet.toml` if any are present.
 
 ## [0.1.0-alpha.2] - 2025-10-31
 
 ### Added
+
 - JSON-RPC authorization mechanisms, matching zcashd:
   - Multi-user (supporting both bare and hashed passwords in `zallet.toml`).
 
 ### Fixed
+
 - Several balance calculation bugs have been fixed.
 - Bugs related to detection and selection of unspent outputs have been fixed.
 - JSON-RPC 1.x responses now use the expected HTTP error codes.
