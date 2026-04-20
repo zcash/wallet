@@ -33,6 +33,11 @@ be considered breaking changes.
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
   not defined.
+- `zallet migrate-zcashd-wallet` now migrates transparent addresses that were
+  added to the `zcashd` wallet via `importpubkey` or
+  `importaddress <redeemScript> "" true`. Address-only watch-only entries added
+  via `importaddress <t-address>` remain unmigrated, as the Zallet wallet
+  schema does not yet support hash-only standalone transparent addresses.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 
