@@ -8559,7 +8559,7 @@ dependencies = [
 [[package]]
 name = "zewif-zcashd"
 version = "0.1.0"
-source = "git+https://github.com/zcash/zewif-zcashd.git?rev=9c72d1805c269f88ea5caa4eb33c6d38013b9776#9c72d1805c269f88ea5caa4eb33c6d38013b9776"
+source = "git+https://github.com/nullcopy/zewif-zcashd.git?rev=94737a9c9100ba44415d8931790c2f3cf41b9758#94737a9c9100ba44415d8931790c2f3cf41b9758"
 dependencies = [
  "anyhow",
  "bitflags 2.10.0",
