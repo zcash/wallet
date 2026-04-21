@@ -27,7 +27,10 @@ use zcash_keys::keys::{
 };
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
 use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
-use zewif_zcashd::{BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet};
+use zcash_script::script::{Code, Redeem};
+use zewif_zcashd::{
+    BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet, zcashd_wallet::transparent::WatchScriptKind,
+};
 use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
@@ -114,12 +117,13 @@ impl MigrateZcashdWalletCmd {
         };
 
         if let Ok(db_dump_path) = db_dump_path {
-            let db_dump = BDBDump::from_file(db_dump_path.as_path(), wallet_path.as_path())
-                .map_err(|e| MigrateError::Zewif {
-                    error_type: ZewifError::BdbDump,
-                    wallet_path: wallet_path.to_path_buf(),
-                    error: e,
-                })?;
+            let db_dump =
+                BDBDump::from_file_with_path(db_dump_path.as_path(), wallet_path.as_path())
+                    .map_err(|e| MigrateError::Zewif {
+                        error_type: ZewifError::BdbDump,
+                        wallet_path: wallet_path.to_path_buf(),
+                        error: e,
+                    })?;
 
             let zcashd_dump =
                 ZcashdDump::from_bdb_dump(&db_dump, self.allow_warnings).map_err(|e| {
@@ -216,6 +220,58 @@ impl MigrateZcashdWalletCmd {
             .transpose()
     }
 
+    /// Collects the transparent material imported via `zcashd`'s `importaddress` /
+    /// `importpubkey` RPCs into shapes that Zallet's wallet schema can store.
+    ///
+    /// * P2PK `watchs` entries (added by `importpubkey`) yield full pubkeys, which
+    ///   Zallet imports as standalone transparent pubkeys.
+    /// * P2SH `watchs` entries whose `ScriptID` is also present in `cscripts()`
+    ///   (added by `importaddress <redeemScript> "" true`) yield redeem scripts that
+    ///   `zcash_script` can parse as `Redeem`.
+    /// * P2PKH-only and P2SH-without-matching-cscript entries are watch-only by hash
+    ///   and cannot currently be represented in the Zallet wallet schema; they are
+    ///   skipped with a warning.
+    fn collect_watchonly_imports(wallet: &ZcashdWallet) -> (Vec<PublicKey>, Vec<Redeem>) {
+        let mut pubkeys = Vec::new();
+        let mut scripts = Vec::new();
+        let cscripts = wallet.cscripts();
+
+        for watch_script in wallet.watch_scripts() {
+            match watch_script.kind() {
+                WatchScriptKind::P2PK(pubkey) => match PublicKey::from_slice(pubkey.as_slice()) {
+                    Ok(pk) => pubkeys.push(pk),
+                    Err(e) => {
+                        tracing::warn!("Skipping `zcashd` watched P2PK with invalid pubkey: {e}")
+                    }
+                },
+                WatchScriptKind::P2SH(script_id) => match cscripts.get(script_id) {
+                    Some(redeem_script) => {
+                        match Redeem::parse(&Code(redeem_script.as_ref().to_vec())) {
+                            Ok(script) => scripts.push(script),
+                            Err(e) => tracing::warn!(
+                                "Skipping `zcashd` imported redeem script that `zcash_script` \
+                                 could not parse: {e:?}"
+                            ),
+                        }
+                    }
+                    None => tracing::warn!(
+                        "Skipping watch-only P2SH address without a matching `cscript` \
+                         redeem script; hash-only imports are not yet supported"
+                    ),
+                },
+                WatchScriptKind::P2PKH(_) => tracing::warn!(
+                    "Skipping watch-only P2PKH address imported by hash; hash-only \
+                     imports are not yet supported"
+                ),
+                WatchScriptKind::Other => {
+                    tracing::warn!("Skipping non-standard watch-only `zcashd` script")
+                }
+            }
+        }
+
+        (pubkeys, scripts)
+    }
+
     async fn migrate_zcashd_wallet(
         db: Database,
         keystore: KeyStore,
@@ -227,6 +283,12 @@ impl MigrateZcashdWalletCmd {
         let mut db_data = db.handle().await?;
         let network_params = *db_data.params();
         Self::check_network(wallet.network(), network_params.network_type())?;
+
+        // Classify transparent addresses imported via `importaddress` / `importpubkey`
+        // (surfaced by `zewif-zcashd` as `watch_scripts()` + `cscripts()`) into
+        // importable pubkeys and redeem scripts.
+        let (watchonly_pubkeys, watchonly_scripts) = Self::collect_watchonly_imports(&wallet);
+        let has_watchonly_imports = !watchonly_pubkeys.is_empty() || !watchonly_scripts.is_empty();
 
         let existing_zcash_sourced_accounts = db_data.get_account_ids()?.into_iter().try_fold(
             HashSet::new(),
@@ -377,8 +439,9 @@ impl MigrateZcashdWalletCmd {
 
         let mnemonic_seed_fp = mnemonic_seed_data.as_ref().map(|(_, fp)| *fp);
         let legacy_transparent_account_uuid = if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
-            // If there are any legacy transparent keys, create the legacy account.
-            if !wallet.keys().is_empty() {
+            // Create the legacy account if there are any legacy transparent keys or any
+            // imported watch-only transparent pubkeys / redeem scripts to store.
+            if !wallet.keys().is_empty() || has_watchonly_imports {
                 let (account, _) = db_data.import_account_hd(
                     &format!(
                         "zcashd post-v4.7.0 legacy transparent account {}",
@@ -424,7 +487,7 @@ impl MigrateZcashdWalletCmd {
                     // account, so we don't need to do anything.
                     Some(uuid)
                 }
-                (None, Some((seed, _))) if !wallet.keys().is_empty() => {
+                (None, Some((seed, _))) if !wallet.keys().is_empty() || has_watchonly_imports => {
                     // In this case, we have the legacy seed, but no mnemonic seed was ever derived
                     // from it, so this is a pre-v4.7.0 wallet. We construct the mnemonic in the same
                     // fashion as zcashd, by using the legacy seed as entropy in the generation of the
@@ -614,6 +677,49 @@ impl MigrateZcashdWalletCmd {
                 .into_iter()
                 .map(|key| *key.pubkey()),
         )?;
+
+        // Import transparent addresses that were added to the `zcashd` wallet via
+        // `importaddress` / `importpubkey` (i.e. watch-only imports). These are stored as
+        // `watchs` and `cscript` records in `wallet.dat`, and `zewif-zcashd` does not
+        // currently surface them through its parsed `ZcashdWallet` type.
+        if has_watchonly_imports {
+            let target_account =
+                legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?;
+
+            info!(
+                "Importing {} watch-only transparent pubkey{}",
+                watchonly_pubkeys.len(),
+                if watchonly_pubkeys.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+            );
+            for pubkey in watchonly_pubkeys {
+                db_data.import_standalone_transparent_pubkey(target_account, pubkey)?;
+            }
+
+            info!(
+                "Importing {} watch-only transparent redeem script{}",
+                watchonly_scripts.len(),
+                if watchonly_scripts.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+            );
+            for script in watchonly_scripts {
+                // `import_standalone_transparent_script` currently only accepts multisig
+                // redeem scripts. Log and skip anything else so that a single unsupported
+                // script does not abort the migration.
+                if let Err(e) = db_data.import_standalone_transparent_script(target_account, script)
+                {
+                    tracing::warn!(
+                        "Skipping unsupported `zcashd` imported P2SH redeem script: {e}"
+                    );
+                }
+            }
+        }
 
         // Since we've retrieved the raw transaction data anyway, preemptively store it for faster
         // access to balance & to set priorities in the scan queue.
