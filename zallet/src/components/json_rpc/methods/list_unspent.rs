@@ -192,7 +192,12 @@ pub(crate) fn call(
             .iter()
             .try_fold(vec![], |mut acc, (addr, _)| {
                 let mut outputs = wallet
-                    .get_spendable_transparent_outputs(addr, target_height, confirmations_policy)
+                    .get_spendable_transparent_outputs(
+                        addr,
+                        target_height,
+                        confirmations_policy,
+                        zcash_client_backend::data_api::TransparentOutputFilter::All,
+                    )
                     .map_err(|e| {
                         RpcError::owned(
                             LegacyCode::Database.into(),

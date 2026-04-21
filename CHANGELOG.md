@@ -22,13 +22,20 @@ be considered breaking changes.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
   `zcashd` didn't include in its response.
 - Significant performance improvements to `zallet migrate-zcashd-wallet`.
-- `zallet migrate-zcashd-wallet` now accepts `--no-scan` to skip chain scanning
-  during migration. Keys, accounts, and transaction data are still imported, but
-  block heights and tree state are not resolved from the chain. Cannot be
-  combined with `--buffer-wallet-transactions`. Useful when chain data is not
-  available.
+- `zallet migrate-zcashd-wallet` now accepts `--no-scan` for advanced users who
+  cannot reach a chain data source. Keys, accounts, and transaction data are
+  still imported; block heights and tree state are not resolved from the chain,
+  and address exposure metadata is seeded from each wallet transaction's expiry
+  height. A later scan will refine those estimates via the existing `MIN`-merge
+  semantics once a chain connection is available.
+- `zallet migrate-zcashd-wallet` now soft-degrades if the default (chain-scanning)
+  flow cannot connect to a chain data source: it logs a warning with a hint about
+  `--no-scan` and continues with keys, accounts, and transaction data only.
 
 ### Fixed
+- `zallet migrate-zcashd-wallet --no-scan` now marks every transparent address
+  observed in a wallet transaction as exposed, so that `listaddresses` returns
+  the full HD-derived set after migration even when the chain is not reachable.
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is

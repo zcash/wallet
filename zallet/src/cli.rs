@@ -196,10 +196,15 @@ pub(crate) struct MigrateZcashdWalletCmd {
     #[arg(long)]
     pub(crate) allow_warnings: bool,
 
-    /// Skip chain scanning during migration. Keys, accounts, and transaction data are
-    /// still imported, but block heights and tree state are not resolved from the chain.
-    /// Useful when the corresponding chain data is not available.
-    #[arg(long, conflicts_with = "buffer_wallet_transactions")]
+    /// Skip chain scanning during migration, and instead seed address exposure metadata
+    /// from the wallet's transaction data alone.
+    ///
+    /// Intended for advanced users who cannot reach a chain data source (e.g. no local
+    /// zebrad/zcashd available at migration time). Keys, accounts, and transaction data
+    /// are still imported; block heights and tree state are not resolved from the chain,
+    /// and exposures are estimated from transaction expiry heights. A later scan will
+    /// refine these estimates once a chain connection is available.
+    #[arg(long)]
     pub(crate) no_scan: bool,
 
     /// Temporary flag ensuring any alpha users are aware the migration is not stable.
