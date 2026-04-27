@@ -10,7 +10,7 @@ use std::time::Duration;
 use documented::{Documented, DocumentedFields};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use zcash_client_backend::data_api::wallet::ConfirmationsPolicy;
+use zcash_client_backend::data_api::wallet::{ConfirmationsPolicy, ConfirmationsPolicyError};
 use zcash_protocol::consensus::NetworkType;
 
 use crate::commands::{lock_datadir, resolve_datadir_path};
@@ -209,8 +209,7 @@ impl BuilderSection {
     ///
     /// This will return an error if the number of confirmations required for spending untrusted
     /// TXOs is less than the number of confirmations required for spending trusted TXOs
-    #[allow(clippy::result_unit_err)]
-    pub fn confirmations_policy(&self) -> Result<ConfirmationsPolicy, ()> {
+    pub fn confirmations_policy(&self) -> Result<ConfirmationsPolicy, ConfirmationsPolicyError> {
         let allow_zero_conf_shielding = self.untrusted_confirmations() == 0;
         ConfirmationsPolicy::new(
             NonZeroU32::new(self.trusted_confirmations()).unwrap_or(NonZeroU32::MIN),

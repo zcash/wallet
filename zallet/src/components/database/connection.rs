@@ -262,6 +262,17 @@ impl WalletRead for DbConnection {
         self.with(|db_data| db_data.get_account_for_ufvk(ufvk))
     }
 
+    fn find_account_for_address<P: zcash_protocol::consensus::Parameters>(
+        &self,
+        params: &P,
+        address: &zcash_keys::address::Address,
+    ) -> Result<
+        Option<Self::AccountId>,
+        zcash_client_backend::data_api::error::FindAccountForAddressError<Self::Error>,
+    > {
+        self.with(|db_data| db_data.find_account_for_address(params, address))
+    }
+
     fn list_addresses(&self, account: Self::AccountId) -> Result<Vec<AddressInfo>, Self::Error> {
         self.with(|db_data| db_data.list_addresses(account))
     }
@@ -498,9 +509,15 @@ impl InputSource for DbConnection {
         address: &TransparentAddress,
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
+        output_filter: zcash_client_backend::data_api::TransparentOutputFilter,
     ) -> Result<Vec<WalletUtxo>, Self::Error> {
         self.with(|db_data| {
-            db_data.get_spendable_transparent_outputs(address, target_height, confirmations_policy)
+            db_data.get_spendable_transparent_outputs(
+                address,
+                target_height,
+                confirmations_policy,
+                output_filter,
+            )
         })
     }
 
@@ -643,6 +660,10 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| db_data.truncate_to_height(max_height))
     }
 
+    fn rewind_to_height(&mut self, max_height: BlockHeight) -> Result<BlockHeight, Self::Error> {
+        self.with_mut(|mut db_data| db_data.rewind_to_height(max_height))
+    }
+
     fn truncate_to_chain_state(&mut self, chain_state: ChainState) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.truncate_to_chain_state(chain_state))
     }
@@ -677,6 +698,13 @@ impl WalletWrite for DbConnection {
         as_of_height: BlockHeight,
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.notify_address_checked(request, as_of_height))
+    }
+
+    fn mark_transparent_addresses_exposed(
+        &mut self,
+        exposures: &[(TransparentAddress, BlockHeight)],
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.mark_transparent_addresses_exposed(exposures))
     }
 }
 

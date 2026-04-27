@@ -364,6 +364,13 @@ user-id = 169181
 user-login = "nuttycom"
 user-name = "Kris Nuttycombe"
 
+[[publisher.zcash_encoding]]
+version = "0.3.0"
+when = "2025-02-21"
+user-id = 169181
+user-login = "nuttycom"
+user-name = "Kris Nuttycombe"
+
 [[publisher.zcash_keys]]
 version = "0.4.1"
 when = "2025-05-09"
