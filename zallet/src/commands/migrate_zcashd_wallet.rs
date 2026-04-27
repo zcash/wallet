@@ -11,6 +11,7 @@ use bip0039::{English, Mnemonic};
 use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
+use transparent::address::TransparentAddress;
 use zaino_fetch::jsonrpsee::response::block_header::GetBlockHeader;
 use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
 use zcash_client_backend::{
@@ -26,7 +27,7 @@ use zcash_keys::keys::{
     zcashd::{PathParseError, ZcashdHdDerivation},
 };
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
-use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
+use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, NetworkUpgrade, Parameters};
 use zewif_zcashd::{BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet};
 use zip32::{AccountId, fingerprint::SeedFingerprint};
 
@@ -81,6 +82,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             wallet,
             self.buffer_wallet_transactions,
             self.allow_multiple_wallet_imports,
+            self.no_scan,
         )
         .await?;
 
@@ -223,6 +225,7 @@ impl MigrateZcashdWalletCmd {
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
+        no_scan: bool,
     ) -> Result<(), MigrateError> {
         let mut db_data = db.handle().await?;
         let network_params = *db_data.params();
@@ -282,11 +285,14 @@ impl MigrateZcashdWalletCmd {
             (None, None)
         };
         let sapling_activation = network_params
-            .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)
+            .activation_height(NetworkUpgrade::Sapling)
             .expect("Sapling activation height is defined.");
 
-        // Collect an index from txid to block height for all transactions known to the wallet that
-        // appear in the main chain.
+        // Collect an index from block hash to block height for all transactions known to the
+        // wallet that appear in the main chain. This only runs when we have a chain subscriber;
+        // without one, all transactions are stored as unmined and a later scan will assign
+        // accurate heights. Address exposure is handled separately via
+        // `mark_transparent_addresses_exposed` below.
         info!(
             "Wallet contains {} transactions",
             wallet.transactions().len(),
@@ -351,10 +357,13 @@ impl MigrateZcashdWalletCmd {
             )
             .await?
         } else {
-            // In no-scan mode, approximate the wallet birthday from transaction expiry
-            // heights. Expiry heights are typically creation_height + 40 (the default
-            // TX_EXPIRY_DELTA in zcashd). Subtracting 1000 gives a conservative lower
-            // bound on the earliest mined height.
+            // In no-scan mode, no chain is available, and we cannot determine actual transaction
+            // mined hieghts. Instead, we estimate the wallet's birthday, and then conservatively
+            // mark each address with a mined transaction as exposed at that birthday height.
+            //
+            // We approximate the wallet birthday from transaction expiry heights. Expiry heights
+            // are typically creation_height + 40 (the default TX_EXPIRY_DELTA in zcashd).
+            // Subtracting 1000 gives a conservative lower bound on the earliest mined height.
             let birthday_height = wallet
                 .transactions()
                 .values()
@@ -614,6 +623,58 @@ impl MigrateZcashdWalletCmd {
                 .into_iter()
                 .map(|key| *key.pubkey()),
         )?;
+
+        // In no-scan mode, we need to collect all observed transactions and manually mark them as
+        // exposed, since the chain will not be scanned to detect their exposure heights.
+        if no_scan {
+            let mut observed: HashSet<TransparentAddress> = HashSet::new();
+            let mut buf = vec![];
+            for wallet_tx in wallet.transactions().values() {
+                buf.clear();
+                wallet_tx.transaction().write(&mut buf)?;
+                // For v5+ txs the embedded branch id overrides this value; for earlier
+                // versions the branch id is only stored as metadata and does not affect
+                // parsing. Any value works.
+                let tx = Transaction::read(buf.as_slice(), BranchId::Sprout)?;
+                if let Some(bundle) = tx.transparent_bundle() {
+                    for vout in &bundle.vout {
+                        if let Some(addr) = vout
+                            .script_kind()
+                            .as_ref()
+                            .and_then(TransparentAddress::from_script_kind)
+                        {
+                            observed.insert(addr);
+                        }
+                    }
+                }
+            }
+
+            // The upstream API rolls back the whole batch if any address is not tracked,
+            // so filter to just the wallet's known receivers (external counterparties drop
+            // out here).
+            let mut known: HashSet<TransparentAddress> = HashSet::new();
+            for account_id in db_data.get_account_ids()? {
+                known.extend(
+                    db_data
+                        .get_transparent_receivers(account_id, true, true)?
+                        .into_keys(),
+                );
+            }
+
+            let birthday_height = wallet_birthday.height();
+            let to_mark: Vec<(TransparentAddress, BlockHeight)> = observed
+                .intersection(&known)
+                .map(|addr| (*addr, birthday_height))
+                .collect();
+            if !to_mark.is_empty() {
+                db_data.mark_transparent_addresses_exposed(&to_mark)?;
+                info!(
+                    "Marked {} transparent addresses as exposed at birthday height {}",
+                    to_mark.len(),
+                    birthday_height,
+                );
+            }
+        }
 
         // Since we've retrieved the raw transaction data anyway, preemptively store it for faster
         // access to balance & to set priorities in the scan queue.
