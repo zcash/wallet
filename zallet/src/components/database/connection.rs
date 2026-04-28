@@ -15,6 +15,7 @@ use zcash_client_backend::{
         SAPLING_SHARD_HEIGHT, TargetValue, TransparentKeyOrigin, TransparentOutputFilter,
         WalletCommitmentTrees, WalletRead, WalletUtxo, WalletWrite, Zip32Derivation,
         chain::ChainState,
+        error::FindAccountForAddressError,
         wallet::{ConfirmationsPolicy, TargetHeight},
     },
     keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
@@ -434,6 +435,14 @@ impl WalletRead for DbConnection {
     ) -> Result<Vec<ReceivedTransactionOutput>, Self::Error> {
         self.with(|db_data| db_data.get_received_outputs(txid, target_height, confirmations_policy))
     }
+
+    fn find_account_for_address<P: zcash_protocol::consensus::Parameters>(
+        &self,
+        params: &P,
+        address: &zcash_keys::address::Address,
+    ) -> Result<Option<Self::AccountId>, FindAccountForAddressError<Self::Error>> {
+        self.with(|db_data| db_data.find_account_for_address(params, address))
+    }
 }
 
 impl InputSource for DbConnection {
@@ -651,6 +660,10 @@ impl WalletWrite for DbConnection {
 
     fn truncate_to_chain_state(&mut self, chain_state: ChainState) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.truncate_to_chain_state(chain_state))
+    }
+
+    fn rewind_to_height(&mut self, max_height: BlockHeight) -> Result<BlockHeight, Self::Error> {
+        self.with_mut(|mut db_data| db_data.rewind_to_height(max_height))
     }
 
     fn reserve_next_n_ephemeral_addresses(
