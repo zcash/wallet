@@ -15,6 +15,13 @@ user-id = 3788
 user-login = "emilio"
 user-name = "Emilio Cobos Álvarez"
 
+[[publisher.equihash]]
+version = "0.2.2"
+when = "2025-03-05"
+user-id = 6289
+user-login = "str4d"
+user-name = "Jack Grigg"
+
 [[publisher.halo2_gadgets]]
 version = "0.3.1"
 when = "2024-12-16"
@@ -64,13 +71,6 @@ user-id = 169181
 user-login = "nuttycom"
 user-name = "Kris Nuttycombe"
 
-[[publisher.orchard]]
-version = "0.12.0"
-when = "2025-12-05"
-user-id = 6289
-user-login = "str4d"
-user-name = "Jack Grigg"
-
 [[publisher.sapling-crypto]]
 version = "0.3.0"
 when = "2024-10-02"
@@ -84,13 +84,6 @@ when = "2025-02-21"
 user-id = 169181
 user-login = "nuttycom"
 user-name = "Kris Nuttycombe"
-
-[[publisher.sapling-crypto]]
-version = "0.6.0"
-when = "2025-12-05"
-user-id = 6289
-user-login = "str4d"
-user-name = "Jack Grigg"
 
 [[publisher.schemerz-rusqlite]]
 version = "0.370.0"
@@ -360,6 +353,13 @@ user-name = "Kris Nuttycombe"
 [[publisher.zcash_address]]
 version = "0.9.0"
 when = "2025-07-31"
+user-id = 169181
+user-login = "nuttycom"
+user-name = "Kris Nuttycombe"
+
+[[publisher.zcash_encoding]]
+version = "0.3.0"
+when = "2025-02-21"
 user-id = 169181
 user-login = "nuttycom"
 user-name = "Kris Nuttycombe"
@@ -1171,7 +1171,7 @@ aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_p
 who = "Lukasz Anforowicz <lukasza@chromium.org>"
 criteria = "safe-to-deploy"
 delta = "1.14.0 -> 1.15.0"
-notes = 'The delta in `lib.rs` only tweaks doc comments and `#[cfg(feature = "std")]`.'
+notes = "The delta in `lib.rs` only tweaks doc comments and `#[cfg(feature = \"std\")]`."
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
 [[audits.google.audits.equivalent]]
@@ -1463,8 +1463,8 @@ who = "Lukasz Anforowicz <lukasza@chromium.org>"
 criteria = "safe-to-deploy"
 version = "1.0.35"
 notes = """
-Grepped for "unsafe", "crypt", "cipher", "fs", "net" - there were no hits
-(except for benign "net" hit in tests and "fs" hit in README.md)
+Grepped for \"unsafe\", \"crypt\", \"cipher\", \"fs\", \"net\" - there were no hits
+(except for benign \"net\" hit in tests and \"fs\" hit in README.md)
 """
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
@@ -1582,7 +1582,7 @@ and there were no hits except for:
 * Using `unsafe` in a string:
 
     ```
-    src/constfn.rs:            "unsafe" => Qualifiers::Unsafe,
+    src/constfn.rs:            \"unsafe\" => Qualifiers::Unsafe,
     ```
 
 * Using `std::fs` in `build/build.rs` to write `${OUT_DIR}/version.expr`
@@ -1764,7 +1764,7 @@ aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_p
 who = "Lukasz Anforowicz <lukasza@chromium.org>"
 criteria = "safe-to-deploy"
 version = "1.0.197"
-notes = 'Grepped for "unsafe", "crypt", "cipher", "fs", "net" - there were no hits'
+notes = "Grepped for \"unsafe\", \"crypt\", \"cipher\", \"fs\", \"net\" - there were no hits"
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
 [[audits.google.audits.serde_derive]]
@@ -1783,7 +1783,7 @@ aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_p
 who = "Lukasz Anforowicz <lukasza@chromium.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.202 -> 1.0.203"
-notes = 'Grepped for "unsafe", "crypt", "cipher", "fs", "net" - there were no hits'
+notes = "Grepped for \"unsafe\", \"crypt\", \"cipher\", \"fs\", \"net\" - there were no hits"
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
 [[audits.google.audits.serde_derive]]
@@ -4023,7 +4023,7 @@ Uses `unsafe` blocks to interact with `windows-sys` crate.
 - The slice constructed from the `PWSTR` correctly goes out of scope before
   `guard` is dropped.
 - A code comment says that `path_ptr` is valid for `len` bytes, but `PCWSTR` is
-  a `*const u16` and `lstrlenW` returns its length "in characters" (which the
+  a `*const u16` and `lstrlenW` returns its length \"in characters\" (which the
   Windows documentation confirms means the number of `WCHAR` values). This is
   likely a typo; the code checks that `len * size_of::<u16>() <= isize::MAX`.
 """

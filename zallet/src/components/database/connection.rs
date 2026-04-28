@@ -697,6 +697,13 @@ impl WalletWrite for DbConnection {
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.notify_address_checked(request, as_of_height))
     }
+
+    fn mark_transparent_addresses_exposed(
+        &mut self,
+        exposures: &[(TransparentAddress, BlockHeight)],
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.mark_transparent_addresses_exposed(exposures))
+    }
 }
 
 impl WalletCommitmentTrees for DbConnection {
