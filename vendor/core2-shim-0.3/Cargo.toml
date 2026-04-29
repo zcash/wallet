@@ -1,0 +1,18 @@
+[package]
+name = "core2"
+version = "0.3.99"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Temporary local shim providing the core2 0.3.x API by re-exporting `corez`. See README.md for context and removal criteria."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+corez = { version = "0.1.1", default-features = false }
+
+[features]
+default = ["std"]
+std = ["alloc", "corez/std"]
+alloc = ["corez/alloc"]

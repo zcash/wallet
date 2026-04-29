@@ -2,6 +2,14 @@
 members = [
     "zallet",
 ]
+# `vendor/core2-shim-0.3` and `vendor/core2-shim-0.4` are referenced from the
+# `[patch.crates-io]` table below, but excluded from the workspace because
+# Cargo requires workspace member crate names to be unique and both shims must
+# be named `core2` to satisfy the resolver.
+exclude = [
+    "vendor/core2-shim-0.3",
+    "vendor/core2-shim-0.4",
+]
 resolver = "2"
 
 [workspace.package]
@@ -152,6 +160,16 @@ anyhow = "1.0"
 tonic = "0.14"
 
 [patch.crates-io]
+# TEMPORARY: All `core2` versions on crates.io were yanked by upstream on
+# 2026-04-14, breaking fresh dependency resolution because we still pull
+# `core2 ^0.3` (via `equihash 0.2.2`) and `core2 ^0.4` (via `zaino-state`)
+# transitively. Both entries below redirect those `core2` requests to local
+# shims that re-export `corez` (the Zcash ecosystem's clean-room replacement,
+# https://github.com/zcash/corez). See `vendor/core2-shim-0.3/README.md` for
+# context and removal criteria.
+core2 = { path = "vendor/core2-shim-0.3" }
+core2_v04 = { package = "core2", path = "vendor/core2-shim-0.4" }
+
 age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633bb70c91eef91142fd4" }
 
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "f84f80612813ba00a0a8a9a5f060bd217fa981cc" }

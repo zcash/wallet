@@ -1251,20 +1251,16 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "core2"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "239fa3ae9b63c2dc74bd3fa852d4792b8b305ae64eeede946265b6af62f1fff3"
+version = "0.3.99"
 dependencies = [
- "memchr",
+ "corez",
 ]
 
 [[package]]
 name = "core2"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b49ba7ef1ad6107f8824dbe97de947cbaac53c44e7f9756a1fba0d37c1eec505"
+version = "0.4.99"
 dependencies = [
- "memchr",
+ "corez",
 ]
 
 [[package]]
@@ -1868,7 +1864,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca4f333d4ccc9d23c06593733673026efa71a332e028b00f12cf427b9677dce9"
 dependencies = [
  "blake2b_simd",
- "core2 0.3.3",
+ "core2 0.3.99",
  "document-features",
 ]
 
@@ -3755,7 +3751,7 @@ dependencies = [
  "aes",
  "bitvec",
  "blake2b_simd",
- "core2 0.3.3",
+ "core2 0.3.99",
  "ff",
  "fpe",
  "getset",
@@ -3790,7 +3786,7 @@ dependencies = [
  "aes",
  "bitvec",
  "blake2b_simd",
- "core2 0.3.3",
+ "core2 0.3.99",
  "ff",
  "fpe",
  "getset",
@@ -5236,7 +5232,7 @@ dependencies = [
  "blake2b_simd",
  "blake2s_simd",
  "bls12_381",
- "core2 0.3.3",
+ "core2 0.3.99",
  "document-features",
  "ff",
  "fpe",
@@ -7481,7 +7477,7 @@ dependencies = [
  "bs58",
  "cargo-lock",
  "chrono",
- "core2 0.4.0",
+ "core2 0.4.99",
  "dashmap",
  "derive_more",
  "futures",
@@ -7618,7 +7614,7 @@ checksum = "d32b380113014b136aec579ea1c07fef747a818b9ac97d91daa0ec3b7a642bc0"
 dependencies = [
  "bech32 0.11.0",
  "bs58",
- "core2 0.3.3",
+ "core2 0.3.99",
  "f4jumble",
  "zcash_encoding 0.2.2",
  "zcash_protocol 0.4.3",
@@ -7632,7 +7628,7 @@ checksum = "7c984ae01367a4a3d20e9d34ae4e4cc0dca004b22d9a10a51eec43f43934612e"
 dependencies = [
  "bech32 0.11.0",
  "bs58",
- "core2 0.3.3",
+ "core2 0.3.99",
  "f4jumble",
  "zcash_encoding 0.3.0",
  "zcash_protocol 0.6.2",
@@ -7757,7 +7753,7 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3654116ae23ab67dd1f849b01f8821a8a156f884807ff665eac109bf28306c4d"
 dependencies = [
- "core2 0.3.3",
+ "core2 0.3.99",
  "nonempty 0.7.0",
 ]
 
@@ -7767,7 +7763,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bca38087e6524e5f51a5b0fb3fc18f36d7b84bf67b2056f494ca0c281590953d"
 dependencies = [
- "core2 0.3.3",
+ "core2 0.3.99",
  "nonempty 0.11.0",
 ]
 
@@ -7831,7 +7827,7 @@ dependencies = [
  "blake2b_simd",
  "bls12_381",
  "bs58",
- "core2 0.3.3",
+ "core2 0.3.99",
  "document-features",
  "group",
  "memuse",
@@ -7943,7 +7939,7 @@ dependencies = [
  "blake2b_simd",
  "block-buffer 0.11.0-rc.3",
  "bs58",
- "core2 0.3.3",
+ "core2 0.3.99",
  "crypto-common 0.2.0-rc.1",
  "document-features",
  "equihash 0.2.2",
@@ -8058,7 +8054,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82cb36b15b5a1be70b30c32ce40372dead6561df8a467e297f96b892873a63a2"
 dependencies = [
- "core2 0.3.3",
+ "core2 0.3.99",
  "document-features",
  "hex",
  "memuse",
@@ -8070,7 +8066,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12cc76dd1f77be473e5829dbd34890bcd36d08b1e8dde2da0aea355c812a8f28"
 dependencies = [
- "core2 0.3.3",
+ "core2 0.3.99",
  "document-features",
  "hex",
  "memuse",
@@ -8151,7 +8147,7 @@ dependencies = [
  "bip32 0.6.0-pre.1",
  "blake2b_simd",
  "bs58",
- "core2 0.3.3",
+ "core2 0.3.99",
  "document-features",
  "getset",
  "hex",
