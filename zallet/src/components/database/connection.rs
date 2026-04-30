@@ -12,9 +12,10 @@ use zcash_client_backend::{
     data_api::{
         AccountBirthday, AccountMeta, AddressInfo, Balance, DecryptedTransaction, InputSource,
         NoteFilter, ORCHARD_SHARD_HEIGHT, ReceivedNotes, ReceivedTransactionOutput,
-        SAPLING_SHARD_HEIGHT, TargetValue, TransparentKeyOrigin, WalletCommitmentTrees, WalletRead,
-        WalletUtxo, WalletWrite, Zip32Derivation,
+        SAPLING_SHARD_HEIGHT, TargetValue, TransparentKeyOrigin, TransparentOutputFilter,
+        WalletCommitmentTrees, WalletRead, WalletUtxo, WalletWrite, Zip32Derivation,
         chain::ChainState,
+        error::FindAccountForAddressError,
         wallet::{ConfirmationsPolicy, TargetHeight},
     },
     keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
@@ -434,6 +435,14 @@ impl WalletRead for DbConnection {
     ) -> Result<Vec<ReceivedTransactionOutput>, Self::Error> {
         self.with(|db_data| db_data.get_received_outputs(txid, target_height, confirmations_policy))
     }
+
+    fn find_account_for_address<P: zcash_protocol::consensus::Parameters>(
+        &self,
+        params: &P,
+        address: &zcash_keys::address::Address,
+    ) -> Result<Option<Self::AccountId>, FindAccountForAddressError<Self::Error>> {
+        self.with(|db_data| db_data.find_account_for_address(params, address))
+    }
 }
 
 impl InputSource for DbConnection {
@@ -498,9 +507,15 @@ impl InputSource for DbConnection {
         address: &TransparentAddress,
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
+        output_filter: TransparentOutputFilter,
     ) -> Result<Vec<WalletUtxo>, Self::Error> {
         self.with(|db_data| {
-            db_data.get_spendable_transparent_outputs(address, target_height, confirmations_policy)
+            db_data.get_spendable_transparent_outputs(
+                address,
+                target_height,
+                confirmations_policy,
+                output_filter,
+            )
         })
     }
 
@@ -647,6 +662,10 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| db_data.truncate_to_chain_state(chain_state))
     }
 
+    fn rewind_to_height(&mut self, max_height: BlockHeight) -> Result<BlockHeight, Self::Error> {
+        self.with_mut(|mut db_data| db_data.rewind_to_height(max_height))
+    }
+
     fn reserve_next_n_ephemeral_addresses(
         &mut self,
         account_id: Self::AccountId,
@@ -677,6 +696,13 @@ impl WalletWrite for DbConnection {
         as_of_height: BlockHeight,
     ) -> Result<(), Self::Error> {
         self.with_mut(|mut db_data| db_data.notify_address_checked(request, as_of_height))
+    }
+
+    fn mark_transparent_addresses_exposed(
+        &mut self,
+        exposures: &[(TransparentAddress, BlockHeight)],
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.mark_transparent_addresses_exposed(exposures))
     }
 }
 

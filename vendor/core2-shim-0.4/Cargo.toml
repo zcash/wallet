@@ -1,0 +1,22 @@
+[package]
+name = "core2"
+version = "0.4.99"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Temporary local shim providing the core2 0.4.x API by re-exporting `corez`. See README.md for context and removal criteria."
+# Required by `embed_licensing::collect()` (invoked from Zallet's build.rs in
+# release builds via `generate_debian_copyright`); the shim sources live in
+# this repo at `vendor/core2-shim-0.4/`.
+repository = "https://github.com/zcash/wallet"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+corez = { version = "0.1.1", default-features = false }
+
+[features]
+default = ["std"]
+std = ["alloc", "corez/std"]
+alloc = ["corez/alloc"]
