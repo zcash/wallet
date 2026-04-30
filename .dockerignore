@@ -17,4 +17,5 @@
 !.cargo
 !Cargo.toml
 !Cargo.lock
+!vendor
 !zallet
