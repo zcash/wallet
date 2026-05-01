@@ -23,16 +23,16 @@ be considered breaking changes.
   `zcashd` didn't include in its response.
 - Significant performance improvements to `zallet migrate-zcashd-wallet`.
 - `zallet migrate-zcashd-wallet` now accepts `--no-scan` to skip chain scanning
-  during migration. Keys, accounts, and transaction data are still imported, but
-  block heights and tree state are not resolved from the chain. Cannot be
-  combined with `--buffer-wallet-transactions`. Useful when chain data is not
-  available.
+  during migration.
 
 ### Fixed
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
   not defined.
+- `zallet migrate-zcashd-wallet` now migrates transparent addresses that were
+  added to the `zcashd` wallet via `importpubkey` or `importaddress
+  <redeemScript>`.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 
