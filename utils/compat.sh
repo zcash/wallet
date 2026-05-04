@@ -8,7 +8,7 @@ die() {
 	echo "$@" >&2
 	exit 1
 }
-### Bail and instruct user on missing package to install for their platform
+### Baild and instruct user on missing package to install for their platform
 die_pkg() {
 	local -r package=${1?}
 	local -r version=${2?}
