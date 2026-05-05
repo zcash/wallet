@@ -126,6 +126,13 @@ err-init-zallet-already-running =
 err-init-config-db-mismatch =
     The wallet database was created for network type {$db_network_type}, but the
     config is using network type {$config_network_type}.
+err-init-db-incompatible-alpha =
+    This wallet database was created by an incompatible alpha version of {-zallet}.
+    To use this {-zallet} release, start again with a fresh Zallet wallet or a
+    new data directory.
+err-init-db-invalid-zallet-version =
+    The wallet database recorded an invalid {-zallet} version '{$version}':
+    {$err}
 
 err-init-identity-not-found = Encryption identity file could not be located at {$path}
 err-init-identity-not-passphrase-encrypted = {$path} is not encrypted with a passphrase

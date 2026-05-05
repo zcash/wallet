@@ -3,6 +3,7 @@ use std::fmt;
 use abscissa_core::tracing::info;
 use rusqlite::{OptionalExtension, named_params};
 use schemerz_rusqlite::RusqliteMigration;
+use semver::Version;
 use tokio::fs;
 
 use zcash_client_sqlite::wallet::init::{WalletMigrationError, WalletMigrator};
@@ -26,6 +27,10 @@ mod ext;
 mod tests;
 
 pub(crate) type DbHandle = deadpool::managed::Object<connection::WalletManager>;
+
+// Old databases are accepted only if the last recorded Zallet version is at
+// least the oldest release whose wallet database this binary accepts.
+const MIN_COMPATIBLE_ZALLET_VERSION: &str = "0.1.0-alpha.3";
 
 /// Returns the full list of migrations defined in Zallet, to be applied alongside the
 /// migrations internal to `zcash_client_sqlite`.
@@ -66,30 +71,12 @@ impl Database {
         let handle = database.handle().await?;
 
         if db_exists {
-            // Verify that the database matches the configured network type before we make
-            // any changes (including migrations, some of which make use of the network
-            // params), to avoid leaving the database in an inconsistent state. We can
-            // assume the presence of this table, as it's added by the initial migrations.
-            handle.with_raw(|conn, _| {
-                let wallet_network_type = conn
-                    .query_row(
-                        "SELECT network_type FROM ext_zallet_db_wallet_metadata",
-                        [],
-                        |row| row.get::<_, crate::network::kind::Sql>("network_type"),
-                    )
-                    .map_err(|e| ErrorKind::Init.context(e))?;
-
-                if wallet_network_type.0 == config.consensus.network {
-                    Ok(())
-                } else {
-                    Err(ErrorKind::Init.context(fl!(
-                        "err-init-config-db-mismatch",
-                        db_network_type = crate::network::kind::type_to_str(&wallet_network_type.0),
-                        config_network_type =
-                            crate::network::kind::type_to_str(&config.consensus.network),
-                    )))
-                }
-            })?;
+            // Verify that the database matches the configured network type and was
+            // last opened by a compatible alpha before we make any changes (including
+            // migrations, some of which make use of the network params), to avoid
+            // leaving the database in an inconsistent state. We can assume the network
+            // metadata table is present, as it's added by the initial migrations.
+            handle.with_raw(|conn, _| verify_existing_database(conn, config))?;
 
             info!("Applying latest database migrations");
         } else {
@@ -180,4 +167,81 @@ impl Database {
             .await
             .map_err(|e| ErrorKind::Generic.context(e).into())
     }
+}
+
+fn verify_existing_database(
+    conn: &rusqlite::Connection,
+    config: &ZalletConfig,
+) -> Result<(), Error> {
+    verify_alpha_db_compatibility(conn)?;
+    verify_wallet_network_type(conn, config)
+}
+
+fn verify_wallet_network_type(
+    conn: &rusqlite::Connection,
+    config: &ZalletConfig,
+) -> Result<(), Error> {
+    let wallet_network_type = conn
+        .query_row(
+            "SELECT network_type FROM ext_zallet_db_wallet_metadata",
+            [],
+            |row| row.get::<_, crate::network::kind::Sql>("network_type"),
+        )
+        .map_err(|e| ErrorKind::Init.context(e))?;
+
+    if wallet_network_type.0 == config.consensus.network {
+        Ok(())
+    } else {
+        Err(ErrorKind::Init
+            .context(fl!(
+                "err-init-config-db-mismatch",
+                db_network_type = crate::network::kind::type_to_str(&wallet_network_type.0),
+                config_network_type = crate::network::kind::type_to_str(&config.consensus.network),
+            ))
+            .into())
+    }
+}
+
+fn verify_alpha_db_compatibility(conn: &rusqlite::Connection) -> Result<(), Error> {
+    let latest_version = latest_recorded_zallet_version(conn)?;
+    let latest_version = Version::parse(&latest_version)
+        .map_err(|e| invalid_zallet_version_error(&latest_version, e))?;
+    let minimum_version = Version::parse(MIN_COMPATIBLE_ZALLET_VERSION)
+        .expect("minimum compatible Zallet version is valid SemVer");
+
+    if latest_version >= minimum_version {
+        Ok(())
+    } else {
+        Err(incompatible_alpha_database_error())
+    }
+}
+
+fn latest_recorded_zallet_version(conn: &rusqlite::Connection) -> Result<String, Error> {
+    conn.query_row(
+        "SELECT version
+         FROM ext_zallet_db_version_metadata
+         ORDER BY rowid DESC
+         LIMIT 1",
+        [],
+        |row| row.get("version"),
+    )
+    .optional()
+    .map_err(|_| incompatible_alpha_database_error())?
+    .ok_or_else(incompatible_alpha_database_error)
+}
+
+fn incompatible_alpha_database_error() -> Error {
+    ErrorKind::Init
+        .context(fl!("err-init-db-incompatible-alpha"))
+        .into()
+}
+
+fn invalid_zallet_version_error(version: &str, err: semver::Error) -> Error {
+    ErrorKind::Init
+        .context(fl!(
+            "err-init-db-invalid-zallet-version",
+            version = version,
+            err = err.to_string(),
+        ))
+        .into()
 }

@@ -1,9 +1,10 @@
 use rand::rngs::OsRng;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension, named_params};
+use tempfile::tempdir;
 use zcash_client_sqlite::{WalletDb, util::SystemClock, wallet::init::WalletMigrator};
-use zcash_protocol::consensus::{self, Parameters};
+use zcash_protocol::consensus::{self, NetworkType, Parameters};
 
-use crate::{components::database, network::Network};
+use crate::{components::database, config::ZalletConfig, network::Network};
 
 #[cfg(zallet_build = "wallet")]
 use crate::components::keystore;
@@ -79,4 +80,202 @@ fn verify_schema() {
         ORDER BY tbl_name",
         &[],
     );
+}
+
+#[test]
+fn legacy_alpha_2_database_is_rejected_before_recording_current_version() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.2"]);
+
+    let err = open_database(&config).expect_err("legacy alpha.2 database must be rejected");
+    assert!(
+        err.to_string().contains("fresh Zallet wallet"),
+        "unexpected error: {err}",
+    );
+
+    let conn = Connection::open(config.wallet_db_path()).unwrap();
+    assert_eq!(
+        latest_recorded_version(&conn),
+        Some("0.1.0-alpha.2".to_string())
+    );
+    assert_eq!(
+        count_recorded_versions(&conn, crate::build::PKG_VERSION),
+        0,
+        "the current Zallet version should not be recorded after rejecting the database",
+    );
+}
+
+#[test]
+fn legacy_alpha_3_database_is_allowed() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.3"]);
+
+    open_database(&config).unwrap();
+
+    let conn = Connection::open(config.wallet_db_path()).unwrap();
+    assert_eq!(
+        latest_recorded_version(&conn),
+        Some(crate::build::PKG_VERSION.to_string()),
+    );
+}
+
+#[test]
+fn compatibility_check_uses_latest_recorded_version() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.2", "0.1.0-alpha.3"]);
+
+    open_database(&config).unwrap();
+}
+
+#[test]
+fn latest_alpha_2_version_is_rejected_even_with_earlier_alpha_3_version() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.3", "0.1.0-alpha.2"]);
+
+    let err = open_database(&config).expect_err("latest alpha.2 database must be rejected");
+    assert!(
+        err.to_string().contains("fresh Zallet wallet"),
+        "unexpected error: {err}",
+    );
+}
+
+#[test]
+fn malformed_legacy_version_is_rejected() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db(config.wallet_db_path(), &["not-a-version"]);
+
+    let err = open_database(&config).expect_err("malformed version must be rejected");
+    assert!(
+        err.to_string().contains("invalid zallet version"),
+        "unexpected error: {err}",
+    );
+
+    let conn = Connection::open(config.wallet_db_path()).unwrap();
+    assert_eq!(count_recorded_versions(&conn, crate::build::PKG_VERSION), 0);
+}
+
+#[test]
+fn missing_legacy_version_is_rejected() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db(config.wallet_db_path(), &[]);
+
+    let err = open_database(&config).expect_err("missing version must be rejected");
+    assert!(
+        err.to_string().contains("fresh Zallet wallet"),
+        "unexpected error: {err}",
+    );
+
+    let conn = Connection::open(config.wallet_db_path()).unwrap();
+    assert_eq!(count_recorded_versions(&conn, crate::build::PKG_VERSION), 0);
+}
+
+#[test]
+fn network_mismatch_still_reports_network_error() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db_for_network(
+        config.wallet_db_path(),
+        Network::Consensus(consensus::Network::MainNetwork),
+        &["0.1.0-alpha.3"],
+    );
+
+    let err = open_database(&config).expect_err("network mismatch must be rejected");
+    assert!(
+        err.to_string()
+            .contains("The wallet database was created for network type"),
+        "unexpected error: {err}",
+    );
+}
+
+fn test_config(datadir: &std::path::Path, network_type: NetworkType) -> ZalletConfig {
+    ZalletConfig {
+        datadir: Some(datadir.to_path_buf()),
+        consensus: crate::config::ConsensusSection {
+            network: network_type,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+fn open_database(config: &ZalletConfig) -> Result<(), crate::error::Error> {
+    crate::i18n::load_languages(&[]);
+
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let database = database::Database::open(config).await?;
+            drop(database);
+            Ok(())
+        })
+}
+
+fn create_wallet_db(path: impl AsRef<std::path::Path>, versions: &[&str]) {
+    create_wallet_db_for_network(
+        path,
+        Network::Consensus(consensus::Network::TestNetwork),
+        versions,
+    );
+}
+
+fn create_wallet_db_for_network(
+    path: impl AsRef<std::path::Path>,
+    network: Network,
+    versions: &[&str],
+) {
+    let mut conn = Connection::open(path).unwrap();
+    let mut db_data = WalletDb::from_connection(&mut conn, network, SystemClock, OsRng);
+
+    WalletMigrator::new()
+        .with_external_migrations(database::all_external_migrations(
+            db_data.params().network_type(),
+        ))
+        .init_or_migrate(&mut db_data)
+        .unwrap();
+
+    for version in versions {
+        conn.execute(
+            "INSERT INTO ext_zallet_db_version_metadata
+             VALUES (:version, NULL, NULL, :migrated)",
+            named_params! {
+                ":version": version,
+                ":migrated": "2026-01-01 00:00:00Z",
+            },
+        )
+        .unwrap();
+    }
+}
+
+fn latest_recorded_version(conn: &Connection) -> Option<String> {
+    conn.query_row(
+        "SELECT version
+         FROM ext_zallet_db_version_metadata
+         ORDER BY rowid DESC
+         LIMIT 1",
+        [],
+        |row| row.get("version"),
+    )
+    .optional()
+    .unwrap()
+}
+
+fn count_recorded_versions(conn: &Connection, version: &str) -> usize {
+    conn.query_row(
+        "SELECT COUNT(*)
+         FROM ext_zallet_db_version_metadata
+         WHERE version = :version",
+        named_params! {
+            ":version": version,
+        },
+        |row| row.get::<_, usize>(0),
+    )
+    .unwrap()
 }
