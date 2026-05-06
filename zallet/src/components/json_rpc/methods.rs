@@ -596,7 +596,16 @@ pub(crate) trait WalletRpc {
     ///   leakage is acceptable.
     ///
     /// # Returns
-    /// - An operation ID for tracking the async operation.
+    /// An object matching `zcashd`'s `z_shieldcoinbase` shape:
+    /// - `remainingUTXOs` (numeric): Number of coinbase UTXOs eligible for
+    ///   shielding that were not selected. Zallet currently ignores `limit`,
+    ///   so in practice this is `0` whenever the proposal succeeded.
+    /// - `remainingValue` (numeric, ZEC): Total value of those UTXOs.
+    /// - `shieldingUTXOs` (numeric): Number of coinbase UTXOs being shielded
+    ///   by this operation.
+    /// - `shieldingValue` (numeric, ZEC): Total value being shielded.
+    /// - `opid` (string): Operation id to pass to `z_getoperationstatus` or
+    ///   `z_getoperationresult` to retrieve the final result.
     #[method(name = "z_shieldcoinbase")]
     async fn z_shieldcoinbase(
         &self,
@@ -953,21 +962,19 @@ impl WalletRpcServer for WalletRpcImpl {
         memo: Option<String>,
         privacy_policy: Option<String>,
     ) -> z_shieldcoinbase::Response {
-        Ok(self
-            .start_async(
-                z_shieldcoinbase::call(
-                    self.wallet().await?,
-                    self.keystore.clone(),
-                    self.chain().await?,
-                    fromaddress,
-                    toaddress,
-                    fee,
-                    limit,
-                    memo,
-                    privacy_policy,
-                )
-                .await?,
-            )
-            .await)
+        let (preflight, context, fut) = z_shieldcoinbase::call(
+            self.wallet().await?,
+            self.keystore.clone(),
+            self.chain().await?,
+            fromaddress,
+            toaddress,
+            fee,
+            limit,
+            memo,
+            privacy_policy,
+        )
+        .await?;
+        let opid = self.start_async((context, fut)).await;
+        Ok(z_shieldcoinbase::ShieldCoinbaseResult::new(preflight, opid))
     }
 }
