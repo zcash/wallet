@@ -15,6 +15,7 @@ be considered breaking changes.
   - `verifymessage`
   - `z_converttex`
   - `z_importaddress`
+  - `z_shieldcoinbase`
 
 ### Changed
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
