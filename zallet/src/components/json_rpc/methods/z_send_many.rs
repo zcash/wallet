@@ -365,7 +365,8 @@ pub(crate) async fn call(
 
     #[cfg(feature = "transparent-key-import")]
     let standalone_keys = {
-        let mut keys = std::collections::HashMap::new();
+        let mut keys: std::collections::HashMap<TransparentAddress, Vec<secp256k1::SecretKey>> =
+            std::collections::HashMap::new();
         for step in proposal.steps() {
             for input in step.transparent_inputs() {
                 if let Some(address) = script::FromChain::parse(&input.txout().script_pubkey().0)
@@ -385,7 +386,7 @@ pub(crate) async fn call(
                             }
                             _ => LegacyCode::Database.with_message(e.to_string()),
                         })?;
-                    keys.insert(address, vec![secret_key]);
+                    keys.entry(address).or_default().push(secret_key);
                 }
             }
         }

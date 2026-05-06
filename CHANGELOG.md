@@ -34,6 +34,9 @@ be considered breaking changes.
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
   not defined.
+- `z_sendmany` and `z_shieldcoinbase` no longer drop standalone transparent
+  signing keys when the same address backs multiple proposal inputs. Keys
+  are now accumulated per address rather than overwritten.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 
