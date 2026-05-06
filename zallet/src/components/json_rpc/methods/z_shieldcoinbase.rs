@@ -4,14 +4,17 @@ use std::convert::Infallible;
 use std::future::Future;
 
 use abscissa_core::Application;
+use documented::Documented;
 use jsonrpsee::core::{JsonValue, RpcResult};
+use schemars::JsonSchema;
 use secrecy::ExposeSecret;
+use serde::Serialize;
 use transparent::address::TransparentAddress;
 use zaino_state::FetchServiceSubscriber;
 use zcash_address::unified;
 use zcash_client_backend::{
     data_api::{
-        Account, TransparentOutputFilter, WalletRead,
+        Account, InputSource, TransparentOutputFilter, WalletRead,
         wallet::{
             SpendingKeys, create_proposed_transactions, input_selection::GreedyInputSelector,
             propose_shielding,
@@ -35,6 +38,7 @@ use crate::{
                 get_account_for_address,
             },
             server::LegacyCode,
+            utils::{JsonZec, value_from_zatoshis},
         },
         keystore::KeyStore,
     },
@@ -45,7 +49,68 @@ use crate::{
 #[cfg(feature = "transparent-key-import")]
 use zcash_script::script;
 
-pub(crate) type ResultType = OperationId;
+/// The result of a `z_shieldcoinbase` pre-flight call.
+///
+/// Mirrors the JSON object returned by `zcashd`'s `z_shieldcoinbase`:
+/// `{ remainingUTXOs, remainingValue, shieldingUTXOs, shieldingValue, opid }`.
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
+pub(crate) struct ShieldCoinbaseResult {
+    /// Number of coinbase UTXOs that were eligible for shielding but were not
+    /// selected by this operation.
+    ///
+    /// Note: Zallet currently ignores the `limit` parameter, so in practice
+    /// this is `0` whenever the proposal succeeded. The field is preserved
+    /// for compatibility with `zcashd`-shape clients.
+    #[serde(rename = "remainingUTXOs")]
+    remaining_utxos: u64,
+
+    /// Total value (in ZEC) of coinbase UTXOs that were eligible for
+    /// shielding but were not selected by this operation. See `remainingUTXOs`.
+    #[serde(rename = "remainingValue")]
+    remaining_value: JsonZec,
+
+    /// Number of coinbase UTXOs being shielded by this operation.
+    #[serde(rename = "shieldingUTXOs")]
+    shielding_utxos: u64,
+
+    /// Total value (in ZEC) of coinbase UTXOs being shielded by this
+    /// operation.
+    #[serde(rename = "shieldingValue")]
+    shielding_value: JsonZec,
+
+    /// Operation id to pass to `z_getoperationstatus` /
+    /// `z_getoperationresult` to retrieve the final result.
+    opid: OperationId,
+}
+
+impl ShieldCoinbaseResult {
+    /// Combines the synchronously-computed [`Preflight`] numerics with the
+    /// [`OperationId`] returned by [`crate::components::json_rpc::asyncop`]
+    /// once the async portion is registered.
+    pub(super) fn new(preflight: Preflight, opid: OperationId) -> Self {
+        Self {
+            remaining_utxos: preflight.remaining_utxos,
+            remaining_value: preflight.remaining_value,
+            shielding_utxos: preflight.shielding_utxos,
+            shielding_value: preflight.shielding_value,
+            opid,
+        }
+    }
+}
+
+/// Pre-flight numeric fields, computed before the async portion runs.
+///
+/// Held as a separate type so that the [`OperationId`] (only available after
+/// the async operation is registered) can be joined with these values to
+/// produce the final [`ShieldCoinbaseResult`].
+pub(crate) struct Preflight {
+    pub(super) remaining_utxos: u64,
+    pub(super) remaining_value: JsonZec,
+    pub(super) shielding_utxos: u64,
+    pub(super) shielding_value: JsonZec,
+}
+
+pub(crate) type ResultType = ShieldCoinbaseResult;
 pub(crate) type Response = RpcResult<ResultType>;
 
 pub(super) const PARAM_FROMADDRESS_DESC: &str = "A wallet-owned transparent address to sweep from, or \"*\" to sweep from all taddrs \
@@ -73,6 +138,7 @@ pub(crate) async fn call(
     memo: Option<String>,
     privacy_policy: Option<String>,
 ) -> RpcResult<(
+    Preflight,
     Option<ContextInfo>,
     impl Future<Output = RpcResult<SendResult>>,
 )> {
@@ -223,6 +289,78 @@ pub(crate) async fn call(
 
     enforce_privacy_policy(&proposal, privacy_policy)?;
 
+    // Compute the `zcashd`-shape pre-flight numbers.
+    //
+    // `shielding_*` is what the proposal will spend; we sum directly over the
+    // proposal's selected transparent inputs.
+    //
+    // `remaining_*` is what was eligible-but-not-selected. We re-enumerate the
+    // spendable coinbase UTXOs for `from_addrs` at the same target height the
+    // proposal used and subtract.
+    //
+    // RACE NOTE: Between `propose_shielding` (above) and the enumeration
+    // below, a new block could land and either advance maturity (adding new
+    // eligible UTXOs) or invalidate previously-eligible ones via reorg. In
+    // the first case `total_value` only inflates, leaving
+    // `shielding_value <= total_value`; the subtraction is safe and
+    // `remaining_*` will harmlessly over-count by the freshly-mature outputs.
+    // In the (rare) reorg case, `shielding_value > total_value` is possible.
+    // We treat that as an internal error and abort before registering the
+    // opid, so no half-state is exposed to the caller.
+    let mut shielding_utxos: u64 = 0;
+    let mut shielding_value_zats = Zatoshis::ZERO;
+    for step in proposal.steps() {
+        for utxo in step.transparent_inputs() {
+            shielding_utxos = shielding_utxos.saturating_add(1);
+            shielding_value_zats = (shielding_value_zats + utxo.value()).ok_or_else(|| {
+                LegacyCode::Wallet
+                    .with_static("Internal error: shielding value sum overflowed Zatoshis bounds.")
+            })?;
+        }
+    }
+
+    let target_height = proposal.min_target_height();
+    let mut total_utxos: u64 = 0;
+    let mut total_value_zats = Zatoshis::ZERO;
+    for addr in &from_addrs {
+        let utxos = wallet
+            .get_spendable_transparent_outputs(
+                addr,
+                target_height,
+                confirmations_policy,
+                TransparentOutputFilter::CoinbaseOnly,
+            )
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+        total_utxos = total_utxos.saturating_add(utxos.len() as u64);
+        for utxo in utxos {
+            total_value_zats = (total_value_zats + utxo.value()).ok_or_else(|| {
+                LegacyCode::Wallet.with_static(
+                    "Internal error: total transparent value overflowed Zatoshis bounds.",
+                )
+            })?;
+        }
+    }
+
+    let remaining_utxos = total_utxos.checked_sub(shielding_utxos).ok_or_else(|| {
+        LegacyCode::Wallet.with_static(
+            "Internal accounting error: proposal selected more UTXOs than \
+             enumeration found (likely a chain race during shielding setup).",
+        )
+    })?;
+    let remaining_value_zats = (total_value_zats - shielding_value_zats).ok_or_else(|| {
+        LegacyCode::Wallet.with_static(
+            "Internal accounting error: proposal value exceeds enumerated \
+                 total (likely a chain race during shielding setup).",
+        )
+    })?;
+
+    let preflight = Preflight {
+        remaining_utxos,
+        remaining_value: value_from_zatoshis(remaining_value_zats),
+        shielding_utxos,
+        shielding_value: value_from_zatoshis(shielding_value_zats),
+    };
+
     // Check Orchard action limits.
     let orchard_actions_limit = APP.config().builder.limits.orchard_actions().into();
     for step in proposal.steps() {
@@ -324,6 +462,7 @@ pub(crate) async fn call(
     };
 
     Ok((
+        preflight,
         Some(ContextInfo::new(
             "z_shieldcoinbase",
             serde_json::json!({
