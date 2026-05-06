@@ -36,6 +36,9 @@ be considered breaking changes.
   not defined.
 - Zallet now refuses to open wallet databases from incompatible earlier alpha
   releases instead of attempting to migrate them.
+- `z_sendmany` and `z_shieldcoinbase` no longer drop standalone transparent
+  signing keys when the same address backs multiple proposal inputs. Keys
+  are now accumulated per address rather than overwritten.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 
