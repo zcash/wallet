@@ -67,7 +67,8 @@ pub(crate) async fn call(
     };
 
     if rescan.unwrap_or(true) {
-        crate::components::sync::fetch_transparent_utxos(&chain, wallet)
+        let params = *wallet.params();
+        crate::components::sync::fetch_transparent_utxos(&chain, &params, wallet)
             .await
             .map_err(|e| LegacyCode::Misc.with_message(format!("Rescan failed: {e}")))?;
     }

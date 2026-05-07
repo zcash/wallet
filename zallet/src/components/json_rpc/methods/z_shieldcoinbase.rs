@@ -3,7 +3,6 @@
 use std::convert::Infallible;
 use std::future::Future;
 
-use abscissa_core::Application;
 use documented::Documented;
 use jsonrpsee::core::{JsonValue, RpcResult};
 use schemars::JsonSchema;
