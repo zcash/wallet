@@ -33,7 +33,7 @@
 
 #![allow(deprecated)] // For zaino
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{
     Arc,
     atomic::{AtomicU32, Ordering},
@@ -42,6 +42,7 @@ use std::time::Duration;
 
 use futures::StreamExt as _;
 use jsonrpsee::tracing::{self, debug, info, warn};
+use rusqlite::OptionalExtension;
 use tokio::{sync::Notify, time};
 use transparent::{
     address::Script,
@@ -154,6 +155,7 @@ impl WalletSync {
         let poll_transparent_task = crate::spawn!("Poll transparent", async move {
             poll_transparent(
                 chain_subscriber,
+                params,
                 db_data.as_mut(),
                 poll_tip_change_signal_receiver,
             )
@@ -506,10 +508,9 @@ async fn recover_history(
 /// stores them in the wallet database.
 pub(crate) async fn fetch_transparent_utxos(
     chain: &FetchServiceSubscriber,
+    params: &Network,
     db_data: &mut DbConnection,
 ) -> Result<(), SyncError> {
-    let params = db_data.params();
-
     // Collect all of the wallet's non-ephemeral transparent addresses.
     //
     // TODO: This is likely to be append-only unless we add support for removing an
@@ -532,22 +533,87 @@ pub(crate) async fn fetch_transparent_utxos(
         .z_get_address_utxos(AddressStrings::new(addresses))
         .await?;
 
-    // Notify the wallet about all mined UTXOs.
+    // Notify the wallet about all mined UTXOs, and collect unique (txid,
+    // mined_height) pairs for the second pass below — needed to populate
+    // `transactions.tx_index = 0` for coinbase (see zcash/wallet#436).
+    let mut tx_heights: HashMap<TxId, BlockHeight> = HashMap::new();
+
     for utxo in utxos {
         let (address, txid, index, script, value_zat, mined_height) = utxo.into_parts();
         debug!("{address} has UTXO in tx {txid} at index {}", index.index());
 
+        let mined_height = BlockHeight::from_u32(mined_height.0);
         let output = WalletTransparentOutput::from_parts(
             OutPoint::new(txid.0, index.index()),
             TxOut::new(
                 Zatoshis::const_from_u64(value_zat),
                 Script(script::Code(script.as_raw_bytes().to_vec())),
             ),
-            Some(BlockHeight::from_u32(mined_height.0)),
+            Some(mined_height),
         )
         .expect("the UTXO was detected via a supported address kind");
 
         db_data.put_received_transparent_utxo(&output)?;
+
+        tx_heights.insert(TxId::from_bytes(txid.0), mined_height);
+    }
+
+    // Second pass: enhance each newly-observed tx via `decrypt_and_store_transaction`
+    // so that `transactions.tx_index = 0` is recorded for coinbase (required by
+    // `TransparentOutputFilter::CoinbaseOnly`).
+    //
+    // Skip when either `tx_index` or `raw` is already set: the row has been
+    // enhanced (or had `tx_index` populated by the block scanner) and a re-fetch
+    // would be redundant. This bounds the per-poll cost so that an attacker
+    // flooding the wallet with non-coinbase transparent UTXOs cannot drive
+    // unbounded RPC fetches. Fetch failures are logged-and-skipped to keep a
+    // flaky indexer from wedging sync.
+    for (txid, mined_height) in tx_heights {
+        let already_enhanced = db_data
+            .with_raw(|conn, _params| {
+                conn.query_row(
+                    "SELECT tx_index IS NOT NULL OR raw IS NOT NULL \
+                     FROM transactions WHERE txid = :txid",
+                    rusqlite::named_params![":txid": &txid.as_ref()[..]],
+                    |row| row.get::<_, bool>(0),
+                )
+                .optional()
+            })
+            .map_err(zcash_client_sqlite::error::SqliteClientError::from)?;
+        if already_enhanced.unwrap_or(false) {
+            continue;
+        }
+
+        let tx_obj = match chain.get_raw_transaction(txid.to_string(), Some(1)).await {
+            Ok(zebra_rpc::methods::GetRawTransaction::Object(tx_obj)) => tx_obj,
+            Ok(zebra_rpc::methods::GetRawTransaction::Raw(_)) => {
+                warn!("Unexpected raw response for {txid}; skipping tx_index update");
+                continue;
+            }
+            Err(e) => {
+                warn!("Failed to fetch tx {txid} for tx_index update: {e}");
+                continue;
+            }
+        };
+
+        let parse_height = tx_obj
+            .height()
+            .map(BlockHeight::from_u32)
+            .unwrap_or(mined_height);
+        let tx = match Transaction::read(
+            tx_obj.hex().as_ref(),
+            consensus::BranchId::for_height(params, parse_height),
+        ) {
+            Ok(tx) => tx,
+            Err(e) => {
+                warn!("Failed to parse tx {txid} for tx_index update: {e}");
+                continue;
+            }
+        };
+
+        if let Err(e) = decrypt_and_store_transaction(params, db_data, &tx, Some(mined_height)) {
+            warn!("Failed to enhance tx {txid} for tx_index update: {e}");
+        }
     }
 
     Ok(())
@@ -559,6 +625,7 @@ pub(crate) async fn fetch_transparent_utxos(
 #[tracing::instrument(skip_all)]
 async fn poll_transparent(
     chain: FetchServiceSubscriber,
+    params: Network,
     db_data: &mut DbConnection,
     tip_change_signal: Arc<Notify>,
 ) -> Result<(), SyncError> {
@@ -568,7 +635,7 @@ async fn poll_transparent(
         // Wait for the chain tip to advance
         tip_change_signal.notified().await;
 
-        fetch_transparent_utxos(&chain, db_data).await?;
+        fetch_transparent_utxos(&chain, &params, db_data).await?;
         // TODO: Once Zaino has an index over the mempool, monitor it for changes to the
         // unmined UTXO set (which we can't get directly from the stream without building
         // an index because existing mempool txs can be spent within the mempool).
