@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use crate::differ::DiffEntry;
 use crate::engine::ParityResult;
 use std::collections::HashMap;
 
@@ -25,7 +26,11 @@ pub struct RunSummary {
 pub enum ParityResultReport {
     Match,
     Diff {
-        diff_message: String,
+        /// Number of leaf-level differences found.
+        diff_count: usize,
+        /// JSON Pointer paths where differences were found (e.g. `/chain`, `/softforks/0/id`).
+        /// Full upstream/target values are omitted by default to avoid payload dumps.
+        diff_paths: Vec<String>,
     },
     Missing {
         method: String,
@@ -49,9 +54,14 @@ impl FinalReport {
                     matches += 1;
                     ParityResultReport::Match
                 }
-                ParityResult::Diff { diff_message, .. } => {
+                ParityResult::Diff { diff_entries } => {
                     diffs += 1;
-                    ParityResultReport::Diff { diff_message }
+                    let diff_paths: Vec<String> =
+                        diff_entries.iter().map(|e| e.path.clone()).collect();
+                    ParityResultReport::Diff {
+                        diff_count: diff_paths.len(),
+                        diff_paths,
+                    }
                 }
                 ParityResult::Missing { method: ref m } => {
                     missing += 1;
@@ -77,6 +87,22 @@ impl FinalReport {
         }
     }
 
+    /// Returns the raw `DiffEntry` objects for a given method (for verbose/debug output).
+    /// By default the report only includes paths, not full payloads.
+    pub fn with_diff_detail(results: Vec<(String, ParityResult)>) -> (Self, HashMap<String, Vec<DiffEntry>>) {
+        let mut raw_diffs: HashMap<String, Vec<DiffEntry>> = HashMap::new();
+        let mapped: Vec<(String, ParityResult)> = results
+            .into_iter()
+            .map(|(method, res)| {
+                if let ParityResult::Diff { ref diff_entries } = res {
+                    raw_diffs.insert(method.clone(), diff_entries.clone());
+                }
+                (method, res)
+            })
+            .collect();
+        (Self::new(mapped), raw_diffs)
+    }
+
     pub fn to_markdown(&self) -> String {
         let mut md = String::from("# Zallet Parity Report\n\n");
         md.push_str(&format!("- **Total Tests**: {}\n", self.summary.total));
@@ -86,7 +112,7 @@ impl FinalReport {
         md.push_str(&format!("- **⚠️ Errors**: {}\n\n", self.summary.errors));
 
         md.push_str("## Detailed Results\n\n");
-        md.push_str("| Method | Status | Notes |\n");
+        md.push_str("| Method | Status | Details |\n");
         md.push_str("| :--- | :--- | :--- |\n");
 
         let mut sorted_details: Vec<_> = self.details.iter().collect();
@@ -95,7 +121,10 @@ impl FinalReport {
         for (method, res) in sorted_details {
             let (status, notes) = match res {
                 ParityResultReport::Match => ("✅ Match", String::new()),
-                ParityResultReport::Diff { diff_message } => ("❌ Diff", diff_message.clone()),
+                ParityResultReport::Diff { diff_count, diff_paths } => {
+                    let paths = diff_paths.join(", ");
+                    ("❌ Diff", format!("{} field(s) differ: `{}`", diff_count, paths))
+                }
                 ParityResultReport::Missing { method: m } => {
                     ("🔍 Missing", format!("Method `{}` not found on one endpoint", m))
                 }

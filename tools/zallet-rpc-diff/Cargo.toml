@@ -39,5 +39,8 @@ jsonrpsee = { version = "0.24", features = ["http-client", "macros"] }
 # Comparison
 assert-json-diff = "2"
 
+# JSON Pointer (RFC 6901) — for configurable ignore paths
+jsonptr = { version = "0.7", features = ["json"] }
+
 # Test Mocking
 wiremock = "0.6"

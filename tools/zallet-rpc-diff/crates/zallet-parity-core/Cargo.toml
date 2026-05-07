@@ -7,6 +7,7 @@ description = "Core library for the zallet-rpc-diff parity harness"
 
 [dependencies]
 assert-json-diff.workspace = true
+jsonptr.workspace = true
 jsonrpsee.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -17,3 +18,4 @@ tracing.workspace = true
 
 [dev-dependencies]
 zallet-parity-testkit = { path = "../zallet-parity-testkit" }
+tempfile = "3"

@@ -1,39 +1,40 @@
 use tokio::task::JoinSet;
 use serde_json::Value;
 use crate::client::RpcClient;
+use crate::differ::{diff_values, DiffEntry};
+use crate::normalizer::{normalize, parse_ignore_paths};
 use crate::Error;
-
-/// The result of a single parity check.
-#[derive(Debug, Clone)]
-pub enum ParityResult {
-    Match,
-    Diff {
-        upstream: Value,
-        target: Value,
-        diff_message: String,
-    },
-    /// One endpoint returned a JSON-RPC "method not found" error (-32601).
-    Missing {
-        method: String,
-    },
-    /// A transport failure or non-missing RPC error occurred.
-    Error(String),
-}
 
 /// JSON-RPC "method not found" error code per spec.
 const METHOD_NOT_FOUND_CODE: i32 = -32601;
 
-/// Classify an RPC call result: transport/RPC errors → Ok(Value) or Err(Error).
-/// Returns Err(Error::MethodNotFound) if the server returned -32601.
+/// Returns `true` if the given error represents a "method not found" response.
 fn is_method_not_found(err: &Error) -> bool {
     match err {
         Error::JsonRpc(e) => {
-            // jsonrpsee surfaces method-not-found as an ErrorObject with code -32601
             e.to_string().contains(&METHOD_NOT_FOUND_CODE.to_string())
                 || e.to_string().to_lowercase().contains("method not found")
         }
         _ => false,
     }
+}
+
+/// The result of a single parity check.
+#[derive(Debug, Clone)]
+pub enum ParityResult {
+    /// Both endpoints returned identical data (after normalization).
+    Match,
+    /// Both endpoints returned data, but the normalized values differ.
+    Diff {
+        /// Structured list of leaf-level differences (with JSON Pointer paths).
+        diff_entries: Vec<DiffEntry>,
+    },
+    /// One or both endpoints returned -32601 "method not found".
+    Missing {
+        method: String,
+    },
+    /// A transport failure or non-missing RPC error occurred.
+    Error(String),
 }
 
 /// The engine responsible for executing the parity suite.
@@ -47,7 +48,11 @@ impl ParityEngine {
         Self { upstream, target }
     }
 
-    /// Runs the parity checks for a list of methods defined in the manifest.
+    /// Runs the parity checks for all methods defined in the manifest.
+    ///
+    /// Each method is executed concurrently via `tokio::task::JoinSet`.
+    /// The normalization pipeline (key-sort + ignore-paths) is applied
+    /// before comparison.
     pub async fn run_all(&self, methods: Vec<crate::manifest::MethodEntry>) -> Vec<(String, ParityResult)> {
         let mut set = JoinSet::new();
         let mut results = Vec::new();
@@ -57,46 +62,51 @@ impl ParityEngine {
             let target = self.target.clone();
             let method_name = entry.name.clone();
             let params = entry.params.unwrap_or(Value::Null);
+            let raw_ignore_paths = entry.ignore_paths.clone();
 
             set.spawn(async move {
+                // Parse ignore paths — log and skip on invalid pointers
+                let ignore_paths = match parse_ignore_paths(&raw_ignore_paths) {
+                    Ok(paths) => paths,
+                    Err(e) => {
+                        tracing::warn!("Invalid ignore path for '{}': {}", method_name, e);
+                        vec![]
+                    }
+                };
+
                 let res_u = upstream.call(&method_name, params.clone()).await;
                 let res_t = target.call(&method_name, params).await;
 
                 let parity = match (res_u, res_t) {
                     (Ok(u), Ok(t)) => {
-                        let diff = assert_json_diff::assert_json_matches_no_panic(
-                            &u,
-                            &t,
-                            assert_json_diff::Config::new(assert_json_diff::CompareMode::Strict),
-                        );
+                        // Apply normalization pipeline before comparison
+                        let u_norm = normalize(u, &ignore_paths);
+                        let t_norm = normalize(t, &ignore_paths);
 
-                        match diff {
-                            Ok(_) => ParityResult::Match,
-                            Err(d) => ParityResult::Diff {
-                                upstream: u,
-                                target: t,
-                                diff_message: d,
-                            },
+                        let entries = diff_values(&u_norm, &t_norm);
+
+                        if entries.is_empty() {
+                            ParityResult::Match
+                        } else {
+                            ParityResult::Diff { diff_entries: entries }
                         }
                     }
-                    // Both sides report method-not-found → MISSING on both
+                    // Both sides: method not found
                     (Err(ref e_u), Err(ref e_t))
                         if is_method_not_found(e_u) && is_method_not_found(e_t) =>
                     {
-                        ParityResult::Missing {
-                            method: method_name.clone(),
-                        }
+                        ParityResult::Missing { method: method_name.clone() }
                     }
-                    // One side reports method-not-found → MISSING (asymmetric)
-                    (Err(ref e), _) if is_method_not_found(e) => ParityResult::Missing {
-                        method: method_name.clone(),
-                    },
-                    (_, Err(ref e)) if is_method_not_found(e) => ParityResult::Missing {
-                        method: method_name.clone(),
-                    },
-                    // All other upstream errors
+                    // One side: method not found
+                    (Err(ref e), _) if is_method_not_found(e) => {
+                        ParityResult::Missing { method: method_name.clone() }
+                    }
+                    (_, Err(ref e)) if is_method_not_found(e) => {
+                        ParityResult::Missing { method: method_name.clone() }
+                    }
+                    // Other upstream error
                     (Err(e), _) => ParityResult::Error(format!("Upstream error: {}", e)),
-                    // All other target errors
+                    // Other target error
                     (_, Err(e)) => ParityResult::Error(format!("Target error: {}", e)),
                 };
 
@@ -123,7 +133,19 @@ mod tests {
     use serde_json::json;
 
     fn entry(name: &str) -> MethodEntry {
-        MethodEntry { name: name.to_string(), params: None }
+        MethodEntry {
+            name: name.to_string(),
+            params: None,
+            ignore_paths: vec![],
+        }
+    }
+
+    fn entry_with_ignore(name: &str, paths: Vec<&str>) -> MethodEntry {
+        MethodEntry {
+            name: name.to_string(),
+            params: None,
+            ignore_paths: paths.into_iter().map(String::from).collect(),
+        }
     }
 
     // ── MATCH ────────────────────────────────────────────────────────────────
@@ -134,7 +156,7 @@ mod tests {
         let target_node = MockNode::spawn().await;
 
         let method = "test_match";
-        let response = json!({"blocks": 100});
+        let response = json!({"blocks": 100, "chain": "main"});
 
         upstream_node.mock_response(method, json!(null), response.clone()).await;
         target_node.mock_response(method, json!(null), response).await;
@@ -150,17 +172,20 @@ mod tests {
         assert!(matches!(results[0].1, ParityResult::Match));
     }
 
-    // ── DIFF ─────────────────────────────────────────────────────────────────
+    // ── MATCH via normalization (ordering-only diff) ───────────────────────────
 
     #[tokio::test]
-    async fn test_parity_diff() {
+    async fn test_parity_ordering_only_diff_is_match_after_normalization() {
         let upstream_node = MockNode::spawn().await;
         let target_node = MockNode::spawn().await;
 
-        let method = "test_diff";
-
-        upstream_node.mock_response(method, json!(null), json!({"data": 1})).await;
-        target_node.mock_response(method, json!(null), json!({"data": 2})).await;
+        let method = "test_ordering";
+        upstream_node
+            .mock_response(method, json!(null), json!({"z": 1, "a": 2, "m": 3}))
+            .await;
+        target_node
+            .mock_response(method, json!(null), json!({"a": 2, "m": 3, "z": 1}))
+            .await;
 
         let engine = ParityEngine::new(
             RpcClient::new(&upstream_node.url()).unwrap(),
@@ -170,11 +195,68 @@ mod tests {
         let results = engine.run_all(vec![entry(method)]).await;
 
         assert_eq!(results.len(), 1);
-        let ParityResult::Diff { diff_message, .. } = &results[0].1 else {
+        assert!(matches!(results[0].1, ParityResult::Match),
+            "ordering-only diff should be MATCH after normalization, got: {:?}", results[0].1);
+    }
+
+    // ── DIFF with structured paths ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_parity_diff_returns_structured_paths() {
+        let upstream_node = MockNode::spawn().await;
+        let target_node = MockNode::spawn().await;
+
+        let method = "test_diff";
+        upstream_node
+            .mock_response(method, json!(null), json!({"chain": "main", "blocks": 100}))
+            .await;
+        target_node
+            .mock_response(method, json!(null), json!({"chain": "test", "blocks": 100}))
+            .await;
+
+        let engine = ParityEngine::new(
+            RpcClient::new(&upstream_node.url()).unwrap(),
+            RpcClient::new(&target_node.url()).unwrap(),
+        );
+
+        let results = engine.run_all(vec![entry(method)]).await;
+
+        assert_eq!(results.len(), 1);
+        if let ParityResult::Diff { diff_entries } = &results[0].1 {
+            assert_eq!(diff_entries.len(), 1);
+            assert_eq!(diff_entries[0].path, "/chain");
+        } else {
             panic!("expected Diff, got {:?}", results[0].1);
-        };
-        // The diff message should mention the path that changed
-        assert!(!diff_message.is_empty());
+        }
+    }
+
+    // ── MATCH via ignore_paths ────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_parity_ignore_path_suppresses_diff() {
+        let upstream_node = MockNode::spawn().await;
+        let target_node = MockNode::spawn().await;
+
+        let method = "test_ignore";
+        upstream_node
+            .mock_response(method, json!(null), json!({"chain": "main", "volatile": 999}))
+            .await;
+        target_node
+            .mock_response(method, json!(null), json!({"chain": "main", "volatile": 888}))
+            .await;
+
+        let engine = ParityEngine::new(
+            RpcClient::new(&upstream_node.url()).unwrap(),
+            RpcClient::new(&target_node.url()).unwrap(),
+        );
+
+        let results = engine
+            .run_all(vec![entry_with_ignore(method, vec!["/volatile"])])
+            .await;
+
+        assert_eq!(results.len(), 1);
+        assert!(matches!(results[0].1, ParityResult::Match),
+            "diff only at ignored path should be MATCH, got: {:?}", results[0].1);
     }
 
     // ── MISSING ───────────────────────────────────────────────────────────────
@@ -186,7 +268,6 @@ mod tests {
 
         let method = "test_missing";
 
-        // Upstream succeeds; target returns -32601 "method not found"
         upstream_node.mock_response(method, json!(null), json!({"ok": true})).await;
         target_node.mock_method_not_found(method, json!(null)).await;
 
@@ -213,7 +294,6 @@ mod tests {
 
         let method = "test_error";
 
-        // Upstream returns a non-method-not-found RPC error (e.g. -32603 internal)
         upstream_node.mock_rpc_error(method, json!(null), -32603, "Internal server error").await;
         target_node.mock_response(method, json!(null), json!({"ok": true})).await;
 
