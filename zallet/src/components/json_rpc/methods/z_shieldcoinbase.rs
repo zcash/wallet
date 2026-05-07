@@ -431,6 +431,24 @@ pub(crate) async fn call(
 
     #[cfg(feature = "transparent-key-import")]
     let standalone_keys = {
+        // Determine which transparent receivers in this account were imported
+        // standalone (vs. HD-derived). Only those have an associated entry in
+        // the keystore's standalone-key table; HD-derived receivers are signed
+        // for using `usk` and must not be looked up via
+        // `decrypt_standalone_transparent_key` (which would error with
+        // `QueryReturnedNoRows`).
+        use zcash_client_backend::wallet::TransparentAddressSource;
+        let standalone_addrs: std::collections::HashSet<TransparentAddress> = wallet
+            .get_transparent_receivers(account.id(), true, true)
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+            .into_iter()
+            .filter_map(|(addr, metadata)| match metadata.source() {
+                TransparentAddressSource::StandalonePubkey(_)
+                | TransparentAddressSource::StandaloneScript(_) => Some(addr),
+                TransparentAddressSource::Derived { .. } => None,
+            })
+            .collect();
+
         let mut keys: std::collections::HashMap<TransparentAddress, Vec<secp256k1::SecretKey>> =
             std::collections::HashMap::new();
         for step in proposal.steps() {
@@ -440,6 +458,9 @@ pub(crate) async fn call(
                     .as_ref()
                     .and_then(TransparentAddress::from_script_from_chain)
                 {
+                    if !standalone_addrs.contains(&address) {
+                        continue;
+                    }
                     let secret_key = keystore
                         .decrypt_standalone_transparent_key(&address)
                         .await
