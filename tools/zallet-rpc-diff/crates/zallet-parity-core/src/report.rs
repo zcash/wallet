@@ -9,20 +9,26 @@ pub struct FinalReport {
     pub details: HashMap<String, ParityResultReport>,
 }
 
+/// Counts for the run summary.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RunSummary {
     pub total: usize,
     pub matches: usize,
     pub diffs: usize,
+    pub missing: usize,
     pub errors: usize,
 }
 
+/// The serialized form of a single method's parity result.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ParityResultReport {
     Match,
     Diff {
         diff_message: String,
+    },
+    Missing {
+        method: String,
     },
     Error {
         message: String,
@@ -33,6 +39,7 @@ impl FinalReport {
     pub fn new(results: Vec<(String, ParityResult)>) -> Self {
         let mut matches = 0;
         let mut diffs = 0;
+        let mut missing = 0;
         let mut errors = 0;
         let mut details = HashMap::new();
 
@@ -46,13 +53,13 @@ impl FinalReport {
                     diffs += 1;
                     ParityResultReport::Diff { diff_message }
                 }
+                ParityResult::Missing { method: ref m } => {
+                    missing += 1;
+                    ParityResultReport::Missing { method: m.clone() }
+                }
                 ParityResult::Error(message) => {
                     errors += 1;
                     ParityResultReport::Error { message }
-                }
-                ParityResult::Missing { .. } => {
-                     // Handle missing if needed
-                     ParityResultReport::Error { message: "Method missing".to_string() }
                 }
             };
             details.insert(method, report_res);
@@ -63,6 +70,7 @@ impl FinalReport {
                 total: details.len(),
                 matches,
                 diffs,
+                missing,
                 errors,
             },
             details,
@@ -74,6 +82,7 @@ impl FinalReport {
         md.push_str(&format!("- **Total Tests**: {}\n", self.summary.total));
         md.push_str(&format!("- **✅ Matches**: {}\n", self.summary.matches));
         md.push_str(&format!("- **❌ Diffs**: {}\n", self.summary.diffs));
+        md.push_str(&format!("- **🔍 Missing**: {}\n", self.summary.missing));
         md.push_str(&format!("- **⚠️ Errors**: {}\n\n", self.summary.errors));
 
         md.push_str("## Detailed Results\n\n");
@@ -85,11 +94,19 @@ impl FinalReport {
 
         for (method, res) in sorted_details {
             let (status, notes) = match res {
-                ParityResultReport::Match => ("✅ Match", ""),
-                ParityResultReport::Diff { diff_message } => ("❌ Diff", diff_message.as_str()),
-                ParityResultReport::Error { message } => ("⚠️ Error", message.as_str()),
+                ParityResultReport::Match => ("✅ Match", String::new()),
+                ParityResultReport::Diff { diff_message } => ("❌ Diff", diff_message.clone()),
+                ParityResultReport::Missing { method: m } => {
+                    ("🔍 Missing", format!("Method `{}` not found on one endpoint", m))
+                }
+                ParityResultReport::Error { message } => ("⚠️ Error", message.clone()),
             };
-            md.push_str(&format!("| `{}` | {} | {} |\n", method, status, notes.replace("\n", "<br>")));
+            md.push_str(&format!(
+                "| `{}` | {} | {} |\n",
+                method,
+                status,
+                notes.replace('\n', "<br>")
+            ));
         }
 
         md

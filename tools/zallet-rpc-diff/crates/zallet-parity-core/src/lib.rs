@@ -8,6 +8,9 @@ pub enum Error {
     #[error("RPC error (code {code}): {message}")]
     Rpc { code: i32, message: String },
 
+    #[error("Method not found: {0}")]
+    MethodNotFound(String),
+
     #[error("jsonrpsee error: {0}")]
     JsonRpc(#[from] jsonrpsee::core::client::Error),
 
