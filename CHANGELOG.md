@@ -37,6 +37,12 @@ be considered breaking changes.
 - `z_sendmany` and `z_shieldcoinbase` no longer drop standalone transparent
   signing keys when the same address backs multiple proposal inputs. Keys
   are now accumulated per address rather than overwritten.
+- Transparent UTXO ingestion now records `tx_index` for coinbase transactions
+  by routing each observed transaction through `decrypt_and_store_transaction`
+  in addition to `put_received_transparent_utxo`. This enables
+  `z_shieldcoinbase` (and any other consumer of
+  `TransparentOutputFilter::CoinbaseOnly`) to correctly identify coinbase
+  outputs.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 
