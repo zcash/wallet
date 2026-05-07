@@ -4,6 +4,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 use zallet_parity_core::client::RpcClient;
 use zallet_parity_core::engine::ParityEngine;
+use zallet_parity_core::expected_diffs::ExpectedDiffs;
 use zallet_parity_core::manifest::Manifest;
 use zallet_parity_core::report::FinalReport;
 
@@ -30,6 +31,11 @@ enum Commands {
         #[arg(short, long, default_value = "manifest.toml")]
         manifest: PathBuf,
 
+        /// Path to an optional expected-differences file (TOML).
+        /// Entries in this file are labeled EXPECTED_DIFF instead of DIFF.
+        #[arg(short, long, default_value = "expected_diffs.toml")]
+        expected_diffs: PathBuf,
+
         /// Path where the report will be saved.
         #[arg(short, long, default_value = "report.json")]
         output: PathBuf,
@@ -48,9 +54,10 @@ async fn main() -> Result<()> {
             upstream_url,
             target_url,
             manifest,
+            expected_diffs,
             output,
         } => {
-            run_parity_check(upstream_url, target_url, manifest, output).await?;
+            run_parity_check(upstream_url, target_url, manifest, expected_diffs, output).await?;
         }
     }
 
@@ -61,6 +68,7 @@ async fn run_parity_check(
     upstream_url: String,
     target_url: String,
     manifest_path: PathBuf,
+    expected_diffs_path: PathBuf,
     output_path: PathBuf,
 ) -> Result<()> {
     println!("🚀 Starting Zallet Parity Check");
@@ -69,13 +77,22 @@ async fn run_parity_check(
     println!();
 
     let manifest = Manifest::load(&manifest_path)?;
+
+    // Load expected diffs if the file exists; silently fall back to none.
+    let expected_diffs = if expected_diffs_path.exists() {
+        println!("   Expected diffs: {}", expected_diffs_path.display());
+        ExpectedDiffs::load(&expected_diffs_path)?
+    } else {
+        ExpectedDiffs::none()
+    };
+
     let upstream = RpcClient::new(&upstream_url)?;
     let target = RpcClient::new(&target_url)?;
     let engine = ParityEngine::new(upstream, target);
 
     let multi = MultiProgress::new();
     let pb = multi.add(ProgressBar::new(manifest.methods.len() as u64));
-    
+
     pb.set_style(
         ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}",
@@ -85,23 +102,30 @@ async fn run_parity_check(
 
     pb.set_message("Executing RPC calls...");
 
-    let results = engine.run_all(manifest.methods).await;
-    
+    let results = engine.run_all(manifest.methods, &expected_diffs).await;
+
     pb.finish_with_message("Done!");
 
     let report = FinalReport::new(results);
-    
+
     // Save report as JSON
     let json_output = serde_json::to_string_pretty(&report)?;
     std::fs::write(&output_path, json_output)?;
-    
+
     // Save report as Markdown
     let md_path = output_path.with_extension("md");
     std::fs::write(md_path, report.to_markdown())?;
 
     println!("\n✅ Parity check complete!");
-    println!("   Summary: {} total, {} matches, {} diffs, {} errors", 
-             report.summary.total, report.summary.matches, report.summary.diffs, report.summary.errors);
+    println!(
+        "   Summary: {} total | ✅ {} match | ❌ {} diff | 📋 {} expected | 🔍 {} missing | ⚠️ {} error",
+        report.summary.total,
+        report.summary.matches,
+        report.summary.diffs,
+        report.summary.expected_diffs,
+        report.summary.missing,
+        report.summary.errors,
+    );
     println!("   Report saved to: {}", output_path.display());
 
     Ok(())

@@ -40,7 +40,7 @@ name = "getblockchaininfo"
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Parity check complete!"))
-        .stdout(predicate::str::contains("1 total, 1 matches, 0 diffs, 0 errors"));
+        .stdout(predicate::str::contains("1 total | ✅ 1 match | ❌ 0 diff"));
 
     // Verify report files exist
     assert!(report_path.exists());

@@ -29,6 +29,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub mod client;
 pub mod differ;
 pub mod engine;
+pub mod expected_diffs;
 pub mod manifest;
 pub mod normalizer;
 pub mod report;
