@@ -1,8 +1,196 @@
+# Zallet Parity Harness — Method Suite v1
+#
+# This file defines the RPC methods compared between zcashd (upstream)
+# and Zallet (target). Add new methods here to extend coverage.
+#
+# Fields per method:
+#   name         — JSON-RPC method name (required)
+#   params       — JSON array of call parameters (optional, default: null)
+#   ignore_paths — JSON Pointer paths to strip before comparison (optional)
+#                  Use for volatile fields (timestamps, block counts) that
+#                  differ by design rather than by incompatibility.
+#   tags         — free-form labels for filtering and reporting (optional)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BLOCKCHAIN
+# Methods that describe the local chain state.
+# ─────────────────────────────────────────────────────────────────────────────
+
 [[methods]]
 name = "getblockchaininfo"
+tags = ["blockchain", "core"]
+# volatile: block height, verification progress, timestamps change each block.
+ignore_paths = [
+    "/blocks",
+    "/headers",
+    "/verificationprogress",
+    "/estimatedheight",
+    "/chainwork",
+    "/bestblockhash",
+    "/size_on_disk",
+    "/commitments",
+]
+
+[[methods]]
+name = "getblockcount"
+tags = ["blockchain", "core"]
+# Returns a single integer — always volatile. Ignore the root value.
+# NOTE: result is a scalar; full result will differ. Mark EXPECTED_DIFF
+# in expected_diffs.toml for live runs; fixture tests still validate
+# the method is reachable on both endpoints.
+
+[[methods]]
+name = "getbestblockhash"
+tags = ["blockchain", "core"]
+# Returns current tip hash — always volatile in live runs.
+
+[[methods]]
+name = "getdifficulty"
+tags = ["blockchain", "mining"]
+
+[[methods]]
+name = "getdeprecationinfo"
+tags = ["blockchain", "core"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NETWORK
+# Methods that report p2p and protocol-level information.
+# ─────────────────────────────────────────────────────────────────────────────
 
 [[methods]]
 name = "getnetworkinfo"
+tags = ["network", "core"]
+# volatile: peer counts, relay fee, and version string differ between impls.
+ignore_paths = [
+    "/connections",
+    "/relayfee",
+    "/incrementalfee",
+]
+
+[[methods]]
+name = "getconnectioncount"
+tags = ["network"]
+
+[[methods]]
+name = "getnettotals"
+tags = ["network"]
+# volatile: byte counts change continuously; ignore all numeric fields.
+ignore_paths = [
+    "/totalbytesrecv",
+    "/totalbytessent",
+    "/timemillis",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WALLET — Balances & Addresses
+# Methods that return wallet state. Require both endpoints to load the
+# same wallet keys for results to be meaningful.
+# ─────────────────────────────────────────────────────────────────────────────
 
 [[methods]]
 name = "getwalletinfo"
+tags = ["wallet", "core"]
+# volatile: txcount, unlocked_until, and keypoolsize may differ.
+ignore_paths = [
+    "/walletversion",
+    "/txcount",
+    "/unlocked_until",
+    "/keypoolsize",
+    "/keypoololdest",
+]
+
+[[methods]]
+name = "getbalance"
+tags = ["wallet", "balance"]
+
+[[methods]]
+name = "z_gettotalbalance"
+tags = ["wallet", "balance", "shielded"]
+# Returns { transparent, private, total }
+ignore_paths = []
+
+[[methods]]
+name = "listaddresses"
+tags = ["wallet", "addresses"]
+
+[[methods]]
+name = "z_listaddresses"
+tags = ["wallet", "addresses", "shielded"]
+
+[[methods]]
+name = "getaddressesbyaccount"
+params = [""]
+tags = ["wallet", "addresses"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WALLET — Transactions
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[methods]]
+name = "listtransactions"
+tags = ["wallet", "transactions"]
+# Returns an array; order and count may differ between implementations.
+# Use as a presence/schema test rather than exact value comparison.
+
+[[methods]]
+name = "listunspent"
+tags = ["wallet", "transactions", "utxo"]
+
+[[methods]]
+name = "listreceivedbyaddress"
+tags = ["wallet", "transactions"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WALLET — Shielded / Unified
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[methods]]
+name = "z_listunspent"
+tags = ["wallet", "shielded", "utxo"]
+
+[[methods]]
+name = "z_getoperationresult"
+params = [[]]
+tags = ["wallet", "shielded", "async-ops"]
+# Returns results of completed async operations; empty array when idle.
+
+[[methods]]
+name = "z_getoperationstatus"
+params = [[]]
+tags = ["wallet", "shielded", "async-ops"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MINING / WORK
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[methods]]
+name = "getmininginfo"
+tags = ["mining"]
+# volatile: hashrate and block template change each block.
+ignore_paths = [
+    "/blocks",
+    "/currentblocksize",
+    "/currentblocktx",
+    "/difficulty",
+    "/networkhashps",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UTILITY
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[methods]]
+name = "validateaddress"
+params = ["t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs"]
+tags = ["utility"]
+# Uses a well-known Zcash mainnet transparent address for reproducibility.
+
+[[methods]]
+name = "z_validateaddress"
+params = ["t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs"]
+tags = ["utility", "shielded"]
+
+[[methods]]
+name = "getmemoryinfo"
+tags = ["utility", "debug"]
+ignore_paths = ["/locked/used", "/locked/free", "/locked/total", "/locked/locked", "/locked/chunks_used", "/locked/chunks_free"]
