@@ -1,6 +1,6 @@
+use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::{Result, Error};
 
 /// A manifest defining the suite of RPC methods to test.
 #[derive(Debug, Serialize, Deserialize)]

@@ -83,7 +83,11 @@ fn diff_recursive(upstream: &Value, target: &Value, path: String, out: &mut Vec<
         }
         (u, t) if u != t => {
             out.push(DiffEntry {
-                path: if path.is_empty() { "/".to_string() } else { path },
+                path: if path.is_empty() {
+                    "/".to_string()
+                } else {
+                    path
+                },
                 upstream: u.clone(),
                 target: t.clone(),
             });

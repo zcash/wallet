@@ -1,8 +1,8 @@
+use crate::{Error, Result};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use serde_json::Value;
 use std::time::Duration;
-use crate::{Result, Error};
 
 /// Default per-request timeout for RPC calls.
 /// Keeps the harness from hanging indefinitely on an unresponsive node.
@@ -53,4 +53,3 @@ impl RpcClient {
         &self.url
     }
 }
-

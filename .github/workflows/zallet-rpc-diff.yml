@@ -1,31 +1,60 @@
-name: Zallet RPC Diff CI
+name: zallet-rpc-diff CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - 'tools/zallet-rpc-diff/**'
       - '.github/workflows/zallet-rpc-diff.yml'
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths:
       - 'tools/zallet-rpc-diff/**'
       - '.github/workflows/zallet-rpc-diff.yml'
 
+defaults:
+  run:
+    working-directory: tools/zallet-rpc-diff
+
 jobs:
-  test:
+  ci:
+    name: Build, Test, Lint
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      # Cache Cargo registry and compiled deps for faster subsequent runs
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/zallet-rpc-diff/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('tools/zallet-rpc-diff/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check (locked)
+        run: cargo check --workspace --locked
+
       - name: Build
-        run: cargo build -p zallet-parity-cli -p zallet-parity-core -p zallet-parity-testkit
+        run: cargo build --workspace --locked
+
       - name: Test
-        run: cargo test -p zallet-parity-cli -p zallet-parity-core -p zallet-parity-testkit
-      - name: Format
+        run: cargo test --workspace --locked
+
+      - name: Format check
         run: cargo fmt --all -- --check
+
       - name: Clippy
-        run: cargo clippy -p zallet-parity-cli -p zallet-parity-core -p zallet-parity-testkit -- -D warnings
+        run: >
+          cargo clippy --workspace --locked --all-targets --all-features
+          -- -D warnings

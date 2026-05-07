@@ -1,6 +1,6 @@
-use wiremock::{MockServer, Mock, ResponseTemplate, Request};
-use wiremock::matchers::{method, path};
 use serde_json::{json, Value};
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 /// A mock Zcash RPC node for testing.
 pub struct MockNode {
@@ -62,7 +62,8 @@ impl MockNode {
     /// Mocks a JSON-RPC "method not found" response (error code -32601).
     /// Use this to test the MISSING classification path.
     pub async fn mock_method_not_found(&self, method_name: &str, expected_params: Value) {
-        self.mock_rpc_error(method_name, expected_params, -32601, "Method not found").await;
+        self.mock_rpc_error(method_name, expected_params, -32601, "Method not found")
+            .await;
     }
 
     /// Mocks a generic JSON-RPC error response with the given code and message.

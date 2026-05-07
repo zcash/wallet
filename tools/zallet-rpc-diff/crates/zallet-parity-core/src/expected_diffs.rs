@@ -24,9 +24,9 @@
 //! diff_paths = ["/version", "/subversion"]
 //! ```
 
+use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::{Result, Error};
 
 /// A single expected-difference entry.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -71,7 +71,11 @@ impl ExpectedDiffs {
     /// - If an entry exists for the method with no `diff_paths`, all diffs are expected.
     /// - If an entry exists with `diff_paths`, the diff is expected only if **all**
     ///   of the actual diff paths are covered by the entry's paths.
-    pub fn is_expected(&self, method: &str, actual_diff_paths: &[String]) -> Option<&ExpectedDiffEntry> {
+    pub fn is_expected(
+        &self,
+        method: &str,
+        actual_diff_paths: &[String],
+    ) -> Option<&ExpectedDiffEntry> {
         self.expected.iter().find(|entry| {
             if entry.method != method {
                 return false;
@@ -106,11 +110,13 @@ mod tests {
 
     #[test]
     fn test_parse_method_level_entry() {
-        let ed = load_from_str(r#"
+        let ed = load_from_str(
+            r#"
 [[expected]]
 method = "getnetworkinfo"
 reason = "Intentional difference in version string."
-"#);
+"#,
+        );
         assert_eq!(ed.expected.len(), 1);
         assert_eq!(ed.expected[0].method, "getnetworkinfo");
         assert!(ed.expected[0].diff_paths.is_empty());
@@ -118,12 +124,14 @@ reason = "Intentional difference in version string."
 
     #[test]
     fn test_parse_field_level_entry() {
-        let ed = load_from_str(r#"
+        let ed = load_from_str(
+            r#"
 [[expected]]
 method = "getblockchaininfo"
 reason = "Zallet omits softforks."
 diff_paths = ["/softforks"]
-"#);
+"#,
+        );
         assert_eq!(ed.expected[0].diff_paths, vec!["/softforks"]);
     }
 
@@ -135,7 +143,8 @@ diff_paths = ["/softforks"]
 
     #[test]
     fn test_parse_multiple_entries() {
-        let ed = load_from_str(r#"
+        let ed = load_from_str(
+            r#"
 [[expected]]
 method = "getnetworkinfo"
 reason = "Version diff."
@@ -144,7 +153,8 @@ reason = "Version diff."
 method = "getwalletinfo"
 reason = "Balance diff."
 diff_paths = ["/balance"]
-"#);
+"#,
+        );
         assert_eq!(ed.expected.len(), 2);
     }
 
@@ -152,23 +162,27 @@ diff_paths = ["/balance"]
 
     #[test]
     fn test_method_level_entry_matches_any_diff_path() {
-        let ed = load_from_str(r#"
+        let ed = load_from_str(
+            r#"
 [[expected]]
 method = "getnetworkinfo"
 reason = "Any diff is expected."
-"#);
+"#,
+        );
         let actual_paths = vec!["/version".to_string(), "/subversion".to_string()];
         assert!(ed.is_expected("getnetworkinfo", &actual_paths).is_some());
     }
 
     #[test]
     fn test_field_level_entry_matches_covered_paths() {
-        let ed = load_from_str(r#"
+        let ed = load_from_str(
+            r#"
 [[expected]]
 method = "getblockchaininfo"
 reason = "Softforks omitted."
 diff_paths = ["/softforks"]
-"#);
+"#,
+        );
         let actual_paths = vec!["/softforks/0/id".to_string(), "/softforks/1/id".to_string()];
         // Both paths start with /softforks — fully covered
         assert!(ed.is_expected("getblockchaininfo", &actual_paths).is_some());
@@ -176,12 +190,14 @@ diff_paths = ["/softforks"]
 
     #[test]
     fn test_field_level_entry_does_not_match_uncovered_paths() {
-        let ed = load_from_str(r#"
+        let ed = load_from_str(
+            r#"
 [[expected]]
 method = "getblockchaininfo"
 reason = "Only softforks is expected."
 diff_paths = ["/softforks"]
-"#);
+"#,
+        );
         // /chain is NOT covered — should not be expected
         let actual_paths = vec!["/softforks/0".to_string(), "/chain".to_string()];
         assert!(ed.is_expected("getblockchaininfo", &actual_paths).is_none());
@@ -189,11 +205,13 @@ diff_paths = ["/softforks"]
 
     #[test]
     fn test_wrong_method_does_not_match() {
-        let ed = load_from_str(r#"
+        let ed = load_from_str(
+            r#"
 [[expected]]
 method = "getnetworkinfo"
 reason = "Some diff."
-"#);
+"#,
+        );
         assert!(ed.is_expected("getblockchaininfo", &[]).is_none());
     }
 

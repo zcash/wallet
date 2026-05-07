@@ -1,10 +1,10 @@
-use tokio::task::JoinSet;
-use serde_json::Value;
 use crate::client::RpcClient;
 use crate::differ::{diff_values, DiffEntry};
 use crate::expected_diffs::ExpectedDiffs;
 use crate::normalizer::{normalize, parse_ignore_paths};
 use crate::Error;
+use serde_json::Value;
+use tokio::task::JoinSet;
 
 /// JSON-RPC "method not found" error code per spec.
 const METHOD_NOT_FOUND_CODE: i32 = -32601;
@@ -38,9 +38,7 @@ pub enum ParityResult {
         reason: String,
     },
     /// One or both endpoints returned -32601 "method not found".
-    Missing {
-        method: String,
-    },
+    Missing { method: String },
     /// A transport failure or non-missing RPC error occurred.
     Error(String),
 }
@@ -127,7 +125,9 @@ impl ParityEngine {
                                     reason: ee.reason.clone(),
                                 }
                             } else {
-                                ParityResult::Diff { diff_entries: entries }
+                                ParityResult::Diff {
+                                    diff_entries: entries,
+                                }
                             }
                         }
                     }
@@ -135,15 +135,17 @@ impl ParityEngine {
                     (Err(ref e_u), Err(ref e_t))
                         if is_method_not_found(e_u) && is_method_not_found(e_t) =>
                     {
-                        ParityResult::Missing { method: method_name.clone() }
+                        ParityResult::Missing {
+                            method: method_name.clone(),
+                        }
                     }
                     // One side: method not found
-                    (Err(ref e), _) if is_method_not_found(e) => {
-                        ParityResult::Missing { method: method_name.clone() }
-                    }
-                    (_, Err(ref e)) if is_method_not_found(e) => {
-                        ParityResult::Missing { method: method_name.clone() }
-                    }
+                    (Err(ref e), _) if is_method_not_found(e) => ParityResult::Missing {
+                        method: method_name.clone(),
+                    },
+                    (_, Err(ref e)) if is_method_not_found(e) => ParityResult::Missing {
+                        method: method_name.clone(),
+                    },
                     // Other upstream error
                     (Err(e), _) => ParityResult::Error(format!("Upstream error: {}", e)),
                     // Other target error
@@ -168,13 +170,17 @@ impl ParityEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zallet_parity_testkit::MockNode;
     use crate::expected_diffs::{ExpectedDiffEntry, ExpectedDiffs};
     use crate::manifest::MethodEntry;
     use serde_json::json;
+    use zallet_parity_testkit::MockNode;
 
     fn entry(name: &str) -> MethodEntry {
-        MethodEntry { name: name.to_string(), params: None, ignore_paths: vec![] }
+        MethodEntry {
+            name: name.to_string(),
+            params: None,
+            ignore_paths: vec![],
+        }
     }
 
     fn entry_with_ignore(name: &str, paths: Vec<&str>) -> MethodEntry {
@@ -185,7 +191,9 @@ mod tests {
         }
     }
 
-    fn no_expected() -> ExpectedDiffs { ExpectedDiffs::none() }
+    fn no_expected() -> ExpectedDiffs {
+        ExpectedDiffs::none()
+    }
 
     // ── MATCH ────────────────────────────────────────────────────────────────
 
@@ -197,7 +205,10 @@ mod tests {
         let resp = json!({"blocks": 100, "chain": "main"});
         u.mock_response(method, json!(null), resp.clone()).await;
         t.mock_response(method, json!(null), resp).await;
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
         let results = engine.run_all(vec![entry(method)], &no_expected()).await;
         assert_eq!(results.len(), 1);
         assert!(matches!(results[0].1, ParityResult::Match));
@@ -210,13 +221,21 @@ mod tests {
         let u = MockNode::spawn().await;
         let t = MockNode::spawn().await;
         let method = "test_ordering";
-        u.mock_response(method, json!(null), json!({"z": 1, "a": 2, "m": 3})).await;
-        t.mock_response(method, json!(null), json!({"a": 2, "m": 3, "z": 1})).await;
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
+        u.mock_response(method, json!(null), json!({"z": 1, "a": 2, "m": 3}))
+            .await;
+        t.mock_response(method, json!(null), json!({"a": 2, "m": 3, "z": 1}))
+            .await;
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
         let results = engine.run_all(vec![entry(method)], &no_expected()).await;
         assert_eq!(results.len(), 1);
-        assert!(matches!(results[0].1, ParityResult::Match),
-            "ordering-only diff should be MATCH, got: {:?}", results[0].1);
+        assert!(
+            matches!(results[0].1, ParityResult::Match),
+            "ordering-only diff should be MATCH, got: {:?}",
+            results[0].1
+        );
     }
 
     // ── DIFF ─────────────────────────────────────────────────────────────────
@@ -226,9 +245,14 @@ mod tests {
         let u = MockNode::spawn().await;
         let t = MockNode::spawn().await;
         let method = "test_diff";
-        u.mock_response(method, json!(null), json!({"chain": "main", "blocks": 100})).await;
-        t.mock_response(method, json!(null), json!({"chain": "test", "blocks": 100})).await;
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
+        u.mock_response(method, json!(null), json!({"chain": "main", "blocks": 100}))
+            .await;
+        t.mock_response(method, json!(null), json!({"chain": "test", "blocks": 100}))
+            .await;
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
         let results = engine.run_all(vec![entry(method)], &no_expected()).await;
         assert_eq!(results.len(), 1);
         if let ParityResult::Diff { diff_entries } = &results[0].1 {
@@ -246,18 +270,23 @@ mod tests {
         let u = MockNode::spawn().await;
         let t = MockNode::spawn().await;
         let method = "test_expected_diff";
-        u.mock_response(method, json!(null), json!({"version": "zcashd/4.7.0"})).await;
-        t.mock_response(method, json!(null), json!({"version": "zallet/0.1.0"})).await;
+        u.mock_response(method, json!(null), json!({"version": "zcashd/4.7.0"}))
+            .await;
+        t.mock_response(method, json!(null), json!({"version": "zallet/0.1.0"}))
+            .await;
 
         let expected = ExpectedDiffs {
             expected: vec![ExpectedDiffEntry {
                 method: method.to_string(),
                 reason: "Zallet reports a different version string.".to_string(),
-                diff_paths: vec![],  // method-level: any diff is expected
+                diff_paths: vec![], // method-level: any diff is expected
             }],
         };
 
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
         let results = engine.run_all(vec![entry(method)], &expected).await;
         assert_eq!(results.len(), 1);
         if let ParityResult::ExpectedDiff { reason, .. } = &results[0].1 {
@@ -275,8 +304,18 @@ mod tests {
         let t = MockNode::spawn().await;
         let method = "test_field_expected";
         // Diff only at /softforks — which is covered by the expected entry
-        u.mock_response(method, json!(null), json!({"chain": "main", "softforks": [{"id": "csv"}]})).await;
-        t.mock_response(method, json!(null), json!({"chain": "main", "softforks": []})).await;
+        u.mock_response(
+            method,
+            json!(null),
+            json!({"chain": "main", "softforks": [{"id": "csv"}]}),
+        )
+        .await;
+        t.mock_response(
+            method,
+            json!(null),
+            json!({"chain": "main", "softforks": []}),
+        )
+        .await;
 
         let expected = ExpectedDiffs {
             expected: vec![ExpectedDiffEntry {
@@ -286,11 +325,17 @@ mod tests {
             }],
         };
 
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
         let results = engine.run_all(vec![entry(method)], &expected).await;
         assert_eq!(results.len(), 1);
-        assert!(matches!(results[0].1, ParityResult::ExpectedDiff { .. }),
-            "covered field diff should be ExpectedDiff, got: {:?}", results[0].1);
+        assert!(
+            matches!(results[0].1, ParityResult::ExpectedDiff { .. }),
+            "covered field diff should be ExpectedDiff, got: {:?}",
+            results[0].1
+        );
     }
 
     // ── DIFF when only some paths are expected ────────────────────────────────
@@ -301,8 +346,18 @@ mod tests {
         let t = MockNode::spawn().await;
         let method = "test_partial_expected";
         // Diff at /softforks (expected) AND /chain (unexpected)
-        u.mock_response(method, json!(null), json!({"chain": "main", "softforks": [{"id": "csv"}]})).await;
-        t.mock_response(method, json!(null), json!({"chain": "test", "softforks": []})).await;
+        u.mock_response(
+            method,
+            json!(null),
+            json!({"chain": "main", "softforks": [{"id": "csv"}]}),
+        )
+        .await;
+        t.mock_response(
+            method,
+            json!(null),
+            json!({"chain": "test", "softforks": []}),
+        )
+        .await;
 
         let expected = ExpectedDiffs {
             expected: vec![ExpectedDiffEntry {
@@ -312,12 +367,18 @@ mod tests {
             }],
         };
 
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
         let results = engine.run_all(vec![entry(method)], &expected).await;
         assert_eq!(results.len(), 1);
         // /chain is NOT covered → must be DIFF, not ExpectedDiff
-        assert!(matches!(results[0].1, ParityResult::Diff { .. }),
-            "partial coverage should remain DIFF, got: {:?}", results[0].1);
+        assert!(
+            matches!(results[0].1, ParityResult::Diff { .. }),
+            "partial coverage should remain DIFF, got: {:?}",
+            results[0].1
+        );
     }
 
     // ── MATCH via ignore_paths ────────────────────────────────────────────────
@@ -327,13 +388,34 @@ mod tests {
         let u = MockNode::spawn().await;
         let t = MockNode::spawn().await;
         let method = "test_ignore";
-        u.mock_response(method, json!(null), json!({"chain": "main", "volatile": 999})).await;
-        t.mock_response(method, json!(null), json!({"chain": "main", "volatile": 888})).await;
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
-        let results = engine.run_all(vec![entry_with_ignore(method, vec!["/volatile"])], &no_expected()).await;
+        u.mock_response(
+            method,
+            json!(null),
+            json!({"chain": "main", "volatile": 999}),
+        )
+        .await;
+        t.mock_response(
+            method,
+            json!(null),
+            json!({"chain": "main", "volatile": 888}),
+        )
+        .await;
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
+        let results = engine
+            .run_all(
+                vec![entry_with_ignore(method, vec!["/volatile"])],
+                &no_expected(),
+            )
+            .await;
         assert_eq!(results.len(), 1);
-        assert!(matches!(results[0].1, ParityResult::Match),
-            "ignored path diff should be MATCH, got: {:?}", results[0].1);
+        assert!(
+            matches!(results[0].1, ParityResult::Match),
+            "ignored path diff should be MATCH, got: {:?}",
+            results[0].1
+        );
     }
 
     // ── MISSING ───────────────────────────────────────────────────────────────
@@ -343,14 +425,19 @@ mod tests {
         let u = MockNode::spawn().await;
         let t = MockNode::spawn().await;
         let method = "test_missing";
-        u.mock_response(method, json!(null), json!({"ok": true})).await;
+        u.mock_response(method, json!(null), json!({"ok": true}))
+            .await;
         t.mock_method_not_found(method, json!(null)).await;
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
         let results = engine.run_all(vec![entry(method)], &no_expected()).await;
         assert_eq!(results.len(), 1);
         assert!(
             matches!(&results[0].1, ParityResult::Missing { method: m } if m == method),
-            "expected Missing, got {:?}", results[0].1
+            "expected Missing, got {:?}",
+            results[0].1
         );
     }
 
@@ -361,14 +448,20 @@ mod tests {
         let u = MockNode::spawn().await;
         let t = MockNode::spawn().await;
         let method = "test_error";
-        u.mock_rpc_error(method, json!(null), -32603, "Internal server error").await;
-        t.mock_response(method, json!(null), json!({"ok": true})).await;
-        let engine = ParityEngine::new(RpcClient::new(&u.url()).unwrap(), RpcClient::new(&t.url()).unwrap());
+        u.mock_rpc_error(method, json!(null), -32603, "Internal server error")
+            .await;
+        t.mock_response(method, json!(null), json!({"ok": true}))
+            .await;
+        let engine = ParityEngine::new(
+            RpcClient::new(&u.url()).unwrap(),
+            RpcClient::new(&t.url()).unwrap(),
+        );
         let results = engine.run_all(vec![entry(method)], &no_expected()).await;
         assert_eq!(results.len(), 1);
         assert!(
             matches!(&results[0].1, ParityResult::Error(msg) if msg.contains("Upstream error")),
-            "expected Error, got {:?}", results[0].1
+            "expected Error, got {:?}",
+            results[0].1
         );
     }
 }

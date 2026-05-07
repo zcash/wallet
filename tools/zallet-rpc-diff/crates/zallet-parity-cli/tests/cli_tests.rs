@@ -1,9 +1,9 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use serde_json::json;
 use std::fs;
 use tempfile::tempdir;
 use zallet_parity_testkit::MockNode;
-use serde_json::json;
 
 #[tokio::test]
 async fn test_cli_run_success() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,8 +11,12 @@ async fn test_cli_run_success() -> Result<(), Box<dyn std::error::Error>> {
     let target = MockNode::spawn().await;
 
     // Mock responses
-    upstream.mock_response("getblockchaininfo", json!(null), json!({"blocks": 100})).await;
-    target.mock_response("getblockchaininfo", json!(null), json!({"blocks": 100})).await;
+    upstream
+        .mock_response("getblockchaininfo", json!(null), json!({"blocks": 100}))
+        .await;
+    target
+        .mock_response("getblockchaininfo", json!(null), json!({"blocks": 100}))
+        .await;
 
     let dir = tempdir()?;
     let manifest_path = dir.path().join("manifest.toml");

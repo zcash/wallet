@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use crate::differ::DiffEntry;
 use crate::engine::ParityResult;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// The final report structure for a parity run.
@@ -75,7 +75,10 @@ impl FinalReport {
                         diff_paths,
                     }
                 }
-                ParityResult::ExpectedDiff { diff_entries, reason } => {
+                ParityResult::ExpectedDiff {
+                    diff_entries,
+                    reason,
+                } => {
                     expected_diffs += 1;
                     let diff_paths: Vec<String> =
                         diff_entries.iter().map(|e| e.path.clone()).collect();
@@ -136,7 +139,10 @@ impl FinalReport {
         md.push_str(&format!("- **Total Tests**: {}\n", self.summary.total));
         md.push_str(&format!("- **✅ Matches**: {}\n", self.summary.matches));
         md.push_str(&format!("- **❌ Diffs**: {}\n", self.summary.diffs));
-        md.push_str(&format!("- **📋 Expected Diffs**: {}\n", self.summary.expected_diffs));
+        md.push_str(&format!(
+            "- **📋 Expected Diffs**: {}\n",
+            self.summary.expected_diffs
+        ));
         md.push_str(&format!("- **🔍 Missing**: {}\n", self.summary.missing));
         md.push_str(&format!("- **⚠️ Errors**: {}\n\n", self.summary.errors));
 
@@ -150,20 +156,31 @@ impl FinalReport {
         for (method, res) in sorted_details {
             let (status, notes) = match res {
                 ParityResultReport::Match => ("✅ Match", String::new()),
-                ParityResultReport::Diff { diff_count, diff_paths } => {
+                ParityResultReport::Diff {
+                    diff_count,
+                    diff_paths,
+                } => {
                     let paths = diff_paths.join(", ");
-                    ("❌ Diff", format!("{} field(s) differ: `{}`", diff_count, paths))
+                    (
+                        "❌ Diff",
+                        format!("{} field(s) differ: `{}`", diff_count, paths),
+                    )
                 }
-                ParityResultReport::ExpectedDiff { diff_count, diff_paths, reason } => {
+                ParityResultReport::ExpectedDiff {
+                    diff_count,
+                    diff_paths,
+                    reason,
+                } => {
                     let paths = diff_paths.join(", ");
-                    ("📋 Expected Diff", format!(
-                        "{} field(s): `{}` — _{}_",
-                        diff_count, paths, reason
-                    ))
+                    (
+                        "📋 Expected Diff",
+                        format!("{} field(s): `{}` — _{}_", diff_count, paths, reason),
+                    )
                 }
-                ParityResultReport::Missing { method: m } => {
-                    ("🔍 Missing", format!("Method `{}` not found on one endpoint", m))
-                }
+                ParityResultReport::Missing { method: m } => (
+                    "🔍 Missing",
+                    format!("Method `{}` not found on one endpoint", m),
+                ),
                 ParityResultReport::Error { message } => ("⚠️ Error", message.clone()),
             };
             md.push_str(&format!(
