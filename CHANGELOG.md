@@ -43,6 +43,11 @@ be considered breaking changes.
   `z_shieldcoinbase` (and any other consumer of
   `TransparentOutputFilter::CoinbaseOnly`) to correctly identify coinbase
   outputs.
+- `z_sendmany` and `z_shieldcoinbase` no longer fail with `Query returned no
+  rows` when a proposal includes inputs at HD-derived transparent addresses.
+  The keystore's standalone-key decryption is now invoked only for addresses
+  that were imported standalone; HD-derived addresses are signed for using
+  the account's unified spending key.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 
