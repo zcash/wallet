@@ -7563,6 +7563,7 @@ dependencies = [
  "schemerz-rusqlite",
  "secp256k1 0.29.1",
  "secrecy 0.8.0",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.10.9",
