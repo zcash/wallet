@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "zallet",
+    "tools/zallet-rpc-diff/crates/zallet-parity-core",
+    "tools/zallet-rpc-diff/crates/zallet-parity-cli",
+    "tools/zallet-rpc-diff/crates/zallet-parity-testkit",
 ]
 # `vendor/core2-shim-0.3` and `vendor/core2-shim-0.4` are referenced from the
 # `[patch.crates-io]` table below, but excluded from the workspace because
@@ -84,6 +87,8 @@ secrecy = { version = "0.8", features = ["serde"] }
 abscissa_core = "0.9"
 abscissa_tokio = "0.9"
 clap = { version = "4.5", features = ["derive"] }
+color-eyre = "0.6"
+indicatif = "0.17"
 rpassword = "7"
 
 # RPC
@@ -100,10 +105,14 @@ schemars = "1"
 tower = "0.4"
 
 # Testing
+assert-json-diff = "2"
 once_cell = "1.2"
 regex = "1.4"
 tempfile = "3"
 trycmd = "0.15"
+
+# Error handling
+thiserror = "2"
 
 # Tracing
 console-subscriber = "0.5"

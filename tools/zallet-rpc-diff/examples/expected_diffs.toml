@@ -1,0 +1,52 @@
+# expected_diffs.toml — Known intentional divergences between zcashd and Zallet
+#
+# Add an entry here for any method where a diff is expected and understood.
+# The harness will label these EXPECTED_DIFF in the report instead of DIFF,
+# so new regressions are not masked by known differences.
+#
+# Fields:
+#   method      — RPC method name (required)
+#   reason      — human-readable explanation (required)
+#   diff_paths  — JSON Pointer paths (RFC 6901) where the diff is expected.
+#                 If omitted or empty, any diff on this method is considered expected.
+#                 If non-empty, a diff is EXPECTED_DIFF only if ALL actual diff paths
+#                 are prefixed by one of the listed paths. Any uncovered path → DIFF.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# getnetworkinfo
+# Zallet reports its own version/subversion strings; zcashd reports its own.
+# This is intentional and not a parity gap.
+# ─────────────────────────────────────────────────────────────────────────────
+[[expected]]
+method = "getnetworkinfo"
+reason = "Zallet reports its own agent/version string (e.g. 'Zallet/0.1.0') while zcashd reports '/MagicBean:...' — intentional product identity difference."
+diff_paths = ["/version", "/subversion", "/useragent"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# getblockchaininfo — softforks / upgrades field shape
+# zcashd returns a legacy 'softforks' array; Zallet may return 'upgrades'
+# in a different schema. Mark the structural difference as expected.
+# ─────────────────────────────────────────────────────────────────────────────
+[[expected]]
+method = "getblockchaininfo"
+reason = "zcashd returns 'softforks' as a legacy array while Zallet uses the 'upgrades' map format. Shape difference is intentional; value parity is tracked separately."
+diff_paths = ["/softforks", "/upgrades"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# getwalletinfo — walletname / descriptors fields
+# Zallet may expose additional descriptor-wallet fields not present in zcashd.
+# ─────────────────────────────────────────────────────────────────────────────
+[[expected]]
+method = "getwalletinfo"
+reason = "Zallet exposes additional fields (walletname, descriptors) not present in zcashd's getwalletinfo. Extra fields in target are expected during the migration period."
+diff_paths = ["/walletname", "/descriptors", "/avoid_reuse", "/scanning"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# getdeprecationinfo
+# zcashd returns deprecation info tied to its own release schedule.
+# Zallet does not have the same deprecation lifecycle.
+# ─────────────────────────────────────────────────────────────────────────────
+[[expected]]
+method = "getdeprecationinfo"
+reason = "zcashd's getdeprecationinfo is tied to its release/deprecation cycle; Zallet returns different values or may not implement this method yet."
+diff_paths = []
