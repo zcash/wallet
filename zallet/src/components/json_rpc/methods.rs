@@ -62,6 +62,8 @@ mod z_get_total_balance;
 mod z_import_address;
 #[cfg(zallet_build = "wallet")]
 mod z_send_many;
+#[cfg(zallet_build = "wallet")]
+mod z_shieldcoinbase;
 
 /// The general JSON-RPC interface, containing the methods provided in all Zallet builds.
 #[rpc(server)]
@@ -561,6 +563,59 @@ pub(crate) trait WalletRpc {
         fee: Option<JsonValue>,
         privacy_policy: Option<String>,
     ) -> z_send_many::Response;
+
+    /// Shields coinbase UTXOs by sending them from a transparent address (or all
+    /// wallet taddrs) to a shielded address within the same account.
+    ///
+    /// This is an asynchronous operation; it returns an operation ID that can
+    /// be used with `z_getoperationstatus` or `z_getoperationresult`.
+    ///
+    /// **Note:** This method's behavior differs from `zcashd`. The `toaddress`
+    /// must be a wallet-owned shielded address and is used to select the account
+    /// whose transparent UTXOs will be shielded. The resulting transaction sends
+    /// funds to the account's internal shielded address, which may differ from
+    /// `toaddress`. The `fromaddress` must also belong to the same account.
+    ///
+    /// # Arguments
+    /// - `fromaddress` (string, required): A wallet-owned transparent address to
+    ///   sweep from, or `"*"` to sweep from all taddrs belonging to the same
+    ///   account as `toaddress`. Must belong to the same account as `toaddress`.
+    /// - `toaddress` (string, required): A wallet-owned shielded address (Sapling,
+    ///   Orchard, or Unified with shielded receivers) used to identify the account.
+    ///   Funds are shielded into the account's internal shielded address, which may
+    ///   differ from this address.
+    /// - `fee` (optional): This parameter must be omitted or set to `null`;
+    ///   any other value will be rejected. When accepted, the value of this field
+    ///   is ignored, as Zallet always calculates and applies the ZIP-317 fee
+    ///   internally.
+    /// - `limit` (numeric, optional): Accepted for compatibility but currently
+    ///   ignored; it does not constrain how many UTXOs are shielded.
+    /// - `memo` (string, optional): Accepted for compatibility but currently
+    ///   ignored; it is not stored in the memo field of any new note.
+    /// - `privacy_policy` (string, optional): Policy for what information
+    ///   leakage is acceptable.
+    ///
+    /// # Returns
+    /// An object matching `zcashd`'s `z_shieldcoinbase` shape:
+    /// - `remainingUTXOs` (numeric): Number of coinbase UTXOs eligible for
+    ///   shielding that were not selected. Zallet currently ignores `limit`,
+    ///   so in practice this is `0` whenever the proposal succeeded.
+    /// - `remainingValue` (numeric, ZEC): Total value of those UTXOs.
+    /// - `shieldingUTXOs` (numeric): Number of coinbase UTXOs being shielded
+    ///   by this operation.
+    /// - `shieldingValue` (numeric, ZEC): Total value being shielded.
+    /// - `opid` (string): Operation id to pass to `z_getoperationstatus` or
+    ///   `z_getoperationresult` to retrieve the final result.
+    #[method(name = "z_shieldcoinbase")]
+    async fn z_shieldcoinbase(
+        &self,
+        fromaddress: String,
+        toaddress: String,
+        fee: Option<JsonValue>,
+        limit: Option<u32>,
+        memo: Option<String>,
+        privacy_policy: Option<String>,
+    ) -> z_shieldcoinbase::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -896,5 +951,30 @@ impl WalletRpcServer for WalletRpcImpl {
                 .await?,
             )
             .await)
+    }
+
+    async fn z_shieldcoinbase(
+        &self,
+        fromaddress: String,
+        toaddress: String,
+        fee: Option<JsonValue>,
+        limit: Option<u32>,
+        memo: Option<String>,
+        privacy_policy: Option<String>,
+    ) -> z_shieldcoinbase::Response {
+        let (preflight, context, fut) = z_shieldcoinbase::call(
+            self.wallet().await?,
+            self.keystore.clone(),
+            self.chain().await?,
+            fromaddress,
+            toaddress,
+            fee,
+            limit,
+            memo,
+            privacy_policy,
+        )
+        .await?;
+        let opid = self.start_async((context, fut)).await;
+        Ok(z_shieldcoinbase::ShieldCoinbaseResult::new(preflight, opid))
     }
 }
