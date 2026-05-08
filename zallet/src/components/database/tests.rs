@@ -193,6 +193,23 @@ fn network_mismatch_still_reports_network_error() {
     );
 }
 
+#[test]
+fn incompatible_alpha_is_reported_before_network_mismatch() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db_for_network(
+        config.wallet_db_path(),
+        Network::Consensus(consensus::Network::MainNetwork),
+        &["0.1.0-alpha.2"],
+    );
+
+    let err = open_database(&config).expect_err("incompatible alpha database must be rejected");
+    assert!(
+        err.to_string().contains("fresh Zallet wallet"),
+        "unexpected error: {err}",
+    );
+}
+
 fn test_config(datadir: &std::path::Path, network_type: NetworkType) -> ZalletConfig {
     ZalletConfig {
         datadir: Some(datadir.to_path_buf()),
