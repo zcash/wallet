@@ -152,11 +152,14 @@ pub struct AuthorizationLayer {
 
 impl AuthorizationLayer {
     /// Creates a new `AuthorizationLayer`.
-    pub fn new(auth: Vec<RpcAuthSection>) -> Result<Self, ()> {
+    pub fn new(
+        auth: Vec<RpcAuthSection>,
+        cookie: Option<(String, PasswordHash)>,
+    ) -> Result<Self, ()> {
         let mut using_bare_password = false;
         let mut using_pwhash = false;
 
-        let users = auth
+        let mut users: HashMap<String, PasswordHash> = auth
             .into_iter()
             .map(|a| match (a.password, a.pwhash) {
                 (Some(password), None) => {
@@ -177,6 +180,10 @@ impl AuthorizationLayer {
         }
         if using_pwhash {
             info!("{}", fl!("rpc-pwhash-auth-info"));
+        }
+
+        if let Some((cookie_user, cookie_hash)) = cookie {
+            users.insert(cookie_user, cookie_hash);
         }
 
         Ok(Self { users })
@@ -232,8 +239,24 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
 
-    use super::PasswordHash;
+    use hyper::header::HeaderValue;
+
+    use super::{Authorization, PasswordHash};
+    use crate::components::json_rpc::server::cookie;
+
+    /// Constructs an `Authorization` with the given users and a dummy service.
+    fn auth_with_users(users: HashMap<String, PasswordHash>) -> Authorization<()> {
+        Authorization::new((), users)
+    }
+
+    /// Encodes credentials as a Basic auth header value.
+    fn basic_auth_header(user: &str, password: &str) -> HeaderValue {
+        use base64ct::{Base64, Encoding};
+        let encoded = Base64::encode_string(format!("{user}:{password}").as_bytes());
+        HeaderValue::from_str(&format!("Basic {encoded}")).unwrap()
+    }
 
     #[test]
     fn pwhash_round_trip() {
@@ -244,5 +267,49 @@ mod tests {
         let pwhash_str = pwhash.to_string();
         let parsed_pwhash = pwhash_str.parse::<PasswordHash>().unwrap();
         assert!(parsed_pwhash.check(password));
+    }
+
+    #[test]
+    fn cookie_user_authenticates() {
+        let cookie_password = "K4b8H3nS7vJ2mQ9pR1wX5yA0cE6fG8iL";
+        let mut users = HashMap::new();
+        users.insert(
+            cookie::COOKIE_USER.to_string(),
+            PasswordHash::from_bare(cookie_password),
+        );
+        let auth = auth_with_users(users);
+        let header = basic_auth_header(cookie::COOKIE_USER, cookie_password);
+        assert!(auth.is_authorized(&header));
+    }
+
+    #[test]
+    fn cookie_and_configured_user_coexist() {
+        let mut users = HashMap::new();
+        let password = "abadpassword";
+        let cookie_password = "K4b8H3nS7vJ2mQ9pR1wX5yA0cE6fG8iL";
+        users.insert("user1".to_string(), PasswordHash::from_bare(password));
+        users.insert(
+            cookie::COOKIE_USER.to_string(),
+            PasswordHash::from_bare(cookie_password),
+        );
+        let auth = auth_with_users(users);
+        let user_header = basic_auth_header("user1", password);
+        let cookie_header = basic_auth_header(cookie::COOKIE_USER, cookie_password);
+        assert!(auth.is_authorized(&user_header));
+        assert!(auth.is_authorized(&cookie_header));
+    }
+
+    #[test]
+    fn wrong_cookie_password_rejected() {
+        let mut users = HashMap::new();
+        let cookie_password = "K4b8H3nS7vJ2mQ9pR1wX5yA0cE6fG8iL";
+        let wrong_cookie_password = "wrongcookiepassword";
+        users.insert(
+            cookie::COOKIE_USER.to_string(),
+            PasswordHash::from_bare(cookie_password),
+        );
+        let auth = auth_with_users(users);
+        let header = basic_auth_header(cookie::COOKIE_USER, wrong_cookie_password);
+        assert!(!auth.is_authorized(&header));
     }
 }

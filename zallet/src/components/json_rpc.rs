@@ -49,6 +49,7 @@ impl JsonRpc {
             info!("Trying to open RPC endpoint at {}...", rpc.bind[0]);
             server::spawn(
                 rpc,
+                config.datadir().to_path_buf(),
                 db,
                 #[cfg(zallet_build = "wallet")]
                 keystore,
