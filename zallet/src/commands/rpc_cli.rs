@@ -4,11 +4,16 @@ use std::fmt;
 use std::time::Duration;
 
 use abscissa_core::Runnable;
+use base64ct::{Base64, Encoding};
+use hyper::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use jsonrpsee::core::{client::ClientT, params::ArrayParams};
 use jsonrpsee_http_client::HttpClientBuilder;
 use secrecy::{ExposeSecret, SecretString};
 
-use crate::{cli::RpcCliCmd, commands::AsyncRunnable, error::Error, prelude::*};
+use crate::{
+    cli::RpcCliCmd, commands::AsyncRunnable, components::json_rpc::server::cookie, error::Error,
+    prelude::*,
+};
 
 const DEFAULT_HTTP_CLIENT_TIMEOUT: u64 = 900;
 
@@ -43,31 +48,48 @@ impl AsyncRunnable for RpcCliCmd {
             None => DEFAULT_HTTP_CLIENT_TIMEOUT,
         });
 
-        // Find a password we can use. If none are configured, we assume none is needed.
-        let auth_prefix = config
+        // Find credentials: prefer configured password, fall back to cookie file.
+        let credentials = config
             .rpc
             .auth
             .iter()
             .find_map(|auth| {
                 auth.password
                     .as_ref()
-                    .map(|pw| SecretString::new(format!("{}:{}@", auth.user, pw.expose_secret())))
+                    .map(|pw| SecretString::new(format!("{}:{}", auth.user, pw.expose_secret())))
             })
-            .unwrap_or_else(|| SecretString::new(String::new()));
+            .or_else(|| {
+                // Fall back to cookie-based auth.
+                cookie::read_cookie(config.datadir())
+                    .ok()
+                    .map(SecretString::new)
+            });
+
+        // Build auth header if credentials are available.
+        let mut headers = HeaderMap::new();
+        if let Some(creds) = &credentials {
+            let encoded = Base64::encode_string(creds.expose_secret().as_bytes());
+            let mut value = HeaderValue::from_str(&format!("Basic {encoded}"))
+                .map_err(|_| RpcCliError::FailedToConnect)?;
+            value.set_sensitive(true);
+            headers.insert(AUTHORIZATION, value);
+        }
 
         // Connect to the Zallet wallet.
         let client = match config.rpc.bind.as_slice() {
             &[] => Err(RpcCliError::WalletHasNoRpcServer),
             &[bind] => HttpClientBuilder::default()
                 .request_timeout(timeout)
-                .build(format!("http://{}{bind}", auth_prefix.expose_secret()))
+                .set_headers(headers.clone())
+                .build(format!("http://{bind}"))
                 .map_err(|_| RpcCliError::FailedToConnect),
             addrs => addrs
                 .iter()
                 .find_map(|bind| {
                     HttpClientBuilder::default()
                         .request_timeout(timeout)
-                        .build(format!("http://{}{bind}", auth_prefix.expose_secret()))
+                        .set_headers(headers.clone())
+                        .build(format!("http://{bind}"))
                         .ok()
                 })
                 .ok_or(RpcCliError::FailedToConnect),
