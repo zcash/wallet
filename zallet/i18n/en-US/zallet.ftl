@@ -59,6 +59,10 @@ rpc-bare-password-auth-warn =
     '{-zallet-add-rpc-user}'.
 rpc-pwhash-auth-info = Using '{-cfg-rpc-auth-pwhash}' authorization
 
+rpc-cookie-generated = Generated RPC authentication cookie {$path}
+rpc-cookie-read-failed = Failed to read cookie file: {$error}
+rpc-cookie-user-conflict = Configured user conflicts with cookie auth username, skipping cookie generation
+
 ## zallet.toml example messages
 
 example-alpha-code =

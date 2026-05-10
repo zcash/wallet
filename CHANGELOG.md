@@ -9,7 +9,10 @@ be considered breaking changes.
 ## [0.1.0-alpha.4] - PLANNED
 
 ### Added
-
+- Cookie file authentication for the JSON-RPC interface. A random credential
+  is generated on startup and written to `{datadir}/.cookie`, enabling
+  `zallet rpc` to authenticate automatically without manual password setup.
+  Cookie auth coexists with configured `[[rpc.auth]]` users.
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`
@@ -33,6 +36,8 @@ be considered breaking changes.
 - Significant performance improvements to `zallet migrate-zcashd-wallet`.
 - `zallet migrate-zcashd-wallet` now accepts `--no-scan` to skip chain scanning
   during migration.
+- `zallet rpc` now sends credentials via the `Authorization` header instead of
+  embedding them in the HTTP URL.
 
 ### Fixed
 
