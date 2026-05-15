@@ -9,6 +9,7 @@ be considered breaking changes.
 ## [0.1.0-alpha.4] - PLANNED
 
 ### Added
+
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`
@@ -17,42 +18,48 @@ be considered breaking changes.
   - `z_importaddress`
 
 ### Changed
+
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
   and `addresses` for transparent outputs.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
   `zcashd` didn't include in its response.
 - Significant performance improvements to `zallet migrate-zcashd-wallet`.
 - `zallet migrate-zcashd-wallet` now accepts `--no-scan` to skip chain scanning
-  during migration. Keys, accounts, and transaction data are still imported, but
-  block heights and tree state are not resolved from the chain. Cannot be
-  combined with `--buffer-wallet-transactions`. Useful when chain data is not
-  available.
+  during migration.
 
 ### Fixed
+
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
   not defined.
 - Zallet now refuses to open wallet databases from incompatible earlier alpha
   releases instead of attempting to migrate them.
+- `zallet migrate-zcashd-wallet` now migrates transparent addresses that were
+  added to the `zcashd` wallet via `importpubkey` or `importaddress
+<redeemScript>`.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 
 ### Changed
+
 - Finished implementing the following stubbed-out JSON-RPC methods:
   - `z_listaccounts`
 
 ### Fixed
+
 - `zallet rpc` can communicate with Zallet again, by using a username and
   password from `zallet.toml` if any are present.
 
 ## [0.1.0-alpha.2] - 2025-10-31
 
 ### Added
+
 - JSON-RPC authorization mechanisms, matching zcashd:
   - Multi-user (supporting both bare and hashed passwords in `zallet.toml`).
 
 ### Fixed
+
 - Several balance calculation bugs have been fixed.
 - Bugs related to detection and selection of unspent outputs have been fixed.
 - JSON-RPC 1.x responses now use the expected HTTP error codes.
