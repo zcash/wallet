@@ -694,6 +694,39 @@ impl MigrateZcashdWalletCmd {
             }
         }
 
+        // Import view-only Sapling keys added via `z_importviewingkey`. zcashd stores these as
+        // `sapextfvk` BDB records; each extended FVK becomes its own view-only account, matching
+        // how each spending-key entry becomes its own account above. If both `z_importkey` and
+        // `z_importviewingkey` were called for the same key, the spending-key path already created
+        // the account, so the `get_account_for_ufvk` check below skips the duplicate.
+        let viewing_keys = wallet.sapling_extended_full_viewing_keys();
+        info!("Importing {} view-only Sapling keys", viewing_keys.len());
+        for (idx, zewif_extfvk) in viewing_keys.values().enumerate() {
+            if idx % 100 == 0 && idx > 0 {
+                info!("Processed {} view-only Sapling keys", idx);
+            }
+            // `zewif-zcashd` parses Sapling types against an older `sapling-crypto`. The ZIP 32
+            // extended FVK encoding is 169 bytes and stable across versions, so round-trip through
+            // bytes to get the version this crate uses.
+            let mut bytes = [0u8; 169];
+            zewif_extfvk
+                .write(&mut bytes[..])
+                .expect("Sapling extended FVK fits in 169 bytes");
+            let extfvk = sapling::zip32::ExtendedFullViewingKey::read(&bytes[..])
+                .expect("Sapling extended FVK encoding is stable across sapling-crypto versions");
+            let ufvk = UnifiedFullViewingKey::from_sapling_extended_full_viewing_key(extfvk)?;
+
+            if db_data.get_account_for_ufvk(&ufvk)?.is_none() {
+                db_data.import_account_ufvk(
+                    &format!("zcashd imported view-only sapling {}", idx),
+                    &ufvk,
+                    &wallet_birthday,
+                    AccountPurpose::ViewOnly,
+                    Some(ZCASHD_LEGACY_SOURCE),
+                )?;
+            }
+        }
+
         // TODO: Move this into zewif-zcashd once we're out of dependency version hell.
         fn convert_key(
             key: &zewif_zcashd::zcashd_wallet::transparent::KeyPair,
