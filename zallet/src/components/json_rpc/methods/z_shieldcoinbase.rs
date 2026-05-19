@@ -25,7 +25,7 @@ use zcash_client_backend::{
 };
 use zcash_keys::{address::Address, keys::UnifiedSpendingKey};
 use zcash_proofs::prover::LocalTxProver;
-use zcash_protocol::{PoolType, ShieldedProtocol, value::Zatoshis};
+use zcash_protocol::value::Zatoshis;
 
 use crate::{
     components::{
@@ -41,7 +41,6 @@ use crate::{
         },
         keystore::KeyStore,
     },
-    fl,
     prelude::*,
 };
 
@@ -116,11 +115,23 @@ pub(super) const PARAM_TOADDRESS_DESC: &str = "A wallet-owned shielded address u
 pub(super) const PARAM_FEE_DESC: &str =
     "If provided, must be null. Zallet always calculates and applies the ZIP-317 fee internally.";
 pub(super) const PARAM_LIMIT_DESC: &str = "If supplied, caps the number of selected coinbase UTXOs to the highest-value `n` of those \
-     eligible.";
+     eligible. Recommended for wallets with many eligible coinbase UTXOs: without it, a single \
+     transaction is built containing all eligible UTXOs, which can exceed transaction-size \
+     limits at broadcast time. Zallet logs a warning (but does not enforce a hard cap) when \
+     the proposal selects more than ~400 inputs.";
 pub(super) const PARAM_MEMO_DESC: &str = "If supplied, stored in the memo field of the resulting shielded payment. Must be a \
      hex-encoded string (up to 1024 hex characters = 512 bytes).";
 pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
     "Policy for what information leakage is acceptable.";
+
+/// Soft threshold above which [`call`] emits a `warn!` log about potential
+/// transaction-size issues at broadcast time.
+///
+/// Not enforced as a hard limit: callers may legitimately want to drain a long
+/// tail of small coinbase UTXOs in a single call. The escape hatch for callers
+/// who hit broadcast-size issues is the `limit` RPC parameter, which shields
+/// the highest-value `n` UTXOs and leaves the rest for a subsequent call.
+pub(super) const COINBASE_INPUTS_WARN_THRESHOLD: u64 = 400;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn call(
@@ -341,48 +352,17 @@ pub(crate) async fn call(
         shielding_value: value_from_zatoshis(shielding_value_zats),
     };
 
-    // Check Orchard action limits.
-    let orchard_actions_limit = APP.config().builder.limits.orchard_actions().into();
-    for step in proposal.steps() {
-        let orchard_spends = step
-            .shielded_inputs()
-            .iter()
-            .flat_map(|inputs| inputs.notes())
-            .filter(|note| note.note().protocol() == ShieldedProtocol::Orchard)
-            .count();
-
-        let orchard_outputs = step
-            .payment_pools()
-            .values()
-            .filter(|pool| pool == &&PoolType::ORCHARD)
-            .count()
-            + step
-                .balance()
-                .proposed_change()
-                .iter()
-                .filter(|change| change.output_pool() == PoolType::ORCHARD)
-                .count();
-
-        let orchard_actions = orchard_spends.max(orchard_outputs);
-
-        if orchard_actions > orchard_actions_limit {
-            let (count, kind) = if orchard_outputs <= orchard_actions_limit {
-                (orchard_spends, "inputs")
-            } else if orchard_spends <= orchard_actions_limit {
-                (orchard_outputs, "outputs")
-            } else {
-                (orchard_actions, "actions")
-            };
-
-            return Err(LegacyCode::Misc.with_message(fl!(
-                "err-excess-orchard-actions",
-                count = count,
-                kind = kind,
-                limit = orchard_actions_limit,
-                config = "-orchardactionlimit=N",
-                bound = format!("N >= %u"),
-            )));
-        }
+    // Only warn when the caller did not constrain the batch themselves; if
+    // `limit` was supplied, the caller has already opted into a specific batch
+    // size and the warning is noise.
+    if limit.is_none() && shielding_utxos > COINBASE_INPUTS_WARN_THRESHOLD {
+        warn!(
+            "z_shieldcoinbase: proposal selected {} coinbase UTXOs, which exceeds the \
+             soft warning threshold of {}. The resulting transaction may exceed \
+             network/mempool size limits at broadcast time. If broadcast fails, retry \
+             with a `limit` parameter to shield in smaller batches.",
+            shielding_utxos, COINBASE_INPUTS_WARN_THRESHOLD,
+        );
     }
 
     // Derive the spending key for the account.
