@@ -589,7 +589,12 @@ pub(crate) trait WalletRpc {
     ///   is ignored, as Zallet always calculates and applies the ZIP-317 fee
     ///   internally.
     /// - `limit` (numeric, optional): If supplied, caps the number of selected
-    ///   coinbase UTXOs to the highest-value `n` of those eligible.
+    ///   coinbase UTXOs to the highest-value `n` of those eligible. Recommended
+    ///   for wallets with many eligible coinbase UTXOs: without it, a single
+    ///   transaction is built containing all eligible UTXOs, which can exceed
+    ///   transaction-size limits at broadcast time. Zallet logs a warning (but
+    ///   does not enforce a hard cap) when the proposal selects more than ~400
+    ///   inputs.
     /// - `memo` (string, optional): If supplied, stored in the memo field of
     ///   the resulting shielded payment. Must be a hex-encoded string (up to
     ///   1024 hex characters = 512 bytes).
