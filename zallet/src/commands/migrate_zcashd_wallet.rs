@@ -122,7 +122,7 @@ impl MigrateZcashdWalletCmd {
                 })?;
 
             let zcashd_dump =
-                ZcashdDump::from_bdb_dump(&db_dump, self.allow_warnings).map_err(|e| {
+                ZcashdDump::from_bdb_dump(&db_dump, !self.allow_warnings).map_err(|e| {
                     MigrateError::Zewif {
                         error_type: ZewifError::ZcashdDump,
                         wallet_path: wallet_path.clone(),
