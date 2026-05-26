@@ -12,6 +12,7 @@ use jsonrpsee::tracing::Instrument;
 use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
+    fl,
 };
 
 use super::{TaskHandle, chain::Chain, database::Database};
@@ -42,7 +43,7 @@ impl JsonRpc {
         if !rpc.bind.is_empty() {
             if rpc.bind.len() > 1 {
                 return Err(ErrorKind::Init
-                    .context("Only one RPC bind address is supported (for now)")
+                    .context(fl!("err-init-rpc-single-bind-only"))
                     .into());
             }
             info!("Spawning RPC server");

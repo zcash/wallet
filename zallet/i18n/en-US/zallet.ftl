@@ -139,6 +139,14 @@ err-init-identity-not-passphrase-encrypted = {$path} is not encrypted with a pas
 err-init-path-not-utf8 = {$path} is not currently supported (not UTF-8)
 err-init-identity-not-usable = Identity file at {$path} is not usable: {$error}
 err-init-rpc-auth-invalid = Invalid '{-cfg-rpc-auth}' configuration
+err-init-rpc-single-bind-only = Only one RPC bind address is supported (for now)
+err-init-validator-no-addresses =
+    validator_address '{$addr}' resolved to no IP addresses
+err-init-validator-resolve-failed =
+    Failed to resolve validator_address '{$addr}': {$error}
+err-init-validator-parse-default-failed =
+    Failed to parse default validator_address '{$addr}': {$error}
+err-init-seed-required-migration = Seed-required wallet migrations are not yet supported
 
 ## Keystore errors
 
@@ -214,6 +222,7 @@ err-migrate-wallet-invalid-chain-data =
     programming error; please report the following error to (TBD): '{$err}'
 err-migrate-wallet-key-decoding =
     An error occurred decoding key material: '{$err}'.
+err-migrate-wallet-key-decoding-der-failed = failed DER decoding
 err-migrate-wallet-tx-fetch =
     An error occurred fetching transaction data: '{$err}'.
 err-migrate-wallet-data-parse=
@@ -287,6 +296,16 @@ err-rpc-cli-conn-failed = Failed to connect to the Zallet wallet's JSON-RPC port
 err-rpc-cli-invalid-param = Invalid parameter '{$parameter}'
 err-rpc-cli-no-server = No JSON-RPC port is available.
 err-rpc-cli-request-failed = JSON-RPC request failed: {$error}
+
+## Regtest CLI errors
+
+err-regtest-not-regtest-wallet = Command only works on a regtest wallet
+err-regtest-fresh-wallet-only = Command only works on a fresh wallet
+err-regtest-need-mnemonic-first = Need to call generate-mnemonic or import-mnemonic first
+err-regtest-multi-seed-unsupported = This regtest API is not supported with multiple seeds
+err-regtest-miner-address-failed = Failed to generate miner address: {$error}
+
+err-chain-indexer-not-running = ChainState indexer is not running
 
 ## zallet manpage
 

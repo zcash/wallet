@@ -585,7 +585,7 @@ impl MigrateZcashdWalletCmd {
             .map_err(|_| {
                 ErrorKind::Generic.context(fl!(
                     "err-migrate-wallet-key-decoding",
-                    err = "failed DER decoding"
+                    err = fl!("err-migrate-wallet-key-decoding-der-failed")
                 ))
             })?;
 
