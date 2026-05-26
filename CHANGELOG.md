@@ -36,9 +36,9 @@ be considered breaking changes.
   not defined.
 - Zallet now refuses to open wallet databases from incompatible earlier alpha
   releases instead of attempting to migrate them.
-- `z_sendmany` and `z_shieldcoinbase` no longer drop standalone transparent
-  signing keys when the same address backs multiple proposal inputs. Keys
-  are now accumulated per address rather than overwritten.
+- `z_sendmany` no longer drop standalone transparent signing keys when the same
+  address backs multiple proposal inputs. Keys are now accumulated per address
+  rather than overwritten.
 - Transparent UTXO ingestion now records `tx_index` for coinbase transactions
   by routing each observed transaction through `decrypt_and_store_transaction`
   in addition to `put_received_transparent_utxo`. This enables
