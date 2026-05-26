@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::num::NonZeroU32;
 
@@ -12,8 +12,6 @@ use zaino_state::FetchServiceSubscriber;
 use zcash_address::{ZcashAddress, unified};
 use zcash_client_backend::data_api::wallet::SpendingKeys;
 use zcash_client_backend::proposal::Proposal;
-#[cfg(feature = "transparent-key-import")]
-use zcash_client_backend::{data_api::WalletRead, wallet::TransparentAddressSource};
 use zcash_client_backend::{
     data_api::{
         Account,
@@ -52,8 +50,8 @@ use crate::{
     prelude::*,
 };
 
-#[cfg(feature = "transparent-key-import")]
-use {transparent::address::TransparentAddress, zcash_script::script};
+#[cfg(feature = "zcashd-import")]
+use crate::components::json_rpc::utils::collect_standalone_transparent_keys;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub(crate) struct AmountParameter {
@@ -365,54 +363,10 @@ pub(crate) async fn call(
     )
     .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
 
-    #[cfg(feature = "transparent-key-import")]
-    let standalone_keys = {
-        // Determine which transparent receivers in this account were imported
-        // standalone (vs. HD-derived). Only those have an associated entry in
-        // the keystore's standalone-key table; HD-derived receivers are signed
-        // for using `usk` and must not be looked up via
-        // `decrypt_standalone_transparent_key` (which would error with
-        // `QueryReturnedNoRows`).
-        let standalone_addrs: HashSet<TransparentAddress> = wallet
-            .get_transparent_receivers(account.id(), true, true)
-            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
-            .into_iter()
-            .filter_map(|(addr, metadata)| match metadata.source() {
-                TransparentAddressSource::StandalonePubkey(_)
-                | TransparentAddressSource::StandaloneScript(_) => Some(addr),
-                TransparentAddressSource::Derived { .. } => None,
-            })
-            .collect();
-
-        let mut keys: HashMap<TransparentAddress, Vec<secp256k1::SecretKey>> = HashMap::new();
-        for step in proposal.steps() {
-            for input in step.transparent_inputs() {
-                if let Some(address) = script::FromChain::parse(&input.txout().script_pubkey().0)
-                    .ok()
-                    .as_ref()
-                    .and_then(TransparentAddress::from_script_from_chain)
-                {
-                    if !standalone_addrs.contains(&address) {
-                        continue;
-                    }
-                    let secret_key = keystore
-                        .decrypt_standalone_transparent_key(&address)
-                        .await
-                        .map_err(|e| match e.kind() {
-                            // TODO: Improve internal error types.
-                            crate::error::ErrorKind::Generic
-                                if e.to_string() == "Wallet is locked" =>
-                            {
-                                LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
-                            }
-                            _ => LegacyCode::Database.with_message(e.to_string()),
-                        })?;
-                    keys.entry(address).or_default().push(secret_key);
-                }
-            }
-        }
-        keys
-    };
+    #[cfg(feature = "zcashd-import")]
+    let standalone_keys =
+        collect_standalone_transparent_keys(wallet.as_ref(), &keystore, account.id(), &proposal)
+            .await?;
 
     // TODO: verify that the proposal satisfies the requested privacy policy
 
@@ -429,11 +383,10 @@ pub(crate) async fn call(
             wallet,
             chain,
             proposal,
-            SpendingKeys::new(
-                usk,
-                #[cfg(feature = "zcashd-import")]
-                standalone_keys,
-            ),
+            #[cfg(feature = "zcashd-import")]
+            SpendingKeys::new(usk, standalone_keys),
+            #[cfg(not(feature = "zcashd-import"))]
+            SpendingKeys::from_unified_spending_key(usk),
         ),
     ))
 }
