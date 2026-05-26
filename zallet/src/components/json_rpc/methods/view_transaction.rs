@@ -366,7 +366,7 @@ pub(crate) async fn call(
                     &format!(
                         "SELECT txid, {output_prefix}_index, accounts.uuid, address, value
                         FROM {pool_prefix}_received_notes rn
-                        JOIN transactions ON tx = id_tx
+                        JOIN transactions ON transaction_id = id_tx
                         JOIN accounts ON accounts.id = rn.account_id
                         LEFT OUTER JOIN addresses ON address_id = addresses.id
                         WHERE nf = :nf"
@@ -405,7 +405,7 @@ pub(crate) async fn call(
                 conn.query_row(
                     "SELECT to_address
                             FROM sent_notes
-                            JOIN transactions ON tx = id_tx
+                            JOIN transactions ON transaction_id = id_tx
                             WHERE txid = :txid
                             AND   output_pool = :output_pool
                             AND   output_index = :output_index",
