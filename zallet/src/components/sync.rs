@@ -550,6 +550,9 @@ pub(crate) async fn fetch_transparent_utxos(
                 Script(script::Code(script.as_raw_bytes().to_vec())),
             ),
             Some(mined_height),
+            None,
+            None,
+            None,
         )
         .expect("the UTXO was detected via a supported address kind");
 

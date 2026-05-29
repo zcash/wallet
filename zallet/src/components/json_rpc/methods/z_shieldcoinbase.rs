@@ -10,16 +10,16 @@ use secrecy::ExposeSecret;
 use serde::Serialize;
 use transparent::address::TransparentAddress;
 use zaino_state::FetchServiceSubscriber;
-use zcash_address::unified;
+use zcash_address::ZcashAddress;
 use zcash_client_backend::{
     data_api::{
         Account, InputSource, TransparentOutputFilter, WalletRead,
         wallet::{
             SpendingKeys, create_proposed_transactions, input_selection::GreedyInputSelector,
-            propose_shielding,
+            propose_shielding_coinbase,
         },
     },
-    fees::{DustOutputPolicy, StandardFeeRule, standard::MultiOutputChangeStrategy},
+    fees::StandardFeeRule,
     proposal::Proposal,
     wallet::OvkPolicy,
 };
@@ -34,7 +34,7 @@ use crate::{
             asyncop::{ContextInfo, OperationId},
             payments::{
                 PrivacyPolicy, SendResult, broadcast_transactions, enforce_privacy_policy,
-                get_account_for_address,
+                get_account_for_address, parse_memo,
             },
             server::LegacyCode,
             utils::{JsonZec, value_from_zatoshis},
@@ -55,11 +55,8 @@ use zcash_script::script;
 #[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct ShieldCoinbaseResult {
     /// Number of coinbase UTXOs that were eligible for shielding but were not
-    /// selected by this operation.
-    ///
-    /// Note: Zallet currently ignores the `limit` parameter, so in practice
-    /// this is `0` whenever the proposal succeeded. The field is preserved
-    /// for compatibility with `zcashd`-shape clients.
+    /// selected by this operation. Non-zero when the caller supplied a `limit`
+    /// that was smaller than the count of eligible coinbase UTXOs.
     #[serde(rename = "remainingUTXOs")]
     remaining_utxos: u64,
 
@@ -118,10 +115,10 @@ pub(super) const PARAM_TOADDRESS_DESC: &str = "A wallet-owned shielded address u
      the account's internal shielded address, which may differ from this address.";
 pub(super) const PARAM_FEE_DESC: &str =
     "If provided, must be null. Zallet always calculates and applies the ZIP-317 fee internally.";
-pub(super) const PARAM_LIMIT_DESC: &str = "Accepted for compatibility but currently ignored; does not constrain how many UTXOs are \
-     shielded.";
-pub(super) const PARAM_MEMO_DESC: &str = "Accepted for compatibility but currently ignored; not stored in the memo field of any new \
-     note.";
+pub(super) const PARAM_LIMIT_DESC: &str = "If supplied, caps the number of selected coinbase UTXOs to the highest-value `n` of those \
+     eligible.";
+pub(super) const PARAM_MEMO_DESC: &str = "If supplied, stored in the memo field of the resulting shielded payment. Must be a \
+     hex-encoded string (up to 1024 hex characters = 512 bytes).";
 pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
     "Policy for what information leakage is acceptable.";
 
@@ -158,52 +155,41 @@ pub(crate) async fn call(
         None => Ok(PrivacyPolicy::AllowRevealedSenders),
     }?;
 
-    // TODO(schell): `propose_shielding` does not accept a memo parameter. The memo is
-    // accepted here for API compatibility but is currently ignored. Once the backend
-    // supports attaching a memo to shielding transactions, wire it through.
-    let _memo = memo;
+    // Parse the memo parameter (hex-encoded). The backend will attach it to the
+    // resulting shielded payment. The backend rejects memos longer than 512 bytes
+    // by way of `MemoBytes::from_bytes`.
+    let memo = memo.as_deref().map(parse_memo).transpose()?;
 
-    // TODO(schell): `propose_shielding` does not support a UTXO limit parameter. The
-    // limit is accepted here for API compatibility but is currently ignored. Consider
-    // pre-filtering UTXOs or extending the backend API to support this.
-    let _limit = limit;
+    // The `limit` parameter caps the number of selected coinbase UTXOs to the
+    // highest-value `n` of those eligible.
+    let limit_usize = limit.map(|n| n as usize);
 
-    // Validate the destination address: must have at least one shielded receiver.
+    // Parse and validate the destination address. We need both:
+    // - a `ZcashAddress` to pass to `propose_shielding_coinbase` (the backend's
+    //   shielded-receiver enforcement runs against this value).
+    // - a `zcash_keys::address::Address` to call `get_account_for_address` and
+    //   anchor the zallet-level same-account constraint: zallet's
+    //   `z_shieldcoinbase` requires `toaddress` to belong to a wallet account
+    //   (matching `zcashd`'s behavior), on top of the backend's requirement
+    //   that it be shielded.
     let to_address = Address::decode(wallet.params(), &toaddress).ok_or_else(|| {
         LegacyCode::InvalidParameter.with_message(format!(
             "Invalid parameter, unknown address format: {toaddress}"
         ))
     })?;
+    let to_zcash_address: ZcashAddress = toaddress.parse().map_err(|_| {
+        LegacyCode::InvalidParameter.with_message(format!(
+            "Invalid parameter, unknown address format: {toaddress}"
+        ))
+    })?;
 
-    match &to_address {
-        Address::Transparent(_) | Address::Tex(_) => {
-            return Err(LegacyCode::InvalidParameter.with_static(
-                "Invalid parameter, toaddress must be a shielded address (Sapling, Orchard, or Unified with shielded receivers).",
-            ));
-        }
-        Address::Unified(ua) => {
-            let has_shielded = ua
-                .receiver_types()
-                .iter()
-                .any(|t| matches!(t, unified::Typecode::Sapling | unified::Typecode::Orchard));
-            if !has_shielded {
-                return Err(LegacyCode::InvalidParameter.with_static(
-                    "Invalid parameter, the provided Unified Address has no shielded receivers.",
-                ));
-            }
-        }
-        // Sapling addresses are always valid shielded destinations.
-        Address::Sapling(_) => {}
-    }
-
-    // Look up the account that owns the destination address.
+    // Look up the account that owns the destination address. This enforces the
+    // zallet-level "same account" requirement; the backend additionally
+    // enforces "must be a shielded address" via
+    // `ProposalError::ShieldingRequiresShieldedRecipient`.
     let account = get_account_for_address(wallet.as_ref(), &to_address)?;
 
     // Resolve the transparent source addresses.
-    // TODO(schell): When fromaddress is "*", we currently only sweep transparent
-    // addresses belonging to the same account as toaddress. Check with teammates
-    // whether "*" should sweep across all wallet accounts instead (matching zcashd's
-    // single-keypool model more closely).
     let from_addrs: Vec<TransparentAddress> = if fromaddress == "*" {
         wallet
             .get_transparent_receivers(account.id(), true, true)
@@ -257,31 +243,26 @@ pub(crate) async fn call(
 
     let params = *wallet.params();
 
-    let change_strategy = MultiOutputChangeStrategy::new(
-        StandardFeeRule::Zip317,
-        None,
-        ShieldedProtocol::Orchard,
-        DustOutputPolicy::default(),
-        APP.config().note_management.split_policy(),
-    );
-
     let input_selector = GreedyInputSelector::new();
 
-    // Create the shielding proposal. Uses Zatoshis::ZERO as the shielding threshold
-    // to shield all available coinbase UTXOs. Passes TransparentOutputFilter::CoinbaseOnly
-    // to ensure only coinbase UTXOs are selected for shielding.
-    let proposal = propose_shielding::<_, _, _, _, Infallible>(
+    // Create the shielding proposal. Uses Zatoshis::ZERO as the shielding
+    // threshold to shield all available coinbase UTXOs (or all up to `limit`
+    // when supplied). `propose_shielding_coinbase` hard-codes
+    // `TransparentOutputFilter::CoinbaseOnly`, attaches the supplied memo to
+    // the resulting shielded payment, and produces no transparent or shielded
+    // change (preserving the privacy invariant that a shielded change output
+    // would let `toaddress` learn the sender's total selected-coinbase value).
+    let proposal = propose_shielding_coinbase::<_, _, _, _, Infallible>(
         wallet.as_mut(),
         &params,
         &input_selector,
-        &change_strategy,
+        &StandardFeeRule::Zip317,
         Zatoshis::ZERO,
         &from_addrs,
-        account.id(),
-        confirmations_policy,
-        TransparentOutputFilter::CoinbaseOnly,
+        to_zcash_address,
+        memo,
+        limit_usize,
     )
-    // TODO: Map errors to `zcashd` shape.
     .map_err(|e| {
         LegacyCode::Wallet.with_message(format!("Failed to propose shielding transaction: {e}"))
     })?;
@@ -488,7 +469,7 @@ pub(crate) async fn call(
             serde_json::json!({
                 "fromaddress": fromaddress,
                 "toaddress": toaddress,
-                "limit": _limit,
+                "limit": limit,
             }),
         )),
         run(

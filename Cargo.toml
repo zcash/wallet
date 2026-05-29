@@ -161,6 +161,24 @@ anyhow = "1.0"
 tonic = "0.14"
 
 [patch.crates-io]
+# TEMPORARY: Pin librustzcash crates to upstream main
+# (zcash/librustzcash@dad6ebed5c, the merge commit for PR #2376) so that
+# we can consume the `propose_shielding_coinbase` API used by
+# `z_shieldcoinbase`. Drop this block when librustzcash crates are
+# released to crates.io at a version that includes that API.
+equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "dad6ebed5c0d8714a095667c7b10df749d5e44d2" }
+
 # TEMPORARY: All `core2` versions on crates.io were yanked by upstream on
 # 2026-04-14, breaking fresh dependency resolution because we still pull
 # `core2 ^0.3` (via `equihash 0.2.2`) and `core2 ^0.4` (via `zaino-state`)
