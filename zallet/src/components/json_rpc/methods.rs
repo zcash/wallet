@@ -588,18 +588,19 @@ pub(crate) trait WalletRpc {
     ///   any other value will be rejected. When accepted, the value of this field
     ///   is ignored, as Zallet always calculates and applies the ZIP-317 fee
     ///   internally.
-    /// - `limit` (numeric, optional): Accepted for compatibility but currently
-    ///   ignored; it does not constrain how many UTXOs are shielded.
-    /// - `memo` (string, optional): Accepted for compatibility but currently
-    ///   ignored; it is not stored in the memo field of any new note.
+    /// - `limit` (numeric, optional): If supplied, caps the number of selected
+    ///   coinbase UTXOs to the highest-value `n` of those eligible.
+    /// - `memo` (string, optional): If supplied, stored in the memo field of
+    ///   the resulting shielded payment. Must be a hex-encoded string (up to
+    ///   1024 hex characters = 512 bytes).
     /// - `privacy_policy` (string, optional): Policy for what information
     ///   leakage is acceptable.
     ///
     /// # Returns
     /// An object matching `zcashd`'s `z_shieldcoinbase` shape:
     /// - `remainingUTXOs` (numeric): Number of coinbase UTXOs eligible for
-    ///   shielding that were not selected. Zallet currently ignores `limit`,
-    ///   so in practice this is `0` whenever the proposal succeeded.
+    ///   shielding that were not selected. Non-zero when `limit` is smaller
+    ///   than the count of eligible coinbase UTXOs.
     /// - `remainingValue` (numeric, ZEC): Total value of those UTXOs.
     /// - `shieldingUTXOs` (numeric): Number of coinbase UTXOs being shielded
     ///   by this operation.

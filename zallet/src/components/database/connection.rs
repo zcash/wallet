@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
@@ -13,9 +13,9 @@ use zcash_client_backend::{
         AccountBirthday, AccountMeta, AddressInfo, Balance, DecryptedTransaction, InputSource,
         NoteFilter, ORCHARD_SHARD_HEIGHT, ReceivedNotes, ReceivedTransactionOutput,
         SAPLING_SHARD_HEIGHT, TargetValue, TransparentKeyOrigin, TransparentOutputFilter,
-        WalletCommitmentTrees, WalletRead, WalletUtxo, WalletWrite, Zip32Derivation,
+        WalletCommitmentTrees, WalletRead, WalletWrite, Zip32Derivation,
         chain::ChainState,
-        error::FindAccountForAddressError,
+        error::{FindAccountForAddressError, RewindError},
         wallet::{ConfirmationsPolicy, TargetHeight},
     },
     keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
@@ -498,7 +498,7 @@ impl InputSource for DbConnection {
         &self,
         outpoint: &OutPoint,
         target_height: TargetHeight,
-    ) -> Result<Option<WalletUtxo>, Self::Error> {
+    ) -> Result<Option<WalletTransparentOutput<Self::AccountId>>, Self::Error> {
         self.with(|db_data| db_data.get_unspent_transparent_output(outpoint, target_height))
     }
 
@@ -508,7 +508,7 @@ impl InputSource for DbConnection {
         target_height: TargetHeight,
         confirmations_policy: ConfirmationsPolicy,
         output_filter: TransparentOutputFilter,
-    ) -> Result<Vec<WalletUtxo>, Self::Error> {
+    ) -> Result<Vec<WalletTransparentOutput<Self::AccountId>>, Self::Error> {
         self.with(|db_data| {
             db_data.get_spendable_transparent_outputs(
                 address,
@@ -627,7 +627,7 @@ impl WalletWrite for DbConnection {
 
     fn put_received_transparent_utxo(
         &mut self,
-        output: &WalletTransparentOutput,
+        output: &WalletTransparentOutput<Self::AccountId>,
     ) -> Result<Self::UtxoRef, Self::Error> {
         self.with_mut(|mut db_data| db_data.put_received_transparent_utxo(output))
     }
@@ -662,8 +662,14 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| db_data.truncate_to_chain_state(chain_state))
     }
 
-    fn rewind_to_height(&mut self, max_height: BlockHeight) -> Result<BlockHeight, Self::Error> {
-        self.with_mut(|mut db_data| db_data.rewind_to_height(max_height))
+    fn rewind_to_chain_state(
+        &mut self,
+        chain_state: ChainState,
+        reset_account_birthdays: HashSet<Self::AccountId>,
+    ) -> Result<(), RewindError<Self::AccountId, Self::Error>> {
+        self.with_mut(|mut db_data| {
+            db_data.rewind_to_chain_state(chain_state, reset_account_birthdays)
+        })
     }
 
     fn reserve_next_n_ephemeral_addresses(
