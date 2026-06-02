@@ -4,7 +4,7 @@ SHELL := /bin/bash
 IMAGE_NAME := zallet
 IMAGE_TAG := latest
 
-.PHONY: all build import
+.PHONY: all
 all: build import
 
 .PHONY: build
