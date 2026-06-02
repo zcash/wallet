@@ -2,7 +2,6 @@
 
 set -e
 
-DIR="$( cd "$( dirname "$0" )" && pwd )"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PLATFORM="linux/amd64"
 OCI_OUTPUT="$REPO_ROOT/build/oci"
@@ -11,15 +10,15 @@ DOCKERFILE="$REPO_ROOT/Dockerfile"
 export DOCKER_BUILDKIT=1
 export SOURCE_DATE_EPOCH=1
 
-echo $DOCKERFILE
-mkdir -p $OCI_OUTPUT
+echo "$DOCKERFILE"
+mkdir -p "$OCI_OUTPUT"
 
 # Build runtime image for docker run
 echo "Building runtime image..."
 docker build -f "$DOCKERFILE" "$REPO_ROOT" \
 	--platform "$PLATFORM" \
 	--target runtime \
-	--output type=oci,rewrite-timestamp=true,force-compression=true,dest=$OCI_OUTPUT/zallet.tar,name=zallet \
+	--output "type=oci,rewrite-timestamp=true,force-compression=true,dest=$OCI_OUTPUT/zallet.tar,name=zallet" \
 	"$@"
 
 # Extract binary locally from export stage
