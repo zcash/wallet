@@ -22,8 +22,16 @@ use super::server::LegacyCode;
 use {
     crate::components::{database::DbConnection, keystore::KeyStore},
     std::collections::HashSet,
-    zcash_client_backend::data_api::{Account, WalletRead},
-    zcash_protocol::value::BalanceError,
+    zaino_state::FetchServiceSubscriber,
+    zcash_client_backend::{
+        data_api::{Account, AccountBirthday, WalletRead, chain::ChainState},
+        proto::service::TreeState,
+    },
+    zcash_primitives::block::BlockHash,
+    zcash_protocol::{
+        consensus::{NetworkType, Parameters},
+        value::BalanceError,
+    },
     zip32::fingerprint::SeedFingerprint,
 };
 
@@ -42,6 +50,63 @@ pub(super) async fn ensure_wallet_is_unlocked(keystore: &KeyStore) -> RpcResult<
     } else {
         Ok(())
     }
+}
+
+/// Builds an [`AccountBirthday`] by fetching the treestate at the given height.
+///
+/// For height 0 (genesis), returns a birthday with an empty chain state since the
+/// commitment trees are empty. For non-zero heights, fetches the real treestate from
+/// the chain indexer so the sync engine can validate note commitment tree continuity.
+#[cfg(zallet_build = "wallet")]
+pub(super) async fn fetch_account_birthday(
+    wallet: &DbConnection,
+    chain: &FetchServiceSubscriber,
+    height: BlockHeight,
+) -> RpcResult<AccountBirthday> {
+    if height == BlockHeight::from_u32(0) {
+        return Ok(AccountBirthday::from_parts(
+            ChainState::empty(BlockHeight::from_u32(0), BlockHash([0; 32])),
+            None,
+        ));
+    }
+
+    let treestate_height = height.saturating_sub(1);
+    let treestate = chain
+        .fetcher
+        .get_treestate(treestate_height.to_string())
+        .await
+        .map_err(|e| {
+            LegacyCode::InvalidParameter.with_message(format!(
+                "Failed to get treestate at height {treestate_height}: {e}"
+            ))
+        })?;
+
+    let treestate = TreeState {
+        network: match wallet.params().network_type() {
+            NetworkType::Main => "main".into(),
+            NetworkType::Test => "test".into(),
+            NetworkType::Regtest => "regtest".into(),
+        },
+        height: u64::try_from(treestate.height).map_err(|_| RpcErrorCode::InternalError)?,
+        hash: treestate.hash,
+        time: treestate.time,
+        sapling_tree: treestate
+            .sapling
+            .commitments()
+            .final_state()
+            .as_ref()
+            .map(hex::encode)
+            .unwrap_or_default(),
+        orchard_tree: treestate
+            .orchard
+            .commitments()
+            .final_state()
+            .as_ref()
+            .map(hex::encode)
+            .unwrap_or_default(),
+    };
+
+    AccountBirthday::from_treestate(treestate, None).map_err(|_| RpcErrorCode::InternalError.into())
 }
 
 pub(crate) fn parse_txid(txid_str: &str) -> RpcResult<TxId> {

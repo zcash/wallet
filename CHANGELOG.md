@@ -15,6 +15,7 @@ be considered breaking changes.
   - `verifymessage`
   - `z_converttex`
   - `z_importaddress`
+  - `z_importviewingkey` (Sapling extended full viewing keys only)
 
 ### Changed
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
