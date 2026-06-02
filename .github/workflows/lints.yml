@@ -80,12 +80,25 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+  hadolint:
+    name: Hadolint (Dockerfile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile
+
   required-lints:
     name: Required lints have passed
     needs:
       - clippy
       - doc-links
       - fmt
+      - hadolint
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
