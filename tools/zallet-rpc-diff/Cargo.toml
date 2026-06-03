@@ -1,0 +1,46 @@
+[workspace]
+members = [
+    "crates/zallet-parity-core",
+    "crates/zallet-parity-cli",
+    "crates/zallet-parity-testkit",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# CLI & UX
+clap = { version = "4", features = ["derive", "env"] }
+color-eyre = "0.6"
+indicatif = "0.17"
+
+# Telemetry
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error Handling
+thiserror = "2"
+anyhow = "1"
+
+# RPC
+jsonrpsee = { version = "0.24", features = ["http-client", "macros"] }
+
+# Comparison
+assert-json-diff = "2"
+
+# JSON Pointer (RFC 6901) — for configurable ignore paths
+jsonptr = { version = "0.7", features = ["json"] }
+
+# Test Mocking
+wiremock = "0.6"

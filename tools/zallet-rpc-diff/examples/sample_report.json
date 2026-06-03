@@ -1,0 +1,42 @@
+{
+  "summary": {
+    "total": 7,
+    "matches": 3,
+    "diffs": 1,
+    "expected_diffs": 2,
+    "missing": 1,
+    "errors": 0
+  },
+  "details": {
+    "getblockchaininfo": {
+      "type": "match"
+    },
+    "getnetworkinfo": {
+      "type": "expected_diff",
+      "diff_count": 2,
+      "diff_paths": ["/subversion", "/version"],
+      "reason": "Zallet reports its own agent/version string (e.g. 'Zallet/0.1.0') while zcashd reports '/MagicBean:...' — intentional product identity difference."
+    },
+    "getwalletinfo": {
+      "type": "match"
+    },
+    "getbalance": {
+      "type": "match"
+    },
+    "z_gettotalbalance": {
+      "type": "diff",
+      "diff_count": 1,
+      "diff_paths": ["/private"]
+    },
+    "getdeprecationinfo": {
+      "type": "expected_diff",
+      "diff_count": 3,
+      "diff_paths": ["/version", "/deprecationheight", "/end_of_service"],
+      "reason": "zcashd's getdeprecationinfo is tied to its release/deprecation cycle; Zallet returns different values or may not implement this method yet."
+    },
+    "z_listaddresses": {
+      "type": "missing",
+      "method": "z_listaddresses"
+    }
+  }
+}

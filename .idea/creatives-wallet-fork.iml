@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="EMPTY_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/tools/zallet-rpc-diff/crates/zallet-parity-cli/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tools/zallet-rpc-diff/crates/zallet-parity-core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tools/zallet-rpc-diff/crates/zallet-parity-testkit/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/zallet/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/zallet/tests" isTestSource="true" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

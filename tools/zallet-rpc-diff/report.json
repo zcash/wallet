@@ -1,0 +1,22 @@
+{
+  "summary": {
+    "total": 3,
+    "matches": 0,
+    "diffs": 0,
+    "errors": 3
+  },
+  "details": {
+    "getnetworkinfo": {
+      "type": "error",
+      "message": "Target error: jsonrpsee error: client error (SendRequest)"
+    },
+    "getblockchaininfo": {
+      "type": "error",
+      "message": "Target error: jsonrpsee error: client error (SendRequest)"
+    },
+    "getwalletinfo": {
+      "type": "error",
+      "message": "Upstream error: jsonrpsee error: ErrorObject { code: MethodNotFound, message: \"Method not found\", data: None }"
+    }
+  }
+}
