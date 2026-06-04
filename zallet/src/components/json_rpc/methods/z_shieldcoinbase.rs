@@ -44,12 +44,8 @@ use crate::{
     prelude::*,
 };
 
-#[cfg(feature = "transparent-key-import")]
-use std::collections::{HashMap, HashSet};
-#[cfg(feature = "transparent-key-import")]
-use zcash_client_backend::wallet::TransparentAddressSource;
-#[cfg(feature = "transparent-key-import")]
-use zcash_script::script;
+#[cfg(feature = "zcashd-import")]
+use crate::components::json_rpc::utils::collect_standalone_transparent_keys;
 
 /// The result of a `z_shieldcoinbase` pre-flight call.
 ///
@@ -304,9 +300,10 @@ pub(crate) async fn call(
     )
     .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
 
-    #[cfg(feature = "transparent-key-import")]
+    #[cfg(feature = "zcashd-import")]
     let standalone_keys =
-        collect_standalone_keys(wallet.as_mut(), &keystore, account_id, &proposal).await?;
+        collect_standalone_transparent_keys(wallet.as_ref(), &keystore, account_id, &proposal)
+            .await?;
 
     Ok((
         preflight,
@@ -322,11 +319,10 @@ pub(crate) async fn call(
             wallet,
             chain,
             proposal,
-            SpendingKeys::new(
-                usk,
-                #[cfg(feature = "transparent-key-import")]
-                standalone_keys,
-            ),
+            #[cfg(feature = "zcashd-import")]
+            SpendingKeys::new(usk, standalone_keys),
+            #[cfg(not(feature = "zcashd-import"))]
+            SpendingKeys::from_unified_spending_key(usk),
         ),
     ))
 }
@@ -500,51 +496,6 @@ fn enumerate_eligible(
         }
     }
     Ok((total_utxos, total_value_zats))
-}
-
-#[cfg(feature = "transparent-key-import")]
-async fn collect_standalone_keys(
-    wallet: &mut DbConnection,
-    keystore: &KeyStore,
-    account_id: AccountUuid,
-    proposal: &Proposal<StandardFeeRule, Infallible>,
-) -> RpcResult<HashMap<TransparentAddress, Vec<secp256k1::SecretKey>>> {
-    let standalone_addrs: HashSet<TransparentAddress> = wallet
-        .get_transparent_receivers(account_id, true, true)
-        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
-        .into_iter()
-        .filter_map(|(addr, metadata)| match metadata.source() {
-            TransparentAddressSource::StandalonePubkey(_)
-            | TransparentAddressSource::StandaloneScript(_) => Some(addr),
-            TransparentAddressSource::Derived { .. } => None,
-        })
-        .collect();
-
-    let mut keys: HashMap<TransparentAddress, Vec<secp256k1::SecretKey>> = HashMap::new();
-    for step in proposal.steps() {
-        for input in step.transparent_inputs() {
-            if let Some(address) = script::FromChain::parse(&input.txout().script_pubkey().0)
-                .ok()
-                .as_ref()
-                .and_then(TransparentAddress::from_script_from_chain)
-            {
-                if !standalone_addrs.contains(&address) {
-                    continue;
-                }
-                let secret_key = keystore
-                    .decrypt_standalone_transparent_key(&address)
-                    .await
-                    .map_err(|e| match e.kind() {
-                        crate::error::ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
-                            LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
-                        }
-                        _ => LegacyCode::Database.with_message(e.to_string()),
-                    })?;
-                keys.entry(address).or_default().push(secret_key);
-            }
-        }
-    }
-    Ok(keys)
 }
 
 /// Construct and broadcast the shielding transaction.

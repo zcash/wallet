@@ -27,6 +27,17 @@ use {
     zip32::fingerprint::SeedFingerprint,
 };
 
+#[cfg(feature = "zcashd-import")]
+use {
+    crate::error::ErrorKind,
+    std::collections::HashMap,
+    transparent::address::TransparentAddress,
+    zcash_client_backend::{
+        fees::StandardFeeRule, proposal::Proposal, wallet::TransparentAddressSource,
+    },
+    zcash_script::script,
+};
+
 /// The account identifier used for HD derivation of transparent and Sapling addresses via
 /// the legacy `getnewaddress` and `z_getnewaddress` code paths.
 #[cfg(zallet_build = "wallet")]
@@ -42,6 +53,63 @@ pub(super) async fn ensure_wallet_is_unlocked(keystore: &KeyStore) -> RpcResult<
     } else {
         Ok(())
     }
+}
+
+/// Collects the standalone (non-HD) transparent spending keys required to sign the
+/// transparent inputs of `proposal`.
+///
+/// Determines which transparent receivers in this account were imported standalone
+/// (vs. HD-derived). Only those have an associated entry in the keystore's
+/// standalone-key table; HD-derived receivers are signed for using `usk` and must not
+/// be looked up via `decrypt_standalone_transparent_key` (which would error with
+/// `QueryReturnedNoRows`).
+///
+/// Gated on `zcashd-import` because the keystore's standalone-key table (and the
+/// `decrypt_standalone_transparent_key` accessor) only exists under that feature.
+#[cfg(feature = "zcashd-import")]
+pub(super) async fn collect_standalone_transparent_keys<NoteRef>(
+    wallet: &DbConnection,
+    keystore: &KeyStore,
+    account_id: AccountUuid,
+    proposal: &Proposal<StandardFeeRule, NoteRef>,
+) -> RpcResult<HashMap<TransparentAddress, Vec<secp256k1::SecretKey>>> {
+    let standalone_addrs: HashSet<TransparentAddress> = wallet
+        .get_transparent_receivers(account_id, true, true)
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+        .into_iter()
+        .filter_map(|(addr, metadata)| match metadata.source() {
+            TransparentAddressSource::StandalonePubkey(_)
+            | TransparentAddressSource::StandaloneScript(_) => Some(addr),
+            TransparentAddressSource::Derived { .. } => None,
+        })
+        .collect();
+
+    let mut keys: HashMap<TransparentAddress, Vec<secp256k1::SecretKey>> = HashMap::new();
+    for step in proposal.steps() {
+        for input in step.transparent_inputs() {
+            if let Some(address) = script::FromChain::parse(&input.txout().script_pubkey().0)
+                .ok()
+                .as_ref()
+                .and_then(TransparentAddress::from_script_from_chain)
+            {
+                if !standalone_addrs.contains(&address) {
+                    continue;
+                }
+                let secret_key = keystore
+                    .decrypt_standalone_transparent_key(&address)
+                    .await
+                    .map_err(|e| match e.kind() {
+                        // TODO: Improve internal error types.
+                        ErrorKind::Generic if e.to_string() == "Wallet is locked" => {
+                            LegacyCode::WalletUnlockNeeded.with_message(e.to_string())
+                        }
+                        _ => LegacyCode::Database.with_message(e.to_string()),
+                    })?;
+                keys.entry(address).or_default().push(secret_key);
+            }
+        }
+    }
+    Ok(keys)
 }
 
 pub(crate) fn parse_txid(txid_str: &str) -> RpcResult<TxId> {
