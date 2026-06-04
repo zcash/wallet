@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
 use std::num::NonZeroU32;
 
@@ -384,8 +384,7 @@ pub(crate) async fn call(
             })
             .collect();
 
-        let mut keys: std::collections::HashMap<TransparentAddress, Vec<secp256k1::SecretKey>> =
-            std::collections::HashMap::new();
+        let mut keys: HashMap<TransparentAddress, Vec<secp256k1::SecretKey>> = HashMap::new();
         for step in proposal.steps() {
             for input in step.transparent_inputs() {
                 if let Some(address) = script::FromChain::parse(&input.txout().script_pubkey().0)
