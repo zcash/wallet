@@ -29,6 +29,7 @@ use zcash_keys::{address::Address, keys::UnifiedSpendingKey};
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::value::Zatoshis;
 
+use crate::components::json_rpc::payments::enforce_privacy_policy;
 use crate::{
     components::{
         database::{DbConnection, DbHandle},
@@ -231,7 +232,7 @@ pub(crate) async fn call(
     // eligible coinbase UTXOs) it also links those addresses on-chain. The privacy policy
     // parsed above bounds which of these leakages the caller is willing to accept;
     // `enforce_privacy_policy` rejects the proposal if it requires more than the caller permitted.
-    crate::components::json_rpc::payments::enforce_privacy_policy(&proposal, privacy_policy)?;
+    enforce_privacy_policy(&proposal, privacy_policy)?;
 
     // Pre-flight numerics. We compute `remaining_*` by enumerating all eligible coinbase UTXOs
     // (`total_*`) and subtracting the ones the proposal selected (`shielding_*`). The
