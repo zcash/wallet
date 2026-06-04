@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
@@ -665,7 +665,7 @@ impl WalletWrite for DbConnection {
     fn rewind_to_chain_state(
         &mut self,
         chain_state: ChainState,
-        reset_account_birthdays: std::collections::HashSet<Self::AccountId>,
+        reset_account_birthdays: HashSet<Self::AccountId>,
     ) -> Result<(), RewindError<Self::AccountId, Self::Error>> {
         self.with_mut(|mut db_data| {
             db_data.rewind_to_chain_state(chain_state, reset_account_birthdays)
