@@ -34,6 +34,10 @@ be considered breaking changes.
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
   not defined.
+- The wallet sync task no longer exits with a "Missing Sapling/Orchard tree
+  state" error when a shielded pool is active but its note commitment tree is
+  still empty (e.g. on regtest, where NU5 is active from height 1). An absent
+  tree state is now correctly treated as an empty tree.
 - Zallet now refuses to open wallet databases from incompatible earlier alpha
   releases instead of attempting to migrate them.
 - `z_sendmany` no longer drop standalone transparent signing keys when the same

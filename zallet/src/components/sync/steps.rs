@@ -309,36 +309,25 @@ pub(super) async fn fetch_chain_state(
         .await?
         .into_parts();
 
-    let final_sapling_tree = if params.is_nu_active(NetworkUpgrade::Sapling, height.0.into()) {
-        read_frontier_v0(
-            sapling
-                .ok_or_else(|| IndexerError::InvalidData {
-                    message: "Missing Sapling tree state".into(),
-                })?
-                .as_slice(),
-        )
-        .map_err(|e| IndexerError::InvalidData {
-            message: format!("{e}"),
-        })?
-    } else {
-        // Sapling is not yet active; the Sapling tree is empty.
-        Frontier::empty()
+    // An absent tree state (`None`) means the pool's note commitment tree is empty, not an
+    // error (fetch errors surface via `?` above). Treat "active but empty" like "not yet
+    // active": an empty frontier.
+    let final_sapling_tree = match sapling {
+        Some(sapling) if params.is_nu_active(NetworkUpgrade::Sapling, height.0.into()) => {
+            read_frontier_v0(sapling.as_slice()).map_err(|e| IndexerError::InvalidData {
+                message: format!("{e}"),
+            })?
+        }
+        _ => Frontier::empty(),
     };
 
-    let final_orchard_tree = if params.is_nu_active(NetworkUpgrade::Nu5, height.0.into()) {
-        read_frontier_v0(
-            orchard
-                .ok_or_else(|| IndexerError::InvalidData {
-                    message: "Missing Orchard tree state".into(),
-                })?
-                .as_slice(),
-        )
-        .map_err(|e| IndexerError::InvalidData {
-            message: format!("{e}"),
-        })?
-    } else {
-        // NU5 is not yet active; the Orchard tree is empty.
-        Frontier::empty()
+    let final_orchard_tree = match orchard {
+        Some(orchard) if params.is_nu_active(NetworkUpgrade::Nu5, height.0.into()) => {
+            read_frontier_v0(orchard.as_slice()).map_err(|e| IndexerError::InvalidData {
+                message: format!("{e}"),
+            })?
+        }
+        _ => Frontier::empty(),
     };
 
     Ok(ChainState::new(
