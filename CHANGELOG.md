@@ -13,6 +13,7 @@ be considered breaking changes.
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`
+  - `getwalletstatus`
   - `verifymessage`
   - `z_converttex`
   - `z_importaddress`

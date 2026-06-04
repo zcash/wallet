@@ -64,12 +64,23 @@ struct ChainTip {
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 struct SyncWorkRemaining {
+    /// The number of blocks within the wallet's view of the chain that have not yet been
+    /// scanned.
     unscanned_blocks: u32,
 
-    // TODO: Replace these with accurate unscanned note counts, which we can determine
-    // because Zallet tracks the chain tip very closely.
-    progress_numerator: u64,
-    progress_denominator: u64,
+    /// Approximate sync progress, as a `numerator / denominator` fraction.
+    ///
+    /// This is currently derived from scanned block ranges. Once the wallet always tracks
+    /// the note commitment tree sizes (zcash/wallet#237), this will be refined to an exact
+    /// count of the unscanned note commitments.
+    progress: Progress,
+}
+
+/// A sync-progress fraction.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+struct Progress {
+    numerator: u64,
+    denominator: u64,
 }
 
 pub(crate) async fn call(wallet: &DbConnection, chain: FetchServiceSubscriber) -> Response {
@@ -170,8 +181,10 @@ impl WalletData {
             } else {
                 Some(SyncWorkRemaining {
                     unscanned_blocks,
-                    progress_numerator,
-                    progress_denominator,
+                    progress: Progress {
+                        numerator: progress_numerator,
+                        denominator: progress_denominator,
+                    },
                 })
             }
         })
