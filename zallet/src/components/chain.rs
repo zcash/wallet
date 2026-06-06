@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 use zaino_common::{CacheConfig, DatabaseConfig, ServiceConfig, StorageConfig};
 use zaino_state::{
     FetchService, FetchServiceConfig, FetchServiceSubscriber, IndexerService, IndexerSubscriber,
-    StatusType, ZcashService,
+    Status, StatusType, ZcashService,
 };
 
 use crate::{
@@ -90,7 +90,7 @@ impl Chain {
         }?;
 
         let config = FetchServiceConfig::new(
-            resolved_validator_address,
+            resolved_validator_address.to_string(),
             config.indexer.validator_cookie_path.clone(),
             config.indexer.validator_user.clone(),
             config.indexer.validator_password.clone(),
@@ -103,10 +103,11 @@ impl Chain {
                     // completely filling the cache. Zaino's DB currently only contains a
                     // cache of CompactBlocks, so we make do for now with uncached queries.
                     // TODO: https://github.com/zingolabs/zaino/issues/249
-                    size: zaino_common::DatabaseSize::Gb(0),
+                    size: zaino_common::DatabaseSize(0),
                 },
             },
             config.consensus.network().to_zaino(),
+            None,
         );
 
         info!("Starting Zaino indexer");
@@ -130,7 +131,7 @@ impl Chain {
 
                 let service = indexer.read().await;
                 let status = match service.as_ref() {
-                    Some(service) => service.inner_ref().status().await,
+                    Some(service) => service.inner_ref().status(),
                     None => StatusType::CriticalError,
                 };
 
