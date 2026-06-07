@@ -2,7 +2,7 @@ use documented::Documented;
 use jsonrpsee::{core::RpcResult, types::ErrorCode as RpcErrorCode};
 use schemars::JsonSchema;
 use serde::Serialize;
-use zaino_state::FetchServiceSubscriber;
+use zaino_state::{FetchServiceSubscriber, ZcashIndexer};
 use zcash_client_backend::{
     data_api::{AccountBirthday, WalletRead, WalletWrite},
     proto::service::TreeState,
@@ -57,29 +57,33 @@ pub(crate) async fn call(
 
     let treestate = {
         let treestate = chain
-            .fetcher
-            .get_treestate(birthday_height.saturating_sub(1).to_string())
+            .z_get_treestate(birthday_height.saturating_sub(1).to_string())
             .await
             .map_err(|_| RpcErrorCode::InternalError)?;
 
+        let (hash, height, time, sapling, orchard) = (
+            treestate.hash(),
+            treestate.height(),
+            treestate.time(),
+            treestate.sapling(),
+            treestate.orchard(),
+        );
         TreeState {
             network: match wallet.params().network_type() {
                 NetworkType::Main => "main".into(),
                 NetworkType::Test => "test".into(),
                 NetworkType::Regtest => "regtest".into(),
             },
-            height: u64::try_from(treestate.height).map_err(|_| RpcErrorCode::InternalError)?,
-            hash: treestate.hash,
-            time: treestate.time,
-            sapling_tree: treestate
-                .sapling
+            height: height.0.into(),
+            hash: hash.to_string(),
+            time,
+            sapling_tree: sapling
                 .commitments()
                 .final_state()
                 .as_ref()
                 .map(hex::encode)
                 .unwrap_or_default(),
-            orchard_tree: treestate
-                .orchard
+            orchard_tree: orchard
                 .commitments()
                 .final_state()
                 .as_ref()
