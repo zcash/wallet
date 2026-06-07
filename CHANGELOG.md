@@ -27,6 +27,7 @@ be considered breaking changes.
   block heights and tree state are not resolved from the chain. Cannot be
   combined with `--buffer-wallet-transactions`. Useful when chain data is not
   available.
+- The remaining user-facing CLI error messages are now translatable.
 
 ### Fixed
 - `listaddresses` no longer returns an internal error when the wallet contains

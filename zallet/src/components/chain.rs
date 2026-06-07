@@ -161,7 +161,7 @@ impl Chain {
             .read()
             .await
             .as_ref()
-            .ok_or_else(|| ErrorKind::Generic.context("ChainState indexer is not running"))?
+            .ok_or_else(|| ErrorKind::Generic.context(crate::fl!("err-chain-indexer-not-running")))?
             .inner_ref()
             .get_subscriber())
     }

@@ -139,6 +139,11 @@ err-init-identity-not-passphrase-encrypted = {$path} is not encrypted with a pas
 err-init-path-not-utf8 = {$path} is not currently supported (not UTF-8)
 err-init-identity-not-usable = Identity file at {$path} is not usable: {$error}
 err-init-rpc-auth-invalid = Invalid '{-cfg-rpc-auth}' configuration
+err-init-single-rpc-bind = Only one RPC bind address is supported (for now)
+
+## Chain errors
+
+err-chain-indexer-not-running = ChainState indexer is not running
 
 ## Keystore errors
 
