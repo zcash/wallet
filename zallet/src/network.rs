@@ -33,7 +33,12 @@ impl Network {
 
                 // If a NU is omitted, ensure that it activates at the same height as the
                 // subsequent specified NU (if any).
-                let nu6_1 = find_nu(consensus::BranchId::Nu6_1);
+                #[cfg(zcash_unstable = "nu7")]
+                let nu7 = find_nu(consensus::BranchId::Nu7);
+                let nu6_2 = find_nu(consensus::BranchId::Nu6_2);
+                #[cfg(zcash_unstable = "nu7")]
+                let nu6_2 = nu6_2.or(nu7);
+                let nu6_1 = find_nu(consensus::BranchId::Nu6_1).or(nu6_2);
                 let nu6 = find_nu(consensus::BranchId::Nu6).or(nu6_1);
                 let nu5 = find_nu(consensus::BranchId::Nu5).or(nu6);
                 let canopy = find_nu(consensus::BranchId::Canopy).or(nu5);
@@ -51,6 +56,9 @@ impl Network {
                     nu5,
                     nu6,
                     nu6_1,
+                    nu6_2,
+                    #[cfg(zcash_unstable = "nu7")]
+                    nu7,
                 })
             }
         }
@@ -74,7 +82,8 @@ impl Network {
                     canopy: local_network.canopy.map(|h| h.into()),
                     nu5: local_network.nu5.map(|h| h.into()),
                     nu6: local_network.nu6.map(|h| h.into()),
-                    nu6_1: None,
+                    nu6_1: local_network.nu6_1.map(|h| h.into()),
+                    nu6_2: local_network.nu6_2.map(|h| h.into()),
                     nu7: None,
                 })
             }

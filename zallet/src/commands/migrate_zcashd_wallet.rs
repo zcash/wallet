@@ -114,8 +114,8 @@ impl MigrateZcashdWalletCmd {
         };
 
         if let Ok(db_dump_path) = db_dump_path {
-            let db_dump = BDBDump::from_file(db_dump_path.as_path(), wallet_path.as_path())
-                .map_err(|e| MigrateError::Zewif {
+            let db_dump =
+                BDBDump::from_file(db_dump_path.as_path()).map_err(|e| MigrateError::Zewif {
                     error_type: ZewifError::BdbDump,
                     wallet_path: wallet_path.to_path_buf(),
                     error: e,
