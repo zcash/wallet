@@ -42,7 +42,7 @@ impl JsonRpc {
         if !rpc.bind.is_empty() {
             if rpc.bind.len() > 1 {
                 return Err(ErrorKind::Init
-                    .context("Only one RPC bind address is supported (for now)")
+                    .context(crate::fl!("err-init-single-rpc-bind"))
                     .into());
             }
             info!("Spawning RPC server");
