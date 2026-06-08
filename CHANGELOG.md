@@ -15,6 +15,7 @@ be considered breaking changes.
   - `verifymessage`
   - `z_converttex`
   - `z_importaddress`
+  - `z_shieldcoinbase`
 
 ### Changed
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
@@ -35,6 +36,20 @@ be considered breaking changes.
   not defined.
 - Zallet now refuses to open wallet databases from incompatible earlier alpha
   releases instead of attempting to migrate them.
+- `z_sendmany` no longer drop standalone transparent signing keys when the same
+  address backs multiple proposal inputs. Keys are now accumulated per address
+  rather than overwritten.
+- Transparent UTXO ingestion now records `tx_index` for coinbase transactions
+  by routing each observed transaction through `decrypt_and_store_transaction`
+  in addition to `put_received_transparent_utxo`. This enables
+  `z_shieldcoinbase` (and any other consumer of
+  `TransparentOutputFilter::CoinbaseOnly`) to correctly identify coinbase
+  outputs.
+- `z_sendmany` no longer fails with `Query returned no rows` when a proposal
+  includes inputs at HD-derived transparent addresses.
+  The keystore's standalone-key decryption is now invoked only for addresses
+  that were imported standalone; HD-derived addresses are signed for using
+  the account's unified spending key.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 

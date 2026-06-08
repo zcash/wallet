@@ -293,21 +293,18 @@ impl MigrateZcashdWalletCmd {
         );
         let mut main_chain_block_heights = HashMap::new();
         if let Some(chain_subscriber) = chain_subscriber.as_ref() {
-            for (_, wallet_tx) in wallet.transactions().iter() {
+            for wallet_tx in wallet.transactions().values() {
                 let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
                 // Skip transactions that were unmined when the zcashd wallet was last written.
                 if block_hash.0 != [0; 32] {
                     if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
-                        match chain_subscriber
+                        // Ignore any blocks that are not in the main chain.
+                        if let GetBlockHeader::Verbose(header) = chain_subscriber
                             .get_block_header(block_hash.to_string(), true)
                             .await?
                         {
-                            GetBlockHeader::Verbose(header) => {
-                                entry.insert(BlockHeight::from_u32(header.height));
-                            }
-                            // Ignore any blocks that are not in the main chain.
-                            _ => (),
-                        };
+                            entry.insert(BlockHeight::from_u32(header.height));
+                        }
                     }
                 }
             }
@@ -464,7 +461,7 @@ impl MigrateZcashdWalletCmd {
                 wallet.unified_accounts().account_metadata.len()
             );
         }
-        for (_, account) in wallet.unified_accounts().account_metadata.iter() {
+        for account in wallet.unified_accounts().account_metadata.values() {
             // The only way that a unified account could be created in zcashd was
             // to be derived from the mnemonic seed, so we can safely unwrap here.
             let (seed, seed_fp) = mnemonic_seed_data
