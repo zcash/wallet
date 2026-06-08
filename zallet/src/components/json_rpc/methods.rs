@@ -57,6 +57,8 @@ mod validate_address;
 mod verify_message;
 mod view_transaction;
 #[cfg(zallet_build = "wallet")]
+mod z_export_viewing_key;
+#[cfg(zallet_build = "wallet")]
 mod z_get_total_balance;
 #[cfg(zallet_build = "wallet")]
 mod z_import_address;
@@ -561,6 +563,14 @@ pub(crate) trait WalletRpc {
         fee: Option<JsonValue>,
         privacy_policy: Option<String>,
     ) -> z_send_many::Response;
+
+    /// Reveals the viewing key corresponding to 'zaddr'.
+    ///
+    /// # Arguments
+    ///
+    /// - `zaddr` (string, required) The Sapling payment address.
+    #[method(name = "z_exportviewingkey")]
+    async fn export_viewing_key(&self, zaddr: &str) -> z_export_viewing_key::Response;
 }
 
 pub(crate) struct RpcImpl {
@@ -896,5 +906,9 @@ impl WalletRpcServer for WalletRpcImpl {
                 .await?,
             )
             .await)
+    }
+
+    async fn export_viewing_key(&self, zaddr: &str) -> z_export_viewing_key::Response {
+        z_export_viewing_key::call(self.wallet().await?.as_ref(), &self.keystore, zaddr).await
     }
 }

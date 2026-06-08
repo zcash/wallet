@@ -14,6 +14,7 @@ be considered breaking changes.
   - `decodescript`
   - `verifymessage`
   - `z_converttex`
+  - `z_exportviewingkey`
   - `z_importaddress`
 
 ### Changed
