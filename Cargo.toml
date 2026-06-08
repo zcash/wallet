@@ -174,13 +174,12 @@ core2_v04 = { package = "core2", path = "vendor/core2-shim-0.4" }
 age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633bb70c91eef91142fd4" }
 
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "798d7b3554ebada05bea63b67ee66f9c2558a21a" }
-zewif-zcashd = { git = "https://github.com/dianaravenborne/zewif-zcashd.git", rev = "944688d6ba0b3986fa2dd3456ea8f237546ff430" }
+zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "22f8219bb2cb741b72683cbee170b6667c7da7b0" }
 
-# https://github.com/zingolabs/zaino/pull/1181 (head: valargroup/zaino @ adam/nu62-support)
-zaino-common = { git = "https://github.com/valargroup/zaino.git", rev = "1e9e339952888ee0222621263c83c6145601fac0" }
-zaino-fetch = { git = "https://github.com/valargroup/zaino.git", rev = "1e9e339952888ee0222621263c83c6145601fac0" }
-zaino-proto = { git = "https://github.com/valargroup/zaino.git", rev = "1e9e339952888ee0222621263c83c6145601fac0" }
-zaino-state = { git = "https://github.com/valargroup/zaino.git", rev = "1e9e339952888ee0222621263c83c6145601fac0" }
+zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "0a41125a712a8cc7de75e903a827a7ef0f08b4a0" }
+zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "0a41125a712a8cc7de75e903a827a7ef0f08b4a0" }
+zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "0a41125a712a8cc7de75e903a827a7ef0f08b4a0" }
+zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "0a41125a712a8cc7de75e903a827a7ef0f08b4a0" }
 
 [profile.release]
 debug = "line-tables-only"
