@@ -11,6 +11,7 @@ use bip0039::{English, Mnemonic};
 use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
+use transparent::address::TransparentAddress;
 use zaino_fetch::jsonrpsee::response::block_header::GetBlockHeader;
 use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
 use zcash_client_backend::{
@@ -26,8 +27,11 @@ use zcash_keys::keys::{
     zcashd::{PathParseError, ZcashdHdDerivation},
 };
 use zcash_primitives::{block::BlockHash, transaction::Transaction};
-use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, Parameters};
-use zewif_zcashd::{BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet};
+use zcash_protocol::consensus::{BlockHeight, BranchId, NetworkType, NetworkUpgrade, Parameters};
+use zcash_script::script::{Code, Redeem};
+use zewif_zcashd::{
+    BDBDump, ZcashdDump, ZcashdParser, ZcashdWallet, zcashd_wallet::transparent::WatchScriptKind,
+};
 use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
@@ -81,6 +85,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             wallet,
             self.buffer_wallet_transactions,
             self.allow_multiple_wallet_imports,
+            self.no_scan,
         )
         .await?;
 
@@ -115,11 +120,12 @@ impl MigrateZcashdWalletCmd {
 
         if let Ok(db_dump_path) = db_dump_path {
             let db_dump =
-                BDBDump::from_file(db_dump_path.as_path()).map_err(|e| MigrateError::Zewif {
-                    error_type: ZewifError::BdbDump,
-                    wallet_path: wallet_path.to_path_buf(),
-                    error: e,
-                })?;
+                BDBDump::from_file_with_path(db_dump_path.as_path(), wallet_path.as_path())
+                    .map_err(|e| MigrateError::Zewif {
+                        error_type: ZewifError::BdbDump,
+                        wallet_path: wallet_path.to_path_buf(),
+                        error: e,
+                    })?;
 
             let zcashd_dump =
                 ZcashdDump::from_bdb_dump(&db_dump, self.allow_warnings).map_err(|e| {
@@ -223,10 +229,117 @@ impl MigrateZcashdWalletCmd {
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
+        no_scan: bool,
     ) -> Result<(), MigrateError> {
         let mut db_data = db.handle().await?;
         let network_params = *db_data.params();
         Self::check_network(wallet.network(), network_params.network_type())?;
+
+        // Collect transparent material imported via `zcashd`'s `importpubkey` (P2PK
+        // entries in `watch_scripts()`) and `importaddress <redeemScript> "" true`
+        // (entries in `cscripts()`). Address-only entries (raw P2PKH / P2SH hashes with
+        // no associated pubkey or redeem script) cannot be represented in the Zallet
+        // wallet schema; count and warn-log them so users see what was dropped. P2SH
+        // entries with a matching `cscripts()` record are imported via that path below.
+        let mut skipped_p2pkh_address_only = 0usize;
+        let mut skipped_p2sh_address_only = 0usize;
+        let mut skipped_nonstandard = 0usize;
+        let mut skipped_malformed_pubkeys = 0usize;
+        let mut skipped_uncompressed_pubkeys = 0usize;
+        let watchonly_pubkeys = wallet
+            .watch_scripts()
+            .iter()
+            .filter_map(|w| match w.kind() {
+                // `import_standalone_transparent_pubkey` always derives the stored
+                // P2PKH from `PublicKey::serialize()` (the 33-byte compressed form),
+                // so an uncompressed (65-byte) pubkey would be tracked under a
+                // different address than `zcashd` had on-chain. Skip with a warn
+                // rather than silently migrating to the wrong address.
+                WatchScriptKind::P2PK(pubkey) if !pubkey.is_compressed() => {
+                    skipped_uncompressed_pubkeys += 1;
+                    None
+                }
+                WatchScriptKind::P2PK(pubkey) => match PublicKey::from_slice(pubkey.as_slice()) {
+                    Ok(pk) => Some(pk),
+                    Err(_) => {
+                        skipped_malformed_pubkeys += 1;
+                        None
+                    }
+                },
+                WatchScriptKind::P2PKH(_) => {
+                    skipped_p2pkh_address_only += 1;
+                    None
+                }
+                WatchScriptKind::P2SH(_) => {
+                    skipped_p2sh_address_only += 1;
+                    None
+                }
+                WatchScriptKind::Other(_) => {
+                    skipped_nonstandard += 1;
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if skipped_uncompressed_pubkeys > 0 {
+            warn!(
+                "Skipped {} watch-only P2PK entries with uncompressed public keys; \
+                 the Zallet wallet schema only supports compressed-form pubkey \
+                 imports, so these would be tracked under a different address than \
+                 `zcashd` had on-chain.",
+                skipped_uncompressed_pubkeys,
+            );
+        }
+        if skipped_malformed_pubkeys > 0 {
+            warn!(
+                "Skipped {} watch-only P2PK entries with malformed public keys.",
+                skipped_malformed_pubkeys,
+            );
+        }
+        if skipped_p2pkh_address_only > 0 {
+            warn!(
+                "Skipped {} watch-only P2PKH address-only entries (from `zcashd`'s \
+                 `importaddress <p2pkhaddress>`); these cannot be migrated without the \
+                 corresponding pubkey.",
+                skipped_p2pkh_address_only,
+            );
+        }
+        if skipped_p2sh_address_only > 0 {
+            warn!(
+                "Skipped {} watch-only P2SH address-only entries (`watchs` records with \
+                 no matching `cscript`). P2SH entries with a matching redeem script are \
+                 imported via the `cscript` path.",
+                skipped_p2sh_address_only,
+            );
+        }
+        if skipped_nonstandard > 0 {
+            warn!(
+                "Skipped {} watch-only entries with non-standard script kinds.",
+                skipped_nonstandard,
+            );
+        }
+        let mut skipped_unparseable_scripts = 0usize;
+        let watchonly_scripts = wallet
+            .cscripts()
+            .values()
+            .filter_map(|s| match Redeem::parse(&Code(s.as_ref().to_vec())) {
+                Ok(redeem) => Some(redeem),
+                Err(e) => {
+                    skipped_unparseable_scripts += 1;
+                    warn!(
+                        "Failed to parse watch-only redeem script (hex: {}): {}",
+                        hex::encode(s.as_ref()),
+                        e,
+                    );
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if skipped_unparseable_scripts > 0 {
+            warn!(
+                "Skipped {} watch-only redeem scripts that failed to parse in total.",
+                skipped_unparseable_scripts,
+            );
+        }
 
         let existing_zcash_sourced_accounts = db_data.get_account_ids()?.into_iter().try_fold(
             HashSet::new(),
@@ -282,11 +395,14 @@ impl MigrateZcashdWalletCmd {
             (None, None)
         };
         let sapling_activation = network_params
-            .activation_height(zcash_protocol::consensus::NetworkUpgrade::Sapling)
+            .activation_height(NetworkUpgrade::Sapling)
             .expect("Sapling activation height is defined.");
 
-        // Collect an index from txid to block height for all transactions known to the wallet that
-        // appear in the main chain.
+        // Collect an index from block hash to block height for all transactions known to the
+        // wallet that appear in the main chain. This only runs when we have a chain subscriber;
+        // without one, all transactions are stored as unmined and a later scan will assign
+        // accurate heights. Address exposure is handled separately via
+        // `mark_transparent_addresses_exposed` below.
         info!(
             "Wallet contains {} transactions",
             wallet.transactions().len(),
@@ -348,10 +464,13 @@ impl MigrateZcashdWalletCmd {
             )
             .await?
         } else {
-            // In no-scan mode, approximate the wallet birthday from transaction expiry
-            // heights. Expiry heights are typically creation_height + 40 (the default
-            // TX_EXPIRY_DELTA in zcashd). Subtracting 1000 gives a conservative lower
-            // bound on the earliest mined height.
+            // In no-scan mode, no chain is available, and we cannot determine actual transaction
+            // mined heights. Instead, we estimate the wallet's birthday, and then conservatively
+            // mark each address with a mined transaction as exposed at that birthday height.
+            //
+            // We approximate the wallet birthday from transaction expiry heights. Expiry heights
+            // are typically creation_height + 40 (the default TX_EXPIRY_DELTA in zcashd).
+            // Subtracting 1000 gives a conservative lower bound on the earliest mined height.
             let birthday_height = wallet
                 .transactions()
                 .values()
@@ -374,8 +493,12 @@ impl MigrateZcashdWalletCmd {
 
         let mnemonic_seed_fp = mnemonic_seed_data.as_ref().map(|(_, fp)| *fp);
         let legacy_transparent_account_uuid = if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
-            // If there are any legacy transparent keys, create the legacy account.
-            if !wallet.keys().is_empty() {
+            // Create the legacy account if there are any legacy transparent keys or any
+            // imported watch-only transparent pubkeys / redeem scripts to store.
+            if !wallet.keys().is_empty()
+                || !watchonly_pubkeys.is_empty()
+                || !watchonly_scripts.is_empty()
+            {
                 let (account, _) = db_data.import_account_hd(
                     &format!(
                         "zcashd post-v4.7.0 legacy transparent account {}",
@@ -421,7 +544,11 @@ impl MigrateZcashdWalletCmd {
                     // account, so we don't need to do anything.
                     Some(uuid)
                 }
-                (None, Some((seed, _))) if !wallet.keys().is_empty() => {
+                (None, Some((seed, _)))
+                    if !wallet.keys().is_empty()
+                        || !watchonly_pubkeys.is_empty()
+                        || !watchonly_scripts.is_empty() =>
+                {
                     // In this case, we have the legacy seed, but no mnemonic seed was ever derived
                     // from it, so this is a pre-v4.7.0 wallet. We construct the mnemonic in the same
                     // fashion as zcashd, by using the legacy seed as entropy in the generation of the
@@ -567,6 +694,39 @@ impl MigrateZcashdWalletCmd {
             }
         }
 
+        // Import view-only Sapling keys added via `z_importviewingkey`. zcashd stores these as
+        // `sapextfvk` BDB records; each extended FVK becomes its own view-only account, matching
+        // how each spending-key entry becomes its own account above. If both `z_importkey` and
+        // `z_importviewingkey` were called for the same key, the spending-key path already created
+        // the account, so the `get_account_for_ufvk` check below skips the duplicate.
+        let viewing_keys = wallet.sapling_extended_full_viewing_keys();
+        info!("Importing {} view-only Sapling keys", viewing_keys.len());
+        for (idx, zewif_extfvk) in viewing_keys.values().enumerate() {
+            if idx % 100 == 0 && idx > 0 {
+                info!("Processed {} view-only Sapling keys", idx);
+            }
+            // `zewif-zcashd` parses Sapling types against an older `sapling-crypto`. The ZIP 32
+            // extended FVK encoding is 169 bytes and stable across versions, so round-trip through
+            // bytes to get the version this crate uses.
+            let mut bytes = [0u8; 169];
+            zewif_extfvk
+                .write(&mut bytes[..])
+                .expect("Sapling extended FVK fits in 169 bytes");
+            let extfvk = sapling::zip32::ExtendedFullViewingKey::read(&bytes[..])
+                .expect("Sapling extended FVK encoding is stable across sapling-crypto versions");
+            let ufvk = UnifiedFullViewingKey::from_sapling_extended_full_viewing_key(extfvk)?;
+
+            if db_data.get_account_for_ufvk(&ufvk)?.is_none() {
+                db_data.import_account_ufvk(
+                    &format!("zcashd imported view-only sapling {}", idx),
+                    &ufvk,
+                    &wallet_birthday,
+                    AccountPurpose::ViewOnly,
+                    Some(ZCASHD_LEGACY_SOURCE),
+                )?;
+            }
+        }
+
         // TODO: Move this into zewif-zcashd once we're out of dependency version hell.
         fn convert_key(
             key: &zewif_zcashd::zcashd_wallet::transparent::KeyPair,
@@ -589,6 +749,18 @@ impl MigrateZcashdWalletCmd {
             Ok(key)
         }
 
+        // Collect transparent addresses that need to be explicitly marked as exposed at the
+        // wallet birthday; `mark_transparent_addresses_exposed` consumes this set below.
+        // Otherwise `listaddresses` (which filters on `exposed_at_height IS NOT NULL`) would
+        // never surface them. Two sources feed this set:
+        //   * Every address imported standalone (privkey, pubkey, or P2SH redeem script) or
+        //     watch-only (from `importaddress` / `importpubkey`), accumulated below as each
+        //     import succeeds, since these have no on-chain derivation history that a chain
+        //     scan would discover.
+        //   * In no-scan mode, every address observed in the wallet's transaction set, since
+        //     the chain will not be scanned to detect exposure heights.
+        let mut to_expose: HashSet<TransparentAddress> = HashSet::new();
+
         let encryptor = keystore.encryptor().await?;
         let transparent_keypairs = wallet.keys().keypairs().collect::<Vec<_>>();
         info!(
@@ -605,12 +777,160 @@ impl MigrateZcashdWalletCmd {
         keystore
             .store_encrypted_standalone_transparent_keys(&encrypted_transparent_keys)
             .await?;
+        let standalone_pubkeys: Vec<PublicKey> = encrypted_transparent_keys
+            .iter()
+            .map(|key| *key.pubkey())
+            .collect();
+        to_expose.extend(
+            standalone_pubkeys
+                .iter()
+                .map(TransparentAddress::from_pubkey),
+        );
         db_data.import_standalone_transparent_pubkeys(
             legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?,
-            encrypted_transparent_keys
-                .into_iter()
-                .map(|key| *key.pubkey()),
+            standalone_pubkeys.into_iter(),
         )?;
+
+        // Import transparent addresses that were added to the `zcashd` wallet via
+        // `importaddress` / `importpubkey` (i.e. watch-only imports). These are stored as
+        // `watchs` and `cscript` records in `wallet.dat`, and `zewif-zcashd` does not
+        // currently surface them through its parsed `ZcashdWallet` type.
+        if !watchonly_pubkeys.is_empty() || !watchonly_scripts.is_empty() {
+            let target_account =
+                legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?;
+
+            info!(
+                "Importing {} watch-only transparent pubkeys",
+                watchonly_pubkeys.len(),
+            );
+            to_expose.extend(
+                watchonly_pubkeys
+                    .iter()
+                    .map(TransparentAddress::from_pubkey),
+            );
+            db_data.import_standalone_transparent_pubkeys(
+                target_account,
+                watchonly_pubkeys.into_iter(),
+            )?;
+
+            info!(
+                "Importing {} watch-only transparent redeem scripts",
+                watchonly_scripts.len(),
+            );
+            let mut skipped_unsupported_scripts = 0usize;
+            for script in watchonly_scripts {
+                let script_addr =
+                    TransparentAddress::from_script_pubkey(&zcash_script::descriptor::sh(&script));
+                // A P2SH descriptor should always produce a valid scriptPubKey from which
+                // `TransparentAddress` can be parsed; if not, our exposure-marking step
+                // below will silently miss this address, so log it.
+                if script_addr.is_none() {
+                    warn!(
+                        "P2SH descriptor unexpectedly produced no `TransparentAddress`; \
+                         the imported script will not be marked as exposed.",
+                    );
+                    debug_assert!(false, "sh() descriptor should always yield an address");
+                }
+                // `import_standalone_transparent_script` currently only accepts multisig
+                // redeem scripts within the P2SH size limit; treat those rejections
+                // (`SqliteClientError::BadAccountData`) as warn-and-skip so a single
+                // unsupported script does not abort the migration. Any other error
+                // (corrupted data, DB failure, conflict, ...) is propagated.
+                match db_data.import_standalone_transparent_script(target_account, script) {
+                    Ok(()) => {
+                        if let Some(addr) = script_addr {
+                            to_expose.insert(addr);
+                        }
+                    }
+                    Err(SqliteClientError::BadAccountData(msg)) => {
+                        skipped_unsupported_scripts += 1;
+                        warn!("Skipping unsupported watch-only redeem script: {}", msg);
+                    }
+                    Err(e) => return Err(e.into()),
+                }
+            }
+            if skipped_unsupported_scripts > 0 {
+                warn!(
+                    "Skipped {} unsupported watch-only redeem scripts in total.",
+                    skipped_unsupported_scripts,
+                );
+            }
+        }
+
+        // In no-scan mode, also mark every address observed in the wallet's transaction set,
+        // since the chain will not be scanned to detect exposure heights.
+        if no_scan {
+            let mut buf = vec![];
+            for wallet_tx in wallet.transactions().values() {
+                buf.clear();
+                wallet_tx.transaction().write(&mut buf)?;
+                // We only read the transparent bundle here, so the branch id chosen here
+                // is irrelevant: for v5+ txs the embedded branch id overrides this value,
+                // and for earlier versions the branch id is only stored as metadata and
+                // does not affect parsing of the transparent bundle. Any value works.
+                //
+                // The buffer-path below uses `BranchId::for_height` instead because it
+                // re-parses the transaction for full decryption, where the branch id
+                // does affect the result for earlier-version txs.
+                let tx = Transaction::read(buf.as_slice(), BranchId::Sprout)?;
+                if let Some(bundle) = tx.transparent_bundle() {
+                    for vout in &bundle.vout {
+                        if let Some(addr) = vout
+                            .script_kind()
+                            .as_ref()
+                            .and_then(TransparentAddress::from_script_kind)
+                        {
+                            to_expose.insert(addr);
+                        }
+                    }
+                }
+            }
+        }
+
+        if !to_expose.is_empty() {
+            // The upstream API rolls back the whole batch if any address is not tracked,
+            // so filter to just the wallet's known receivers (external counterparties drop
+            // out here).
+            let mut known: HashSet<TransparentAddress> = HashSet::new();
+            for account_id in db_data.get_account_ids()? {
+                known.extend(
+                    db_data
+                        .get_transparent_receivers(
+                            account_id, true, // include_change
+                            true, // include_standalone
+                        )?
+                        .into_keys(),
+                );
+            }
+
+            let birthday_height = wallet_birthday.height();
+            let to_mark: Vec<(TransparentAddress, BlockHeight)> = to_expose
+                .intersection(&known)
+                .map(|addr| (*addr, birthday_height))
+                .collect();
+            // Surface any address we queued for exposure marking but that does not
+            // appear in `known`. This should be empty in steady state; a non-zero
+            // count signals that an import-path above produced a different address
+            // than what was stored in the wallet (e.g. encoding mismatches), which
+            // would otherwise be invisible.
+            let dropped = to_expose.difference(&known).count();
+            if dropped > 0 {
+                warn!(
+                    "{} transparent addresses queued for exposure marking were not \
+                     tracked by any account and were skipped; an import path may \
+                     have stored them under a different address.",
+                    dropped,
+                );
+            }
+            if !to_mark.is_empty() {
+                db_data.mark_transparent_addresses_exposed(&to_mark)?;
+                info!(
+                    "Marked {} transparent addresses as exposed at birthday height {}",
+                    to_mark.len(),
+                    birthday_height,
+                );
+            }
+        }
 
         // Since we've retrieved the raw transaction data anyway, preemptively store it for faster
         // access to balance & to set priorities in the scan queue.

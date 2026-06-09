@@ -199,7 +199,7 @@ pub(crate) struct MigrateZcashdWalletCmd {
     /// Skip chain scanning during migration. Keys, accounts, and transaction data are
     /// still imported, but block heights and tree state are not resolved from the chain.
     /// Useful when the corresponding chain data is not available.
-    #[arg(long, conflicts_with = "buffer_wallet_transactions")]
+    #[arg(long)]
     pub(crate) no_scan: bool,
 
     /// Temporary flag ensuring any alpha users are aware the migration is not stable.
