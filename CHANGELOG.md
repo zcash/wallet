@@ -30,6 +30,10 @@ be considered breaking changes.
 
 ### Fixed
 
+- `walletpassphrase` unlock timeouts are now capped at 100,000,000 seconds,
+  matching Bitcoin Core.
+- Cached age identities are now zeroized on drop when the keystore is locked or
+  auto-relocks.
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is

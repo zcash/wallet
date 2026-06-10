@@ -149,6 +149,20 @@ pub(crate) use error::KeystoreError;
 
 type RelockTask = (SystemTime, JoinHandle<()>);
 
+/// Maximum duration the keystore may remain unlocked via [`KeyStore::unlock`].
+///
+/// Matches Bitcoin Core's `walletpassphrase` timeout cap.
+const MAX_UNLOCK_TIMEOUT_SECS: u64 = 100_000_000;
+
+fn clamp_unlock_timeout(timeout: u64) -> u64 {
+    timeout.min(MAX_UNLOCK_TIMEOUT_SECS)
+}
+
+fn clear_cached_identities(identities: &mut Vec<Box<dyn age::Identity + Send + Sync>>) {
+    identities.drain(..);
+    identities.shrink_to_fit();
+}
+
 #[derive(Clone)]
 pub(crate) struct KeyStore {
     db: Database,
@@ -355,13 +369,14 @@ impl KeyStore {
         *self.identities.write().await = decrypted_identities;
 
         // Start a task to relock the keystore after the given timeout.
-        let duration = Duration::from_secs(timeout);
+        let duration = Duration::from_secs(clamp_unlock_timeout(timeout));
         let identities = self.identities.clone();
         *relock_task = Some((
             SystemTime::now() + duration,
             crate::spawn!("Keystore relock", async move {
                 time::sleep(duration).await;
-                identities.write().await.clear();
+                let mut identities = identities.write().await;
+                clear_cached_identities(&mut identities);
             }),
         ));
 
@@ -381,7 +396,8 @@ impl KeyStore {
             existing_timeout.abort();
         }
 
-        self.identities.write().await.clear();
+        let mut identities = self.identities.write().await;
+        clear_cached_identities(&mut identities);
     }
 
     async fn with_db<T>(
@@ -957,4 +973,19 @@ fn decrypt_standalone_transparent_privkey(
         .map_err(|e| ErrorKind::Generic.context(e))?;
 
     Ok(secret_key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unlock_timeout_is_clamped_to_bitcoin_core_max() {
+        assert_eq!(clamp_unlock_timeout(u64::MAX), MAX_UNLOCK_TIMEOUT_SECS);
+        assert_eq!(clamp_unlock_timeout(60), 60);
+        assert_eq!(
+            clamp_unlock_timeout(MAX_UNLOCK_TIMEOUT_SECS),
+            MAX_UNLOCK_TIMEOUT_SECS,
+        );
+    }
 }
