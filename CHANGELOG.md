@@ -30,6 +30,8 @@ be considered breaking changes.
 
 ### Fixed
 
+- `z_sendmany` no longer allocates unbounded memory when parsing an oversized
+  `memo` hex string.
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is

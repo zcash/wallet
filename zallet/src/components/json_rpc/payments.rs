@@ -412,7 +412,15 @@ impl From<IncompatiblePrivacyPolicy> for ErrorObjectOwned {
     }
 }
 
+/// Maximum decoded memo size in bytes, matching [`MemoBytes::from_bytes`].
+const MAX_MEMO_BYTES: usize = 512;
+
 pub(super) fn parse_memo(memo_hex: &str) -> RpcResult<MemoBytes> {
+    if memo_hex.len() > MAX_MEMO_BYTES * 2 {
+        return Err(LegacyCode::InvalidParameter
+            .with_static("Invalid parameter, memo is longer than the maximum allowed 512 bytes."));
+    }
+
     let memo_bytes = hex::decode(memo_hex).map_err(|_| {
         LegacyCode::InvalidParameter
             .with_static("Invalid parameter, expected memo data in hexadecimal format.")
@@ -422,6 +430,41 @@ pub(super) fn parse_memo(memo_hex: &str) -> RpcResult<MemoBytes> {
         LegacyCode::InvalidParameter
             .with_static("Invalid parameter, memo is longer than the maximum allowed 512 bytes.")
     })
+}
+
+#[cfg(test)]
+mod parse_memo_tests {
+    use super::*;
+    use jsonrpsee::types::ErrorObject;
+
+    fn invalid_parameter_message(err: ErrorObject<'_>) -> String {
+        err.message().to_string()
+    }
+
+    #[test]
+    fn parse_memo_accepts_max_length_hex() {
+        let memo_hex = "00".repeat(MAX_MEMO_BYTES);
+        assert!(parse_memo(&memo_hex).is_ok());
+    }
+
+    #[test]
+    fn parse_memo_rejects_overlong_hex_before_decode() {
+        let memo_hex = "00".repeat(MAX_MEMO_BYTES + 1);
+        let err = parse_memo(&memo_hex).expect_err("overlong memo should be rejected");
+        assert_eq!(
+            invalid_parameter_message(err),
+            "Invalid parameter, memo is longer than the maximum allowed 512 bytes."
+        );
+    }
+
+    #[test]
+    fn parse_memo_rejects_invalid_hex() {
+        let err = parse_memo("not-hex").expect_err("invalid hex should be rejected");
+        assert_eq!(
+            invalid_parameter_message(err),
+            "Invalid parameter, expected memo data in hexadecimal format."
+        );
+    }
 }
 
 pub(super) fn get_account_for_address(
