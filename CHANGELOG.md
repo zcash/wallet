@@ -30,6 +30,9 @@ be considered breaking changes.
 
 ### Fixed
 
+- `walletlock` now awaits aborted relock tasks before returning, preventing a race
+  where a rapid `walletpassphrase` after `walletlock` could leave the wallet locked
+  despite reporting success.
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is

@@ -379,6 +379,9 @@ impl KeyStore {
         let mut relock_task = self.relock_task.lock().await;
         if let Some((_, existing_timeout)) = relock_task.take() {
             existing_timeout.abort();
+            // Wait for the task to either finish or abort, to ensure there's zero
+            // possibility of a subsequent `unlock` having its identities cleared.
+            let _ = existing_timeout.await;
         }
 
         self.identities.write().await.clear();
@@ -957,4 +960,72 @@ fn decrypt_standalone_transparent_privkey(
         .map_err(|e| ErrorKind::Generic.context(e))?;
 
     Ok(secret_key)
+}
+
+#[cfg(test)]
+mod tests {
+    use age::secrecy::ExposeSecret;
+    use tempfile::tempdir;
+    use zcash_protocol::consensus::NetworkType;
+
+    use super::*;
+    use crate::{components::database::Database, config::ZalletConfig};
+
+    /// Regression test for GHSA-8cfr-hmvc-2333: `lock()` must await aborted relock tasks
+    /// so a subsequent `unlock()` cannot have its identities cleared by a stale task.
+    #[test]
+    fn lock_awaits_aborted_relock_task_before_unlock() {
+        crate::i18n::load_languages(&[]);
+
+        let datadir = tempdir().unwrap();
+        let passphrase = age::secrecy::SecretString::from("test-passphrase".to_owned());
+
+        let identity_line = age::x25519::Identity::generate().to_string();
+        let encrypted_identity = age::encrypt_and_armor(
+            &age::scrypt::Recipient::new(passphrase.clone()),
+            identity_line.expose_secret().as_bytes(),
+        )
+        .unwrap();
+        std::fs::write(
+            datadir.path().join("encryption-identity.txt"),
+            encrypted_identity,
+        )
+        .unwrap();
+
+        let config = ZalletConfig {
+            datadir: Some(datadir.path().to_path_buf()),
+            consensus: crate::config::ConsensusSection {
+                network: NetworkType::Test,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let db = Database::open(&config).await.unwrap();
+                let keystore = KeyStore::new(&config, db).unwrap();
+
+                assert!(
+                    keystore.unlock(passphrase.clone(), 3_600).await,
+                    "initial unlock should succeed"
+                );
+
+                for _ in 0..5 {
+                    keystore.lock().await;
+                    assert!(
+                        keystore.unlock(passphrase.clone(), 3_600).await,
+                        "unlock after lock should succeed"
+                    );
+                    assert!(
+                        !keystore.is_locked().await,
+                        "wallet must remain unlocked after lock/unlock cycle"
+                    );
+                    tokio::task::yield_now().await;
+                }
+            });
+    }
 }
