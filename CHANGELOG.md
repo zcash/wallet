@@ -30,6 +30,9 @@ be considered breaking changes.
 
 ### Fixed
 
+- Async RPC operations that panic no longer remain stuck in the `executing` state
+  indefinitely; they are now reported as `failed` and can be pruned with
+  `z_getoperationresult`.
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is

@@ -94,6 +94,22 @@ pub(super) struct OperationData {
     result: Option<RpcResult<Value>>,
 }
 
+async fn record_task_panic(handle: &Arc<RwLock<OperationData>>) {
+    let mut data = handle.write().await;
+    if matches!(
+        data.state,
+        OperationState::Success | OperationState::Failed | OperationState::Cancelled
+    ) {
+        return;
+    }
+
+    data.state = OperationState::Failed;
+    data.end_time = Some(SystemTime::now());
+    data.result = Some(Err(
+        LegacyCode::Misc.with_static("Async operation task panicked")
+    ));
+}
+
 /// An async operation launched by an RPC call.
 pub(super) struct AsyncOperation {
     operation_id: OperationId,
@@ -117,9 +133,9 @@ impl AsyncOperation {
             result: None,
         }));
 
-        let handle = data.clone();
+        let task_data = data.clone();
 
-        crate::spawn!(
+        let task = crate::spawn!(
             context
                 .as_ref()
                 .map(|context| context.method)
@@ -127,7 +143,7 @@ impl AsyncOperation {
             async move {
                 // Record that the task has started.
                 {
-                    let mut data = handle.write().await;
+                    let mut data = task_data.write().await;
                     if matches!(data.state, OperationState::Cancelled) {
                         return;
                     }
@@ -149,7 +165,7 @@ impl AsyncOperation {
                 });
 
                 // Record the result.
-                let mut data = handle.write().await;
+                let mut data = task_data.write().await;
                 data.state = if res.is_ok() {
                     OperationState::Success
                 } else {
@@ -159,6 +175,13 @@ impl AsyncOperation {
                 data.result = Some(res);
             }
         );
+
+        let panic_data = data.clone();
+        crate::spawn!("AsyncOp panic handler", async move {
+            if task.await.is_err() {
+                record_task_panic(&panic_data).await;
+            }
+        });
 
         Self {
             operation_id: OperationId::new(),
@@ -268,4 +291,61 @@ struct OperationError {
     /// Optional data
     #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn wait_for_terminal(op: &AsyncOperation) {
+        for _ in 0..100 {
+            if matches!(
+                op.state().await,
+                OperationState::Success | OperationState::Failed | OperationState::Cancelled
+            ) {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("operation did not reach a terminal state");
+    }
+
+    #[test]
+    fn task_panic_marks_operation_failed() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should build");
+
+        rt.block_on(async {
+            let op = AsyncOperation::new(None, async {
+                panic!("test panic");
+                #[allow(unreachable_code)]
+                Ok(0_u32)
+            })
+            .await;
+            wait_for_terminal(&op).await;
+            assert_eq!(op.state().await, OperationState::Failed);
+
+            let status = op.to_status().await;
+            assert_eq!(status.status, OperationState::Failed);
+            let error = status.error.expect("panic should record an RPC error");
+            assert_eq!(error.code, LegacyCode::Misc as i32);
+            assert_eq!(error.message, "Async operation task panicked");
+        });
+    }
+
+    #[test]
+    fn successful_task_is_unchanged() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should build");
+
+        rt.block_on(async {
+            let op = AsyncOperation::new(None, async { Ok(42_u32) }).await;
+            wait_for_terminal(&op).await;
+            assert_eq!(op.state().await, OperationState::Success);
+        });
+    }
 }
