@@ -30,6 +30,10 @@ be considered breaking changes.
 
 ### Fixed
 
+- JSON-RPC async operations (`z_sendmany`, `z_shieldcoinbase`) are now bounded
+  to 64 in-flight operations, and finished operations are pruned automatically
+  when new async RPCs are started. This prevents authenticated callers from
+  exhausting wallet memory by flooding the operation queue.
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
