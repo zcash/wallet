@@ -2,9 +2,8 @@ use documented::Documented;
 use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
-use zaino_state::FetchServiceSubscriber;
 
-use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
+use crate::components::{chain::Chain, database::DbConnection, json_rpc::server::LegacyCode};
 
 #[cfg(feature = "transparent-key-import")]
 use {
@@ -40,7 +39,7 @@ pub(super) const PARAM_RESCAN_DESC: &str =
 #[cfg(feature = "transparent-key-import")]
 pub(crate) async fn call(
     wallet: &mut DbConnection,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     account: &str,
     hex_data: &str,
     rescan: Option<bool>,
@@ -79,7 +78,7 @@ pub(crate) async fn call(
 #[cfg(not(feature = "transparent-key-import"))]
 pub(crate) async fn call(
     _wallet: &mut DbConnection,
-    _chain: FetchServiceSubscriber,
+    _chain: Chain,
     _account: &str,
     _hex_data: &str,
     _rescan: Option<bool>,

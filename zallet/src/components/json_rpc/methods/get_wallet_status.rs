@@ -3,15 +3,13 @@ use jsonrpsee::core::RpcResult;
 use rand::rngs::OsRng;
 use schemars::JsonSchema;
 use serde::Serialize;
-use zaino_state::{FetchServiceSubscriber, LightWalletIndexer};
 use zcash_client_backend::data_api::{
     BlockMetadata, WalletRead, WalletSummary, scanning::ScanRange, wallet::ConfirmationsPolicy,
 };
 use zcash_client_sqlite::{AccountUuid, WalletDb, error::SqliteClientError, util::SystemClock};
-use zcash_primitives::block::BlockHash;
 
 use crate::{
-    components::{database::DbConnection, json_rpc::server::LegacyCode},
+    components::{chain::Chain, database::DbConnection, json_rpc::server::LegacyCode},
     network::Network,
 };
 
@@ -83,9 +81,13 @@ struct Progress {
     denominator: u64,
 }
 
-pub(crate) async fn call(wallet: &DbConnection, chain: FetchServiceSubscriber) -> Response {
+pub(crate) async fn call(wallet: &DbConnection, chain: Chain) -> Response {
     let node_tip = chain
-        .get_latest_block()
+        .snapshot()
+        .await
+        // TODO: Better error.
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+        .tip()
         .await
         // TODO: Better error.
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
@@ -96,12 +98,8 @@ pub(crate) async fn call(wallet: &DbConnection, chain: FetchServiceSubscriber) -
 
     Ok(GetWalletStatus {
         node_tip: ChainTip {
-            blockhash: BlockHash::try_from_slice(node_tip.hash.as_slice())
-                .expect("block hash missing")
-                .to_string(),
-            height: u32::try_from(node_tip.height)
-                // TODO: Better error.
-                .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?,
+            blockhash: node_tip.hash.to_string(),
+            height: node_tip.height.into(),
         },
         wallet_tip: wallet_data.as_ref().map(|d| d.chain_tip()),
         fully_synced_height: wallet_data.as_ref().and_then(|d| d.fully_synced_height()),

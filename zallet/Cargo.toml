@@ -145,13 +145,12 @@ which = { workspace = true, optional = true }
 xdg.workspace = true
 zaino-common.workspace = true
 zaino-fetch.workspace = true
-zaino-proto.workspace = true
 zaino-state.workspace = true
 zcash_address.workspace = true
 zcash_client_backend = { workspace = true, features = [
     "lightwalletd-tonic-tls-webpki-roots",
     "orchard",
-    "sync",
+    "sync-decryptor",
     "transparent-inputs",
 ] }
 zcash_client_sqlite = { workspace = true, features = [
@@ -165,9 +164,7 @@ zcash_primitives.workspace = true
 zcash_proofs = { workspace = true, features = ["bundled-prover"] }
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
 zcash_script.workspace = true
-zebra-chain.workspace = true
 zebra-rpc.workspace = true
-zebra-state.workspace = true
 zip32.workspace = true
 zewif = { workspace = true, optional = true }
 zewif-zcashd = { workspace = true, optional = true }
