@@ -1,15 +1,10 @@
 [workspace]
-members = [
-    "zallet",
-]
+members = ["zallet"]
 # `vendor/core2-shim-0.3` and `vendor/core2-shim-0.4` are referenced from the
 # `[patch.crates-io]` table below, but excluded from the workspace because
 # Cargo requires workspace member crate names to be unique and both shims must
 # be named `core2` to satisfy the resolver.
-exclude = [
-    "vendor/core2-shim-0.3",
-    "vendor/core2-shim-0.4",
-]
+exclude = ["vendor/core2-shim-0.3", "vendor/core2-shim-0.4"]
 resolver = "2"
 
 [workspace.package]
@@ -119,7 +114,12 @@ orchard = "0.14"
 sapling = { package = "sapling-crypto", version = "0.7" }
 transparent = { package = "zcash_transparent", version = "0.8" }
 zcash_encoding = "0.4"
-zcash_keys = { version = "0.14", features = ["transparent-inputs", "sapling", "orchard", "transparent-key-encoding"] }
+zcash_keys = { version = "0.14", features = [
+    "transparent-inputs",
+    "sapling",
+    "orchard",
+    "transparent-key-encoding",
+] }
 zcash_primitives = "0.28"
 zcash_proofs = "0.28"
 zcash_script = "0.4.3"
@@ -127,7 +127,7 @@ secp256k1 = { version = "0.29", features = ["recovery"] }
 
 # Zcash chain state
 zaino-common = "0.1.1"
-zaino-fetch = "0.1.1"
+zaino-fetch = "0.1"
 zaino-proto = "0.1.1"
 zaino-state = "0.2"
 zebra-chain = "9.0"
@@ -194,10 +194,12 @@ age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "798d7b3554ebada05bea63b67ee66f9c2558a21a" }
 zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "22f8219bb2cb741b72683cbee170b6667c7da7b0" }
 
-zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "0a41125a712a8cc7de75e903a827a7ef0f08b4a0" }
-zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "0a41125a712a8cc7de75e903a827a7ef0f08b4a0" }
-zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "0a41125a712a8cc7de75e903a827a7ef0f08b4a0" }
-zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "0a41125a712a8cc7de75e903a827a7ef0f08b4a0" }
+# Pinned to the zingolabs/zaino#1200. Bump to the final `0.4.0` tag once it is
+# published. See https://github.com/zcash/wallet/issues/471.
+zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "021fbf32ea373a684c5dec9fff187c8e1c7004b0" }
+zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "021fbf32ea373a684c5dec9fff187c8e1c7004b0" }
+zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "021fbf32ea373a684c5dec9fff187c8e1c7004b0" }
+zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "021fbf32ea373a684c5dec9fff187c8e1c7004b0" }
 
 [profile.release]
 debug = "line-tables-only"
