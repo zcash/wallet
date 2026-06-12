@@ -21,6 +21,11 @@ be considered breaking changes.
 
 ### Changed
 
+- Updated the Zaino chain indexer to a pre-release `dev`-branch build
+  (zingolabs/zaino#1200) that retains NU 6.2 support and adds optional
+  ("ephemeral") finalised state. The embedded indexer now runs in ephemeral
+  mode, serving finalised chain data directly from the validator instead of
+  maintaining a persistent finalised-state database.
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
   and `addresses` for transparent outputs.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
@@ -31,6 +36,12 @@ be considered breaking changes.
 
 ### Fixed
 
+- The wallet no longer permanently stops following the chain after a few
+  hundred blocks of history. The embedded indexer's finalised-state database
+  was configured with a size limit of 0 (a workaround for slow start-up,
+  zingolabs/zaino#249), so its sync loop eventually failed with `MDB_MAP_FULL`
+  and gave up; running the finalised state ephemerally removes the database
+  (and the workaround) entirely.
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is

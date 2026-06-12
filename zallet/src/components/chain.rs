@@ -99,13 +99,17 @@ impl Chain {
                 cache: CacheConfig::default(),
                 database: DatabaseConfig {
                     path: config.indexer_db_path().to_path_buf(),
-                    // Setting this to as non-zero value causes start-up to block on
-                    // completely filling the cache. Zaino's DB currently only contains a
-                    // cache of CompactBlocks, so we make do for now with uncached queries.
-                    // TODO: https://github.com/zingolabs/zaino/issues/249
+                    // Unused in ephemeral mode (no persistent finalised-state
+                    // database is opened).
                     size: zaino_common::DatabaseSize(0),
                 },
             },
+            // Run the finalised state ephemerally: no persistent database,
+            // finalised reads are served from the backing validator. This
+            // replaces the previous `DatabaseSize(0)` workaround for
+            // https://github.com/zingolabs/zaino/issues/249, which made the
+            // LMDB map fill up and permanently stall the sync loop.
+            true,
             config.consensus.network().to_zaino(),
             None,
         );
