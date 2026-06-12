@@ -26,6 +26,13 @@ be considered breaking changes.
   ("ephemeral") finalised state. The embedded indexer now runs in ephemeral
   mode, serving finalised chain data directly from the validator instead of
   maintaining a persistent finalised-state database.
+- The wallet sync engine has been migrated to Zaino's `ChainIndex` interface,
+  and now scans full blocks instead of compact blocks:
+  - Shielded outputs are trial-decrypted by a batched decryption engine.
+  - Transparent outputs are detected directly while scanning blocks, instead
+    of by polling the backing node's address index on every chain tip change.
+  - Chain queries made by RPC methods now operate against a stable snapshot of
+    the chain state.
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
   and `addresses` for transparent outputs.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that

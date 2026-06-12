@@ -7344,7 +7344,6 @@ dependencies = [
  "xdg 2.5.2",
  "zaino-common",
  "zaino-fetch",
- "zaino-proto",
  "zaino-state",
  "zcash_address",
  "zcash_client_backend",
@@ -7357,9 +7356,7 @@ dependencies = [
  "zcash_protocol",
  "zcash_script",
  "zcash_transparent",
- "zebra-chain",
  "zebra-rpc",
- "zebra-state",
  "zewif",
  "zewif-zcashd",
  "zip32",
@@ -7383,7 +7380,6 @@ name = "zcash_client_backend"
 version = "0.23.0"
 source = "git+https://github.com/zcash/librustzcash.git?rev=32fa8e25684693605762febde92920c7d795634b#32fa8e25684693605762febde92920c7d795634b"
 dependencies = [
- "async-trait",
  "base64 0.22.1",
  "bech32 0.11.0",
  "bip32",
@@ -7392,7 +7388,6 @@ dependencies = [
  "byteorder",
  "document-features",
  "flume",
- "futures-util",
  "getset",
  "group",
  "hex",
@@ -7413,6 +7408,7 @@ dependencies = [
  "subtle",
  "time",
  "time-core",
+ "tokio",
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
