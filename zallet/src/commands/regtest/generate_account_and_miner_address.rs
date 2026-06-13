@@ -10,6 +10,7 @@ use crate::{
     commands::AsyncRunnable,
     components::{database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
+    fl,
     network::Network,
     prelude::*,
 };
@@ -22,7 +23,7 @@ impl AsyncRunnable for GenerateAccountAndMinerAddressCmd {
         let params = config.consensus.network();
         if !matches!(params, Network::RegTest(_)) {
             return Err(ErrorKind::Init
-                .context("Command only works on a regtest wallet")
+                .context(fl!("err-regtest-not-regtest-wallet"))
                 .into());
         }
 
@@ -33,7 +34,7 @@ impl AsyncRunnable for GenerateAccountAndMinerAddressCmd {
         match wallet.chain_height() {
             Ok(None) => Ok(()),
             Ok(Some(_)) | Err(_) => {
-                Err(ErrorKind::Init.context("Command only works on a fresh wallet"))
+                Err(ErrorKind::Init.context(fl!("err-regtest-fresh-wallet-only")))
             }
         }?;
 
@@ -41,10 +42,10 @@ impl AsyncRunnable for GenerateAccountAndMinerAddressCmd {
         let mut seed_fps = seed_fps.into_iter();
         match (seed_fps.next(), seed_fps.next()) {
             (None, _) => Err(ErrorKind::Init
-                .context("Need to call generate-mnemonic or import-mnemonic first")
+                .context(fl!("err-regtest-need-mnemonic-first"))
                 .into()),
             (_, Some(_)) => Err(ErrorKind::Init
-                .context("This regtest API is not supported with multiple seeds")
+                .context(fl!("err-regtest-multi-seed-unsupported"))
                 .into()),
             (Some(seed_fp), None) => {
                 let seed = keystore.decrypt_seed(&seed_fp).await?;
@@ -61,7 +62,10 @@ impl AsyncRunnable for GenerateAccountAndMinerAddressCmd {
                 let (_, usk) = wallet
                     .create_account("Default account", &seed, &birthday, None)
                     .map_err(|e| {
-                        ErrorKind::Generic.context(format!("Failed to generate miner address: {e}"))
+                        ErrorKind::Generic.context(fl!(
+                            "err-regtest-miner-address-failed",
+                            error = e.to_string()
+                        ))
                     })?;
 
                 let (addr, _) = usk
@@ -69,7 +73,10 @@ impl AsyncRunnable for GenerateAccountAndMinerAddressCmd {
                     .to_account_pubkey()
                     .derive_internal_ivk()
                     .map_err(|e| {
-                        ErrorKind::Generic.context(format!("Failed to generate miner address: {e}"))
+                        ErrorKind::Generic.context(fl!(
+                            "err-regtest-miner-address-failed",
+                            error = e.to_string()
+                        ))
                     })?
                     .default_address();
 

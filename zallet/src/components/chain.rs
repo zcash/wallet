@@ -15,6 +15,7 @@ use zaino_state::{
 use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
+    fl,
 };
 
 use super::TaskHandle;
@@ -48,15 +49,16 @@ impl Chain {
                             "validator_address '{}' resolved to no IP addresses",
                             addr_str
                         );
-                        Err(ErrorKind::Init.context(format!(
-                            "validator_address '{addr_str}' resolved to no IP addresses"
-                        )))
+                        Err(ErrorKind::Init
+                            .context(fl!("err-init-validator-no-addresses", addr = addr_str)))
                     }
                 },
                 Err(e) => {
                     error!("Failed to resolve validator_address '{}': {}", addr_str, e);
-                    Err(ErrorKind::Init.context(format!(
-                        "Failed to resolve validator_address '{addr_str}': {e}"
+                    Err(ErrorKind::Init.context(fl!(
+                        "err-init-validator-resolve-failed",
+                        addr = addr_str,
+                        error = e.to_string()
                     )))
                 }
             },
@@ -81,8 +83,10 @@ impl Chain {
                             "Failed to parse default validator_address '{}': {}",
                             default_addr_str, e
                         );
-                        Err(ErrorKind::Init.context(format!(
-                            "Failed to parse default validator_address '{default_addr_str}': {e}"
+                        Err(ErrorKind::Init.context(fl!(
+                            "err-init-validator-parse-default-failed",
+                            addr = default_addr_str,
+                            error = e.to_string()
                         )))
                     }
                 }
@@ -166,7 +170,7 @@ impl Chain {
             .read()
             .await
             .as_ref()
-            .ok_or_else(|| ErrorKind::Generic.context("ChainState indexer is not running"))?
+            .ok_or_else(|| ErrorKind::Generic.context(fl!("err-chain-indexer-not-running")))?
             .inner_ref()
             .get_subscriber())
     }

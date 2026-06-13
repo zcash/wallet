@@ -101,7 +101,7 @@ impl Database {
                 Err(schemerz::MigratorError::Migration {
                     error: WalletMigrationError::SeedRequired,
                     ..
-                }) => Err(ErrorKind::Init.context("TODO: Support seed-required migrations")),
+                }) => Err(ErrorKind::Init.context(fl!("err-init-seed-required-migration"))),
                 Err(e) => Err(ErrorKind::Init.context(e)),
             }?;
 
