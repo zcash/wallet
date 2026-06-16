@@ -30,9 +30,6 @@ use zcash_protocol::{
     consensus::{self, BlockHeight},
 };
 
-#[cfg(feature = "transparent-key-import")]
-use zebra_rpc::methods::{GetAddressBalanceRequest, GetAddressUtxos};
-
 use crate::{
     config::ZalletConfig,
     error::{Error, ErrorKind},
@@ -236,20 +233,6 @@ impl Chain {
             snapshot,
             params: self.params,
         })
-    }
-
-    /// Returns all unspent transparent outputs for the given encoded transparent
-    /// addresses.
-    #[cfg(feature = "transparent-key-import")]
-    pub(crate) async fn get_address_utxos(
-        &self,
-        addresses: Vec<String>,
-    ) -> Result<Vec<GetAddressUtxos>, Error> {
-        self.subscriber
-            .get_address_utxos(GetAddressBalanceRequest::new(addresses))
-            .await
-            .map_err(|e| ErrorKind::Generic.context(e))
-            .map_err(Into::into)
     }
 
     pub(crate) async fn get_sapling_subtree_roots(
