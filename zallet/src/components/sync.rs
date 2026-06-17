@@ -229,6 +229,31 @@ async fn initialize(
         steps::scan_blocks(chain_view, db_data, params, &scan_range, &decryptor).await?;
     };
 
+    // The scan-range loop above can complete without ever scanning the tip block — e.g.
+    // when the wallet has no shielded scan work and `suggest_scan_ranges` returns nothing
+    // in the bands the filter accepts. That leaves `block_metadata(chain_height)`
+    // unpopulated, which then strands any caller asking the wallet for its view of the
+    // tip via `getwalletstatus.wallet_tip` (cf. integration-tests `rebuild_cache`).
+    if db_data.block_metadata(current_tip.height)?.is_none() {
+        let chain_view = chain.snapshot().await.map_err(SyncError::Chain)?;
+        let tip_block = chain_view
+            .get_block(current_tip.height)
+            .await
+            .map_err(SyncError::Chain)?
+            .ok_or_else(|| {
+                SyncError::Chain(
+                    ErrorKind::Sync
+                        .context(format!(
+                            "Chain view reported tip at height {} but could not return the \
+                             block at that height",
+                            current_tip.height
+                        ))
+                        .into(),
+                )
+            })?;
+        steps::scan_block(&chain_view, db_data, params, tip_block, &decryptor).await?;
+    }
+
     info!(
         "Initial boundary between recovery and steady-state sync is {}",
         starting_boundary,
