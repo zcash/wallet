@@ -8,7 +8,7 @@ use tokio::net::lookup_host;
 use zaino_common::{CacheConfig, DatabaseConfig, StorageConfig};
 use zaino_fetch::jsonrpsee::connector::JsonRpSeeConnector;
 use zaino_state::{
-    ChainIndex as _, ChainIndexConfig, ChainIndexSnapshot, NodeBackedChainIndex,
+    BlockCacheConfig, ChainIndex as _, ChainIndexSnapshot, NodeBackedChainIndex,
     NodeBackedChainIndexSubscriber, StatusType,
     chain_index::{
         ShieldedPool,
@@ -48,7 +48,7 @@ fn to_zaino_height(height: BlockHeight) -> zaino_state::Height {
 /// The Zaino finalised-state database schema version to target.
 ///
 /// `1` selects Zaino's latest v1 finalised-state schema. We run the indexer in ephemeral
-/// mode (see [`ChainIndexConfig::new`] below), so no persistent finalised-state database
+/// mode (see [`BlockCacheConfig::new`] below), so no persistent finalised-state database
 /// is actually opened and this value has no on-disk effect; it is set to the current
 /// schema version for forward-compatibility if ephemeral mode is ever disabled.
 const ZAINO_FINALISED_DB_VERSION: u32 = 1;
@@ -139,7 +139,7 @@ impl Chain {
         .await
         .map_err(|e| ErrorKind::Init.context(e))?;
 
-        let indexer_config = ChainIndexConfig::new(
+        let indexer_config = BlockCacheConfig::new(
             StorageConfig {
                 cache: CacheConfig::default(),
                 database: DatabaseConfig {
@@ -147,6 +147,9 @@ impl Chain {
                     // Unused in ephemeral mode (no persistent finalised-state
                     // database is opened).
                     size: zaino_common::DatabaseSize(0),
+                    // Unused in ephemeral mode (the finalised-state bulk-sync
+                    // write path is never exercised); inherit Zaino's default.
+                    ..Default::default()
                 },
             },
             ZAINO_FINALISED_DB_VERSION,

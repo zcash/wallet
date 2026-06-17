@@ -21,8 +21,8 @@ be considered breaking changes.
 
 ### Changed
 
-- Updated the Zaino chain indexer to a pre-release `dev`-branch build
-  (zingolabs/zaino#1200) that retains NU 6.2 support and adds optional
+- Updated the Zaino chain indexer to a pre-release `rc-0.4.0` build
+  (zingolabs/zaino#1238) that retains NU 6.2 support and adds optional
   ("ephemeral") finalised state. The embedded indexer now runs in ephemeral
   mode, serving finalised chain data directly from the validator instead of
   maintaining a persistent finalised-state database.

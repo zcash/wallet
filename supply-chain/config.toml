@@ -1897,19 +1897,19 @@ version = "3.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-common]]
-version = "0.1.1@git:021fbf32ea373a684c5dec9fff187c8e1c7004b0"
+version = "0.1.1@git:1f06894587914c063f612b575e6b86296d62c0c4"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-fetch]]
-version = "0.1.1@git:021fbf32ea373a684c5dec9fff187c8e1c7004b0"
+version = "0.2.0@git:1f06894587914c063f612b575e6b86296d62c0c4"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-proto]]
-version = "0.1.1@git:021fbf32ea373a684c5dec9fff187c8e1c7004b0"
+version = "0.1.1@git:1f06894587914c063f612b575e6b86296d62c0c4"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-state]]
-version = "0.2.0@git:021fbf32ea373a684c5dec9fff187c8e1c7004b0"
+version = "0.3.0@git:1f06894587914c063f612b575e6b86296d62c0c4"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_script]]
