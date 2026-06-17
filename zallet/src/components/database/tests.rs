@@ -107,10 +107,34 @@ fn legacy_alpha_2_database_is_rejected_before_recording_current_version() {
 }
 
 #[test]
-fn legacy_alpha_3_database_is_allowed() {
+fn legacy_alpha_3_database_is_rejected_before_recording_current_version() {
     let datadir = tempdir().unwrap();
     let config = test_config(datadir.path(), NetworkType::Test);
     create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.3"]);
+
+    let err = open_database(&config).expect_err("legacy alpha.3 database must be rejected");
+    assert!(
+        err.to_string().contains("fresh Zallet wallet"),
+        "unexpected error: {err}",
+    );
+
+    let conn = Connection::open(config.wallet_db_path()).unwrap();
+    assert_eq!(
+        latest_recorded_version(&conn),
+        Some("0.1.0-alpha.3".to_string())
+    );
+    assert_eq!(
+        count_recorded_versions(&conn, crate::build::PKG_VERSION),
+        0,
+        "the current Zallet version should not be recorded after rejecting the database",
+    );
+}
+
+#[test]
+fn latest_alpha_4_database_is_allowed() {
+    let datadir = tempdir().unwrap();
+    let config = test_config(datadir.path(), NetworkType::Test);
+    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.4"]);
 
     open_database(&config).unwrap();
 
@@ -125,16 +149,16 @@ fn legacy_alpha_3_database_is_allowed() {
 fn compatibility_check_uses_latest_recorded_version() {
     let datadir = tempdir().unwrap();
     let config = test_config(datadir.path(), NetworkType::Test);
-    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.2", "0.1.0-alpha.3"]);
+    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.3", "0.1.0-alpha.4"]);
 
     open_database(&config).unwrap();
 }
 
 #[test]
-fn latest_alpha_2_version_is_rejected_even_with_earlier_alpha_3_version() {
+fn latest_alpha_2_version_is_rejected_even_with_earlier_alpha_4_version() {
     let datadir = tempdir().unwrap();
     let config = test_config(datadir.path(), NetworkType::Test);
-    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.3", "0.1.0-alpha.2"]);
+    create_wallet_db(config.wallet_db_path(), &["0.1.0-alpha.4", "0.1.0-alpha.2"]);
 
     let err = open_database(&config).expect_err("latest alpha.2 database must be rejected");
     assert!(
@@ -182,7 +206,7 @@ fn network_mismatch_still_reports_network_error() {
     create_wallet_db_for_network(
         config.wallet_db_path(),
         Network::Consensus(consensus::Network::MainNetwork),
-        &["0.1.0-alpha.3"],
+        &["0.1.0-alpha.4"],
     );
 
     let err = open_database(&config).expect_err("network mismatch must be rejected");
