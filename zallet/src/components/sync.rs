@@ -38,7 +38,7 @@ use std::sync::{
 use std::time::Duration;
 
 use futures::{StreamExt as _, TryStreamExt as _};
-use jsonrpsee::tracing::{self, debug, info};
+use jsonrpsee::tracing::{self, debug, info, warn};
 use tokio::{sync::Notify, time};
 use zcash_client_backend::{
     data_api::{
@@ -223,7 +223,54 @@ async fn initialize(
             .next()
         {
             Some(r) => r,
-            None => break (current_tip, starting_boundary),
+            None => {
+                // The scan-range loop is about to exit without scanning the tip
+                // block — e.g. when the wallet has no shielded scan work and
+                // `suggest_scan_ranges` returns nothing in the bands the filter
+                // accepts. That would leave `block_metadata(chain_height)`
+                // unpopulated, which strands any caller asking the wallet for its
+                // view of the tip via `getwalletstatus.wallet_tip` (cf.
+                // integration-tests `rebuild_cache`).
+                //
+                // Best-effort: commit metadata for the tip block here, against the
+                // *same* `chain_view` snapshot we just read `current_tip` from so
+                // tree state and the block payload come from a single consistent
+                // chain view. If the indexer can't serve the block right now, log
+                // and continue — `steady_state` will populate metadata as soon as
+                // the index catches up. We skip at height 0 because `scan_block`
+                // would ask for `tree_state_as_of(height - 1)` and underflow on
+                // `BlockHeight`; there is also no useful work to do at genesis.
+                if current_tip.height > BlockHeight::from_u32(0)
+                    && db_data.block_metadata(current_tip.height)?.is_none()
+                {
+                    let attempt = async {
+                        let tip_block = chain_view
+                            .get_block(current_tip.height)
+                            .await
+                            .map_err(SyncError::Chain)?
+                            .ok_or_else(|| {
+                                SyncError::Chain(
+                                    ErrorKind::Sync
+                                        .context(format!(
+                                            "chain view did not return its own tip \
+                                             block at height {}",
+                                            current_tip.height
+                                        ))
+                                        .into(),
+                                )
+                            })?;
+                        steps::scan_block(&chain_view, db_data, params, tip_block, &decryptor).await
+                    };
+                    if let Err(e) = attempt.await {
+                        warn!(
+                            "Best-effort tip scan during initialize failed; \
+                             steady_state will populate metadata once the indexer \
+                             catches up: {e}"
+                        );
+                    }
+                }
+                break (current_tip, starting_boundary);
+            }
         };
 
         steps::scan_blocks(chain_view, db_data, params, &scan_range, &decryptor).await?;
