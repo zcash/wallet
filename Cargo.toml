@@ -1,10 +1,5 @@
 [workspace]
 members = ["zallet"]
-# `vendor/core2-shim-0.3` and `vendor/core2-shim-0.4` are referenced from the
-# `[patch.crates-io]` table below, but excluded from the workspace because
-# Cargo requires workspace member crate names to be unique and both shims must
-# be named `core2` to satisfy the resolver.
-exclude = ["vendor/core2-shim-0.3", "vendor/core2-shim-0.4"]
 resolver = "2"
 
 [workspace.package]
@@ -128,11 +123,8 @@ secp256k1 = { version = "0.29", features = ["recovery"] }
 # Zcash chain state
 zaino-common = "0.1.1"
 zaino-fetch = "0.1"
-zaino-proto = "0.1.1"
 zaino-state = "0.2"
-zebra-chain = "9.0"
 zebra-rpc = "9.0"
-zebra-state = "8.0"
 
 # Zcash wallet
 deadpool = "0.12"
@@ -162,32 +154,18 @@ tonic = "0.14"
 
 [patch.crates-io]
 # TEMPORARY: Pin librustzcash crates to upstream main
-# (zcash/librustzcash@2c4e6c769c) so that we can consume the
-# `propose_shielding_coinbase` API (added in PR #2376) used by
-# `z_shieldcoinbase`. Drop this block when librustzcash crates are
-# released to crates.io at a version that includes that API.
-equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "2c4e6c769c2e70e71f14c9cf95f2dccfdb7ef239" }
-
-# TEMPORARY: All `core2` versions on crates.io were yanked by upstream on
-# 2026-04-14, breaking fresh dependency resolution because we still pull
-# `core2 ^0.3` (via `equihash 0.2.2`) and `core2 ^0.4` (via `zaino-state`)
-# transitively. Both entries below redirect those `core2` requests to local
-# shims that re-export `corez` (the Zcash ecosystem's clean-room replacement,
-# https://github.com/zcash/corez). See `vendor/core2-shim-0.3/README.md` for
-# context and removal criteria.
-core2 = { path = "vendor/core2-shim-0.3" }
-core2_v04 = { package = "core2", path = "vendor/core2-shim-0.4" }
+equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "32fa8e25684693605762febde92920c7d795634b" }
 
 age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633bb70c91eef91142fd4" }
 
@@ -198,7 +176,6 @@ zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "22f82
 # published. See https://github.com/zcash/wallet/issues/471.
 zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "021fbf32ea373a684c5dec9fff187c8e1c7004b0" }
 zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "021fbf32ea373a684c5dec9fff187c8e1c7004b0" }
-zaino-proto = { git = "https://github.com/zingolabs/zaino.git", rev = "021fbf32ea373a684c5dec9fff187c8e1c7004b0" }
 zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "021fbf32ea373a684c5dec9fff187c8e1c7004b0" }
 
 [profile.release]
