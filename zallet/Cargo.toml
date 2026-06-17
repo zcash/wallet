@@ -1,6 +1,6 @@
 [package]
 name = "zallet"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
