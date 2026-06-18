@@ -48,6 +48,42 @@ section are:
   auth)
 - `validator_user` and `validator_password` (if using basic auth)
 
+### Reading chain state directly from a local zebrad (optional)
+
+By default Zallet fetches all chain data from your full node over JSON-RPC. If you
+run `zebrad` on the same machine, you can instead have Zallet read finalized chain
+state directly from zebrad's state database (opened read-only), which avoids
+fetching every block over JSON-RPC.
+
+This relies on zebrad's indexer gRPC interface, which is **not** available in a
+default `zebrad` build. You must compile `zebrad` with the `indexer` feature flag
+and set an `indexer_listen_addr` in its `[rpc]` config section:
+
+```toml
+# zebrad config (e.g. ~/.config/zebra/zebrad.toml)
+[rpc]
+# Any free address/port; must match Zallet's grpc_address below.
+indexer_listen_addr = '127.0.0.1:8230'
+```
+
+Then add an `[indexer.read_state_service]` section to Zallet's config:
+
+```toml
+[indexer.read_state_service]
+# Must match zebrad's [rpc] indexer_listen_addr.
+grpc_address = "127.0.0.1:8230"
+# zebrad's existing state cache directory.
+zebra_state_path = "/home/<username>/.cache/zebra"
+```
+
+Notes:
+- The JSON-RPC settings above are still required; they are used for the mempool,
+  transaction submission, and non-best-chain block reads.
+- `zebrad` must be running on the same machine (Zallet reads its state files
+  directly), and must be built with the `indexer` feature and configured with an
+  `indexer_listen_addr`.
+- This backend does not support regtest.
+
 If you have an existing `zcash.conf`, you can use it as a starting point:
 ```
 $ zallet migrate-zcash-conf --datadir /path/to/zcashd/datadir -o /path/to/zallet/datadir/zallet.toml
