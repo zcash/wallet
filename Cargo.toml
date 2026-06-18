@@ -121,7 +121,7 @@ zcash_script = "0.4.3"
 secp256k1 = { version = "0.29", features = ["recovery"] }
 
 # Zcash chain state
-zaino-common = "0.1.1"
+zaino-common = "0.2"
 zaino-fetch = "0.2"
 zaino-state = "0.3"
 zebra-chain = "9.0"
@@ -176,9 +176,9 @@ zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "22f82
 
 # Pinned to the zingolabs/zaino#1238. Bump to the final `0.4.0` tag once it is
 # published. See https://github.com/zcash/wallet/issues/471.
-zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "1f06894587914c063f612b575e6b86296d62c0c4" }
-zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "1f06894587914c063f612b575e6b86296d62c0c4" }
-zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "1f06894587914c063f612b575e6b86296d62c0c4" }
+zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "d87f986be7248584d4f69af95fba20c8f12f73a8" }
+zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "d87f986be7248584d4f69af95fba20c8f12f73a8" }
+zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "d87f986be7248584d4f69af95fba20c8f12f73a8" }
 
 [profile.release]
 debug = "line-tables-only"
