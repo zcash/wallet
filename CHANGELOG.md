@@ -67,6 +67,20 @@ be considered breaking changes.
 - `zallet migrate-zcashd-wallet` now migrates view-only Sapling keys that were
   added to the `zcashd` wallet via `z_importviewingkey`. Each imported viewing
   key becomes its own view-only account.
+- `zallet migrate-zcashd-wallet` can now import pre-Sapling (HD-seedless)
+  `zcashd` wallets. Previously these were rejected after their transparent keys
+  had already been written to the keystore, leaving orphaned key material
+  behind. A fresh mnemonic seed is now generated to back the legacy transparent
+  "bucket of funds" account (ZIP 32 account `0x7FFFFFFF`, tagged as imported
+  from `zcashd`), mirroring how loading such a wallet into a modern `zcashd`
+  would have generated one. The standalone transparent key import is also now
+  guarded so that it can no longer write key material before confirming a
+  destination account exists.
+- `zallet migrate-zcashd-wallet` now prints the
+  `features.legacy_pool_seed_fingerprint` recommendation when importing
+  pre-v4.7.0 `zcashd` wallets (those with a legacy HD seed but no mnemonic).
+  Previously the recommendation was only printed for wallets that already had a
+  mnemonic seed.
 
 ## [0.1.0-alpha.3] - 2025-12-15
 

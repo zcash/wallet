@@ -7,7 +7,8 @@ use std::{
 
 use abscissa_core::Runnable;
 
-use bip0039::{English, Mnemonic};
+use bip0039::{Count, English, Mnemonic};
+use rand::{RngCore, rngs::OsRng};
 use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
@@ -21,7 +22,7 @@ use zcash_client_backend::{
     },
     decrypt_transaction,
 };
-use zcash_client_sqlite::error::SqliteClientError;
+use zcash_client_sqlite::{AccountUuid, error::SqliteClientError};
 use zcash_keys::keys::{
     DerivationError, UnifiedFullViewingKey,
     zcashd::{PathParseError, ZcashdHdDerivation},
@@ -36,7 +37,11 @@ use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
     cli::MigrateZcashdWalletCmd,
-    components::{chain::Chain, database::Database, keystore::KeyStore},
+    components::{
+        chain::Chain,
+        database::{Database, DbConnection},
+        keystore::KeyStore,
+    },
     error::{Error, ErrorKind},
     fl,
     prelude::*,
@@ -220,6 +225,59 @@ impl MigrateZcashdWalletCmd {
         (!mnemonic.is_empty())
             .then(|| Mnemonic::<English>::from_phrase(mnemonic))
             .transpose()
+    }
+
+    /// Generates a fresh 24-word mnemonic phrase using system randomness.
+    fn generate_mnemonic() -> Mnemonic {
+        // Adapted from `Mnemonic::generate` so we can use `OsRng` directly, matching
+        // the `generate-mnemonic` command.
+        const BITS_PER_BYTE: usize = 8;
+        const MAX_ENTROPY_BITS: usize = Count::Words24.entropy_bits();
+        const ENTROPY_BYTES: usize = MAX_ENTROPY_BITS / BITS_PER_BYTE;
+
+        let mut entropy = [0u8; ENTROPY_BYTES];
+        OsRng.fill_bytes(&mut entropy);
+
+        Mnemonic::<English>::from_entropy(entropy)
+            .expect("valid entropy length won't fail to generate the mnemonic")
+    }
+
+    /// Creates the legacy `zcashd` transparent account (ZIP 32 account index
+    /// [`ZCASHD_LEGACY_ACCOUNT`]) derived from the given mnemonic `seed`, tagging it with
+    /// [`ZCASHD_MNEMONIC_SOURCE`] so it is recognisable as having been imported from
+    /// `zcashd`.
+    ///
+    /// This account acts as the "bucket of funds" that the legacy standalone and watch-only
+    /// transparent material is imported into, mirroring how `zcashd` v4.7.0+ derived its
+    /// legacy transparent addresses from the wallet's mnemonic seed. After creating the
+    /// account, this prints the recommendation to set `features.legacy_pool_seed_fingerprint`
+    /// to the seed's fingerprint in order to enable legacy `zcashd` balance semantics.
+    fn create_legacy_transparent_account(
+        db_data: &mut DbConnection,
+        seed: &SecretVec<u8>,
+        seed_fp: SeedFingerprint,
+        wallet_birthday: &AccountBirthday,
+    ) -> Result<AccountUuid, MigrateError> {
+        let (account, _) = db_data.import_account_hd(
+            &format!(
+                "zcashd post-v4.7.0 legacy transparent account {}",
+                u32::from(ZCASHD_LEGACY_ACCOUNT),
+            ),
+            seed,
+            ZCASHD_LEGACY_ACCOUNT,
+            wallet_birthday,
+            Some(ZCASHD_MNEMONIC_SOURCE),
+        )?;
+
+        println!(
+            "{}",
+            fl!(
+                "migrate-wallet-legacy-seed-fp",
+                seed_fp = seed_fp.to_string()
+            )
+        );
+
+        Ok(account.id())
     }
 
     async fn migrate_zcashd_wallet(
@@ -492,42 +550,11 @@ impl MigrateZcashdWalletCmd {
         );
 
         let mnemonic_seed_fp = mnemonic_seed_data.as_ref().map(|(_, fp)| *fp);
-        let legacy_transparent_account_uuid = if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
-            // Create the legacy account if there are any legacy transparent keys or any
-            // imported watch-only transparent pubkeys / redeem scripts to store.
-            if !wallet.keys().is_empty()
-                || !watchonly_pubkeys.is_empty()
-                || !watchonly_scripts.is_empty()
-            {
-                let (account, _) = db_data.import_account_hd(
-                    &format!(
-                        "zcashd post-v4.7.0 legacy transparent account {}",
-                        u32::from(ZCASHD_LEGACY_ACCOUNT),
-                    ),
-                    seed,
-                    ZCASHD_LEGACY_ACCOUNT,
-                    &wallet_birthday,
-                    Some(ZCASHD_MNEMONIC_SOURCE),
-                )?;
 
-                println!(
-                    "{}",
-                    fl!(
-                        "migrate-wallet-legacy-seed-fp",
-                        seed_fp = mnemonic_seed_fp
-                            .expect("present for mnemonic seed")
-                            .to_string()
-                    )
-                );
-
-                Some(account.id())
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
+        // Store the legacy HD seed if present, so that legacy Sapling keys derived from it
+        // (below) can be associated with it. The presence or absence of this seed also tells
+        // us whether a seedless wallet is a pre-v4.7.0 wallet (legacy seed, no mnemonic) or a
+        // pre-Sapling wallet (no seed of any kind).
         let legacy_seed_data = match wallet.legacy_hd_seed() {
             Some(d) => Some((
                 SecretVec::new(d.seed_data().to_vec()),
@@ -537,46 +564,60 @@ impl MigrateZcashdWalletCmd {
             )),
             None => None,
         };
-        let legacy_transparent_account_uuid =
-            match (legacy_transparent_account_uuid, legacy_seed_data.as_ref()) {
-                (Some(uuid), _) => {
-                    // We already had a mnemonic seed and have created the mnemonic-based legacy
-                    // account, so we don't need to do anything.
-                    Some(uuid)
-                }
-                (None, Some((seed, _)))
-                    if !wallet.keys().is_empty()
-                        || !watchonly_pubkeys.is_empty()
-                        || !watchonly_scripts.is_empty() =>
-                {
-                    // In this case, we have the legacy seed, but no mnemonic seed was ever derived
-                    // from it, so this is a pre-v4.7.0 wallet. We construct the mnemonic in the same
-                    // fashion as zcashd, by using the legacy seed as entropy in the generation of the
-                    // mnemonic seed, and then import that seed and the associated legacy account so
-                    // that we have an account to act as the "bucket of funds" for the transparent keys
-                    // derived from system randomness.
-                    let mnemonic = zcash_keys::keys::zcashd::derive_mnemonic(seed)
-                        .ok_or(ErrorKind::Generic.context(fl!("err-failed-seed-fingerprinting")))?;
+        let legacy_seed_fp = legacy_seed_data.as_ref().map(|(_, fp)| *fp);
 
-                    let seed = SecretVec::new(mnemonic.to_seed("").to_vec());
-                    keystore.encrypt_and_store_mnemonic(mnemonic).await?;
-                    let (account, _) = db_data.import_account_hd(
-                        &format!(
-                            "zcashd post-v4.7.0 legacy transparent account {}",
-                            u32::from(ZCASHD_LEGACY_ACCOUNT),
-                        ),
-                        &seed,
-                        ZCASHD_LEGACY_ACCOUNT,
-                        &wallet_birthday,
-                        Some(ZCASHD_MNEMONIC_SOURCE),
-                    )?;
-
-                    Some(account.id())
-                }
-                _ => None,
-            };
-
-        let legacy_seed_fp = legacy_seed_data.map(|(_, fp)| fp);
+        // Create the legacy `zcashd` transparent account (the "bucket of funds" that standalone
+        // and watch-only transparent material is imported into) if, and only if, there is any
+        // such material to import. Creating it here, before any key material is written to the
+        // keystore below, ensures the transparent import always has a destination account and
+        // never leaves orphaned keystore writes behind.
+        let has_transparent_material = !wallet.keys().is_empty()
+            || !watchonly_pubkeys.is_empty()
+            || !watchonly_scripts.is_empty();
+        let legacy_transparent_account_uuid = if !has_transparent_material {
+            None
+        } else if let Some((seed, _)) = mnemonic_seed_data.as_ref() {
+            // The wallet has a mnemonic seed (zcashd v4.7.0+); derive the legacy account from
+            // it directly.
+            Some(Self::create_legacy_transparent_account(
+                &mut db_data,
+                seed,
+                mnemonic_seed_fp.expect("present for mnemonic seed"),
+                &wallet_birthday,
+            )?)
+        } else if let Some((legacy_seed, _)) = legacy_seed_data.as_ref() {
+            // The wallet has a legacy HD seed but no mnemonic seed was ever derived from it, so
+            // this is a pre-v4.7.0 wallet. We construct the mnemonic in the same fashion as
+            // zcashd, by using the legacy seed as entropy in the generation of the mnemonic
+            // seed, and then import that seed and the associated legacy account so that we have
+            // an account to act as the "bucket of funds" for the transparent keys derived from
+            // system randomness.
+            let mnemonic = zcash_keys::keys::zcashd::derive_mnemonic(legacy_seed)
+                .ok_or(ErrorKind::Generic.context(fl!("err-failed-seed-fingerprinting")))?;
+            let seed = SecretVec::new(mnemonic.to_seed("").to_vec());
+            let seed_fp = keystore.encrypt_and_store_mnemonic(mnemonic).await?;
+            Some(Self::create_legacy_transparent_account(
+                &mut db_data,
+                &seed,
+                seed_fp,
+                &wallet_birthday,
+            )?)
+        } else {
+            // The wallet has no seed of any kind: it predates the Sapling network upgrade
+            // (which introduced the HD seed) and is therefore HD-seedless. Generate a fresh
+            // mnemonic to act as the seed for the legacy "bucket of funds" account, mirroring
+            // how loading such a wallet into a modern zcashd would have generated one. See
+            // <https://github.com/zcash/wallet/issues/478> and #384.
+            let mnemonic = Self::generate_mnemonic();
+            let seed = SecretVec::new(mnemonic.to_seed("").to_vec());
+            let seed_fp = keystore.encrypt_and_store_mnemonic(mnemonic).await?;
+            Some(Self::create_legacy_transparent_account(
+                &mut db_data,
+                &seed,
+                seed_fp,
+                &wallet_birthday,
+            )?)
+        };
 
         // Add unified accounts. The only source of unified accounts in zcashd is derivation from
         // the mnemonic seed.
@@ -763,33 +804,42 @@ impl MigrateZcashdWalletCmd {
 
         let encryptor = keystore.encryptor().await?;
         let transparent_keypairs = wallet.keys().keypairs().collect::<Vec<_>>();
-        info!(
-            "Importing {} legacy standalone transparent keys",
-            transparent_keypairs.len(),
-        ); // TODO: Expose how many there are in zewif-zcashd.
-        let encrypted_transparent_keys = transparent_keypairs
-            .into_iter()
-            .map(|key| {
-                let key = convert_key(key)?;
-                encryptor.encrypt_standalone_transparent_key(&key)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        keystore
-            .store_encrypted_standalone_transparent_keys(&encrypted_transparent_keys)
-            .await?;
-        let standalone_pubkeys: Vec<PublicKey> = encrypted_transparent_keys
-            .iter()
-            .map(|key| *key.pubkey())
-            .collect();
-        to_expose.extend(
-            standalone_pubkeys
+        if !transparent_keypairs.is_empty() {
+            info!(
+                "Importing {} legacy standalone transparent keys",
+                transparent_keypairs.len(),
+            ); // TODO: Expose how many there are in zewif-zcashd.
+
+            // Resolve the destination account before writing any key material to the keystore,
+            // so that a missing account cannot leave orphaned keystore writes behind. This
+            // account is always present when the wallet has transparent material to import.
+            let target_account =
+                legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?;
+
+            let encrypted_transparent_keys = transparent_keypairs
+                .into_iter()
+                .map(|key| {
+                    let key = convert_key(key)?;
+                    encryptor.encrypt_standalone_transparent_key(&key)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            keystore
+                .store_encrypted_standalone_transparent_keys(&encrypted_transparent_keys)
+                .await?;
+            let standalone_pubkeys: Vec<PublicKey> = encrypted_transparent_keys
                 .iter()
-                .map(TransparentAddress::from_pubkey),
-        );
-        db_data.import_standalone_transparent_pubkeys(
-            legacy_transparent_account_uuid.ok_or(MigrateError::SeedNotAvailable)?,
-            standalone_pubkeys.into_iter(),
-        )?;
+                .map(|key| *key.pubkey())
+                .collect();
+            to_expose.extend(
+                standalone_pubkeys
+                    .iter()
+                    .map(TransparentAddress::from_pubkey),
+            );
+            db_data.import_standalone_transparent_pubkeys(
+                target_account,
+                standalone_pubkeys.into_iter(),
+            )?;
+        }
 
         // Import transparent addresses that were added to the `zcashd` wallet via
         // `importaddress` / `importpubkey` (i.e. watch-only imports). These are stored as

@@ -47,6 +47,30 @@ present in the `zcutil/bin` directory of a `zcashd` source installation (as
 specified via the `--zcashd-install-dir` argument), or avaliable on the system
 `$PATH`.
 
+## Legacy transparent account and seed
+
+`zcashd` v4.7.0 and later derived their legacy `getnewaddress` transparent
+addresses from the wallet's mnemonic seed under a dedicated ZIP 32 "legacy"
+account. When a wallet containing any standalone or watch-only transparent
+material is imported, Zallet recreates this account (ZIP 32 account index
+`0x7FFFFFFF`) to act as the "bucket of funds" that the imported transparent keys
+are tracked under.
+
+The seed backing that account depends on the age of the `zcashd` wallet:
+
+- **Post-v4.7.0 wallets** (with a mnemonic seed) use that mnemonic directly.
+- **Pre-v4.7.0 wallets** (with a legacy HD seed but no mnemonic) have the
+  mnemonic reconstructed from the legacy seed, exactly as `zcashd` itself would
+  have done.
+- **Pre-Sapling wallets** (HD-seedless) have a fresh mnemonic generated for
+  them, mirroring how loading such a wallet into a modern `zcashd` would have
+  generated one.
+
+In all three cases, Zallet prints the ZIP 32 seed fingerprint of the resulting
+seed and recommends setting `features.legacy_pool_seed_fingerprint` in
+`zallet.toml` to that value if you wish to enable legacy `zcashd` balance
+semantics for the wallet RPC methods.
+
 [`zcashd`]: https://github.com/zcash/zcash
 [`zallet init-wallet-encryption`]: init-wallet-encryption.md
 [is started]: start.md
