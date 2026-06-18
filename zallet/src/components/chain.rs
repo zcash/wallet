@@ -12,7 +12,7 @@ use zaino_state::{
     NodeBackedChainIndexSubscriber, StatusType,
     chain_index::{
         ShieldedPool,
-        source::ValidatorConnector,
+        source::{State, ValidatorConnector},
         types::{BestChainLocation, NonBestChainLocation},
     },
 };
@@ -29,8 +29,10 @@ use zcash_protocol::{
     TxId,
     consensus::{self, BlockHeight},
 };
+use zebra_rpc::sync::init_read_state_with_syncer;
 
 use crate::{
+    commands::resolve_datadir_path,
     config::ZalletConfig,
     error::{Error, ErrorKind},
     network::Network,
@@ -65,6 +67,18 @@ pub(crate) struct Chain {
 impl fmt::Debug for Chain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Chain").finish_non_exhaustive()
+    }
+}
+
+/// Aborts the wrapped task when dropped.
+///
+/// Used to ensure the read-state-service syncer task does not outlive the chain indexer
+/// on any shutdown path (including when the indexer's shutdown task is itself aborted).
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
     }
 }
 
@@ -159,11 +173,95 @@ impl Chain {
             true,
         );
 
+        let (source, sync_handle) = match &config.indexer.read_state_service {
+            // Default: fetch all chain data over JSON-RPC.
+            None => (ValidatorConnector::Fetch(fetcher.clone()), None),
+            // Read finalized state directly from a local zebrad (read-only secondary),
+            // following the non-finalized tip over zebrad's gRPC indexer interface.
+            Some(rss) => {
+                let grpc_addr = match lookup_host(&rss.grpc_address).await {
+                    Ok(mut addrs) => addrs.next().ok_or_else(|| {
+                        ErrorKind::Init.context(format!(
+                            "indexer.read_state_service.grpc_address '{}' resolved to no IP addresses",
+                            rss.grpc_address
+                        ))
+                    })?,
+                    Err(e) => {
+                        return Err(ErrorKind::Init
+                            .context(format!(
+                                "Failed to resolve indexer.read_state_service.grpc_address '{}': {e}",
+                                rss.grpc_address
+                            ))
+                            .into());
+                    }
+                };
+
+                let zebra_network = params.to_zebra().map_err(|e| ErrorKind::Init.context(e))?;
+
+                let zebra_state_path =
+                    resolve_datadir_path(config.datadir(), &rss.zebra_state_path);
+
+                let zebra_config = zebra_state::Config {
+                    cache_dir: zebra_state_path,
+                    // The standalone read state service cannot use ephemeral state, and
+                    // it reads zebrad's on-disk database in place.
+                    ephemeral: false,
+                    // We are a read-only secondary; never delete zebrad's database.
+                    delete_old_database: false,
+                    should_backup_non_finalized_state: false,
+                    ..Default::default()
+                };
+
+                // Fail fast with an actionable error if there is no compatible
+                // zebra-state database at the configured path, rather than letting
+                // zebra-state silently create a new (empty) database there.
+                match zebra_state::state_database_format_version_on_disk(
+                    &zebra_config,
+                    &zebra_network,
+                )
+                .map_err(|e| {
+                    ErrorKind::Init.context(format!(
+                        "failed to read the zebra-state database version at '{}': {e}",
+                        zebra_config.cache_dir.display(),
+                    ))
+                })? {
+                    Some(_) => {}
+                    None => {
+                        return Err(ErrorKind::Init
+                            .context(format!(
+                                "no zebra-state v{} database found under '{}'; check that \
+                                 indexer.read_state_service.zebra_state_path points at zebrad's \
+                                 state cache directory, and that zebrad's on-disk state format \
+                                 matches Zallet's zebra-state version",
+                                zebra_state::state_database_format_version_in_code().major,
+                                zebra_config.cache_dir.display(),
+                            ))
+                            .into());
+                    }
+                }
+
+                info!("Initializing read-only Zebra state service");
+                let (read_state_service, _latest_tip, _tip_change, sync_task) =
+                    init_read_state_with_syncer(zebra_config, &zebra_network, grpc_addr)
+                        .await
+                        // Outer JoinError from the spawned init task.
+                        .map_err(|e| ErrorKind::Init.context(e))?
+                        // Inner BoxError from read-state initialization.
+                        .map_err(|e| ErrorKind::Init.context(e))?;
+
+                let source = ValidatorConnector::State(State {
+                    read_state_service,
+                    mempool_fetcher: fetcher.clone(),
+                    network: params.to_zaino(),
+                });
+                (source, Some(AbortOnDrop(sync_task)))
+            }
+        };
+
         info!("Starting Zaino indexer");
-        let indexer =
-            NodeBackedChainIndex::new(ValidatorConnector::Fetch(fetcher.clone()), indexer_config)
-                .await
-                .map_err(|e| ErrorKind::Init.context(e))?;
+        let indexer = NodeBackedChainIndex::new(source, indexer_config)
+            .await
+            .map_err(|e| ErrorKind::Init.context(e))?;
         info!("Started Zaino indexer");
 
         let chain = Self {
@@ -174,6 +272,11 @@ impl Chain {
 
         // Spawn a task that stops the indexer when appropriate internal signals occur.
         let task = crate::spawn!("Indexer shutdown", async move {
+            // Hold the read-state syncer for the lifetime of this task. Dropping the
+            // guard aborts the syncer on every shutdown path, including when this task
+            // is itself aborted externally, so the syncer never outlives the indexer.
+            let _sync_handle = sync_handle;
+
             let mut server_interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(100));
 
