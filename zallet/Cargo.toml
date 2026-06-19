@@ -132,6 +132,7 @@ sha2.workspace = true
 shadow-rs.workspace = true
 shardtree.workspace = true
 time.workspace = true
+tempfile.workspace = true
 tokio = { workspace = true, features = ["fs", "io-std", "io-util", "rt-multi-thread"] }
 toml.workspace = true
 tonic.workspace = true
@@ -192,7 +193,6 @@ uuid.workspace = true
 abscissa_core = { workspace = true, features = ["testing"] }
 once_cell.workspace = true
 regex.workspace = true
-tempfile.workspace = true
 trycmd.workspace = true
 
 [features]

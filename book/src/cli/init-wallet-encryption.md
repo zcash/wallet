@@ -9,7 +9,8 @@ initialize the wallet's encryption keys. The encryption identity file name (or p
 be set with the `keystore.encryption_identity` [config option].
 
 > WARNING: As of the latest Zallet alpha release (0.1.0-alpha.4), `zallet` requires the
-> encryption identity file to already exist. You can generate one with [`rage`].
+> encryption identity file to already exist. You can generate a plain or
+> passphrase-encrypted identity with [`zallet generate-identity`].
 
 ## Identity kinds
 
@@ -50,6 +51,6 @@ with an external device like a YubiKey (with [`age-plugin-yubikey`]) or a KMS.
 
 [age encryption]: https://age-encryption.org/
 [config option]: example-config.md
-[`rage`]: https://github.com/str4d/rage
+[`zallet generate-identity`]: generate-identity.md
 [`zallet rpc`]: rpc.md
 [`age-plugin-yubikey`]: https://github.com/str4d/age-plugin-yubikey
