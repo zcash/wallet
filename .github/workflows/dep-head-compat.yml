@@ -2,14 +2,21 @@
 #
 # Repoints the governed [patch.crates-io] git pins to their branch HEAD
 # (`branch = "main"`) and runs `cargo check`, to catch upstream breaking
-# changes before they reach a pinned rev or a release. This is an early-warning
-# signal, not a PR gate: it builds against upstream HEAD, not the PR, so it runs
-# on a schedule (and on demand). A red run means upstream main no longer builds
-# here and needs a human to look.
+# changes before they reach a pinned rev or a release. A red run means upstream
+# main no longer builds here and needs a human to look.
+#
+# Runs on a daily schedule (to catch upstream moving on its own), on demand, and
+# on every pull request that changes the dependency/patch declarations, so each
+# such patch is also validated against upstream HEAD.
 
 name: Dependency HEAD Compatibility
 
 on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - ".github/dep-policy/**"
+      - ".github/workflows/dep-head-compat.yml"
   schedule:
     - cron: "41 4 * * *"
   workflow_dispatch:
