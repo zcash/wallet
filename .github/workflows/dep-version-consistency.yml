@@ -1,0 +1,37 @@
+# Zcash dependency-version policy, job 1 of 2: consistency.
+#
+# Compares this repo's governed Zcash pins against each library's upstream HEAD
+# (registry version pins vs the library's [package] version; [patch.crates-io]
+# git pins vs the branch HEAD commit). Warn-by-default: drift is annotated but
+# does not fail unless a library is set to severity = "error" in
+# .github/dep-policy/governed-libs.toml.
+#
+# Runs on manifest/policy changes and on a daily schedule, so drift introduced
+# by upstream moving (not just by edits here) is still surfaced.
+
+name: Dependency Version Consistency
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - ".github/dep-policy/**"
+      - ".github/workflows/dep-version-consistency.yml"
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check-dep-versions:
+    name: Check governed Zcash dependency versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check dependency versions
+        run: python3 .github/dep-policy/dep_policy.py check

@@ -1,0 +1,123 @@
+# Zcash dependency-version policy for zcash/wallet.
+#
+# The canonical version of each governed library is its own upstream HEAD:
+#   * registry version pins are compared against the library's [package]
+#     version on `ref`;
+#   * [patch.crates-io] git pins are compared against the `ref` branch HEAD
+#     commit, so a pin that has fallen behind main is reported as drift.
+#
+# This is the SAME dep_policy.py used by other consumer repos; only this config
+# differs. The settings below describe wallet's layout:
+consumer_manifest = "Cargo.toml"
+consumer_tables = ["workspace.dependencies"]
+
+# Job 2 (rewrite-to-head) only repoints the [patch.crates-io] git pins to their
+# branch HEAD. It does NOT convert released registry pins (orchard, sapling,
+# ...) into git deps, matching this repo's intent of tracking librustzcash main
+# while consuming released versions of the standalone crates.
+head_rewrite_deps = false
+
+# severity: "warn" annotates (default); "error" fails the job.
+
+# --- librustzcash workspace crates (pinned via [patch.crates-io]) ----------
+# These all share one repo, so a single behind-main pin shows up on each.
+
+[[library]]
+crate = "zcash_address"
+repo = "zcash/librustzcash"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_client_backend"
+repo = "zcash/librustzcash"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_client_sqlite"
+repo = "zcash/librustzcash"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_keys"
+repo = "zcash/librustzcash"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_primitives"
+repo = "zcash/librustzcash"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_proofs"
+repo = "zcash/librustzcash"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_protocol"
+repo = "zcash/librustzcash"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_transparent"
+repo = "zcash/librustzcash"
+ref = "main"
+severity = "warn"
+
+# --- Standalone upstream crates (registry version pins) --------------------
+
+[[library]]
+crate = "orchard"
+repo = "zcash/orchard"
+manifest = "Cargo.toml"
+ref = "main"
+severity = "warn"
+
+# Consumer renames this to `sapling` via `package = "sapling-crypto"`.
+[[library]]
+crate = "sapling-crypto"
+repo = "zcash/sapling-crypto"
+manifest = "Cargo.toml"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_encoding"
+repo = "zcash/librustzcash"
+manifest = "components/zcash_encoding/Cargo.toml"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zcash_note_encryption"
+repo = "zcash/zcash_note_encryption"
+manifest = "Cargo.toml"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "zip32"
+repo = "zcash/zip32"
+manifest = "Cargo.toml"
+ref = "master"
+severity = "warn"
+
+[[library]]
+crate = "incrementalmerkletree"
+repo = "zcash/incrementalmerkletree"
+manifest = "incrementalmerkletree/Cargo.toml"
+ref = "main"
+severity = "warn"
+
+[[library]]
+crate = "shardtree"
+repo = "zcash/incrementalmerkletree"
+manifest = "shardtree/Cargo.toml"
+ref = "main"
+severity = "warn"
