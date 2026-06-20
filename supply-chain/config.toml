@@ -548,10 +548,6 @@ criteria = "safe-to-deploy"
 version = "0.7.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.equihash]]
-version = "0.3.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.eyre]]
 version = "0.6.12"
 criteria = "safe-to-deploy"
@@ -582,6 +578,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.fixedbitset]]
 version = "0.5.7"
+criteria = "safe-to-deploy"
+
+[[exemptions.flume]]
+version = "0.11.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.fmutex]]
@@ -978,6 +978,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.multimap]]
 version = "0.10.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.nanorand]]
+version = "0.7.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.nix]]
@@ -1893,59 +1897,23 @@ version = "3.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-common]]
-version = "0.1.1@git:0a41125a712a8cc7de75e903a827a7ef0f08b4a0"
+version = "0.1.1@git:1f06894587914c063f612b575e6b86296d62c0c4"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-fetch]]
-version = "0.1.1@git:0a41125a712a8cc7de75e903a827a7ef0f08b4a0"
+version = "0.2.0@git:1f06894587914c063f612b575e6b86296d62c0c4"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-proto]]
-version = "0.1.1@git:0a41125a712a8cc7de75e903a827a7ef0f08b4a0"
+version = "0.1.1@git:1f06894587914c063f612b575e6b86296d62c0c4"
 criteria = "safe-to-deploy"
 
 [[exemptions.zaino-state]]
-version = "0.2.0@git:0a41125a712a8cc7de75e903a827a7ef0f08b4a0"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_address]]
-version = "0.12.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_client_backend]]
-version = "0.23.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_client_sqlite]]
-version = "0.21.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_encoding]]
-version = "0.4.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_keys]]
-version = "0.14.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_primitives]]
-version = "0.28.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_proofs]]
-version = "0.28.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_protocol]]
-version = "0.9.0"
+version = "0.3.0@git:1f06894587914c063f612b575e6b86296d62c0c4"
 criteria = "safe-to-deploy"
 
 [[exemptions.zcash_script]]
 version = "0.4.5"
-criteria = "safe-to-deploy"
-
-[[exemptions.zcash_transparent]]
-version = "0.8.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zebra-chain]]
@@ -1998,8 +1966,4 @@ criteria = "safe-to-deploy"
 
 [[exemptions.zingo_common_components]]
 version = "0.3.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.zip321]]
-version = "0.8.0"
 criteria = "safe-to-deploy"
