@@ -54,7 +54,7 @@ use zip32::Scope;
 
 use super::{
     TaskHandle,
-    chain::{Chain, ChainBlock, ChainError, ChainView, ZainoChain},
+    chain::{Chain, ChainBlock, ChainError, ChainView},
     database::{Database, DbConnection},
 };
 use crate::{config::ZalletConfig, error::Error, network::Network};
@@ -72,10 +72,10 @@ const RECOVER_BATCH_SIZE: u32 = 1000;
 pub(crate) struct WalletSync {}
 
 impl WalletSync {
-    pub(crate) async fn spawn(
+    pub(crate) async fn spawn<C: Chain>(
         config: &ZalletConfig,
         db: Database,
-        chain: ZainoChain,
+        chain: C,
     ) -> Result<(TaskHandle, TaskHandle, TaskHandle, TaskHandle), Error> {
         let params = config.consensus.network();
 
@@ -174,8 +174,8 @@ fn update_boundary(current_boundary: BlockHeight, tip_height: BlockHeight) -> Bl
 ///
 /// Returns the boundary block between [`steady_state`] and [`recover_history`] syncing.
 #[tracing::instrument(skip_all)]
-async fn initialize(
-    chain: &ZainoChain,
+async fn initialize<C: Chain>(
+    chain: &C,
     params: &Network,
     db_data: &mut DbConnection,
     decryptor: decryptor::Handle<AccountUuid, (AccountUuid, Scope)>,
@@ -234,8 +234,8 @@ async fn initialize(
 
 /// Keeps the wallet state up-to-date with the chain tip, and handles the mempool.
 #[tracing::instrument(skip_all)]
-async fn steady_state(
-    chain: ZainoChain,
+async fn steady_state<C: Chain>(
+    chain: C,
     params: &Network,
     db_data: &mut DbConnection,
     mut prev_tip: ChainBlock,
@@ -354,8 +354,8 @@ async fn steady_state(
 ///
 /// This function only operates on finalized chain state, and does not handle reorgs.
 #[tracing::instrument(skip_all)]
-async fn recover_history(
-    chain: ZainoChain,
+async fn recover_history<C: Chain>(
+    chain: C,
     params: &Network,
     db_data: &mut DbConnection,
     upper_boundary: Arc<AtomicU32>,
@@ -423,8 +423,8 @@ async fn recover_history(
 /// Fetches information that the wallet requests to complete its view of transaction
 /// history.
 #[tracing::instrument(skip_all)]
-async fn data_requests(
-    chain: ZainoChain,
+async fn data_requests<C: Chain>(
+    chain: C,
     params: &Network,
     db_data: &mut DbConnection,
     tip_change_signal: Arc<Notify>,

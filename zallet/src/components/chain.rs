@@ -3,6 +3,7 @@
 //! [`Chain`] and [`ChainView`] are the backend-neutral interface the rest of the wallet
 //! uses to read chain data. The Zaino-backed implementation lives in [`zaino`].
 
+use std::future::Future;
 use std::ops::Range;
 
 use futures::stream::BoxStream;
@@ -30,23 +31,28 @@ pub(crate) trait Chain: Clone + Send + Sync + 'static {
     type View: ChainView;
 
     /// Broadcasts a transaction to the network's mempool.
-    async fn broadcast_transaction(&self, tx: &Transaction) -> Result<(), ChainError>;
+    fn broadcast_transaction(
+        &self,
+        tx: &Transaction,
+    ) -> impl Future<Output = Result<(), ChainError>> + Send;
 
     /// Returns the Sapling note commitment subtree roots, in index order.
-    async fn get_sapling_subtree_roots(
+    fn get_sapling_subtree_roots(
         &self,
-    ) -> Result<Vec<CommitmentTreeRoot<sapling::Node>>, ChainError>;
+    ) -> impl Future<Output = Result<Vec<CommitmentTreeRoot<sapling::Node>>, ChainError>> + Send;
 
     /// Returns the Orchard note commitment subtree roots, in index order.
-    async fn get_orchard_subtree_roots(
+    fn get_orchard_subtree_roots(
         &self,
-    ) -> Result<Vec<CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>>, ChainError>;
+    ) -> impl Future<
+        Output = Result<Vec<CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>>, ChainError>,
+    > + Send;
 
     /// Captures a consistent view of the chain as of the current tip.
     ///
     /// Every read through the returned [`ChainView`] reflects one fixed chain history for
     /// the lifetime of the view, regardless of reorgs or new blocks observed afterward.
-    async fn snapshot(&self) -> Result<Self::View, ChainError>;
+    fn snapshot(&self) -> impl Future<Output = Result<Self::View, ChainError>> + Send;
 }
 
 /// A consistent, reorg-immune view of the chain as of a fixed tip.
@@ -54,28 +60,33 @@ pub(crate) trait Chain: Clone + Send + Sync + 'static {
 /// A sequence of reads through one `ChainView` is mutually consistent.
 pub(crate) trait ChainView: Clone + Send + Sync + 'static {
     /// Returns this view's chain tip.
-    async fn tip(&self) -> Result<ChainBlock, ChainError>;
+    fn tip(&self) -> impl Future<Output = Result<ChainBlock, ChainError>> + Send;
 
     /// Returns the most recent ancestor of the caller's chain (identified by `known_tip`)
     /// that lies on this view's best chain, or `None` if it cannot be located.
-    async fn find_fork_point(
+    fn find_fork_point(
         &self,
         known_tip: &BlockHash,
-    ) -> Result<Option<ChainBlock>, ChainError>;
+    ) -> impl Future<Output = Result<Option<ChainBlock>, ChainError>> + Send;
 
     /// Returns the final note commitment tree state for each shielded pool as of `height`,
     /// or `None` if `height` is above this view's tip.
-    async fn tree_state_as_of(&self, height: BlockHeight)
-    -> Result<Option<ChainState>, ChainError>;
-
-    /// Returns the block header at `height`, or `None` if above this view's tip.
-    async fn get_block_header(
+    fn tree_state_as_of(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<BlockHeader>, ChainError>;
+    ) -> impl Future<Output = Result<Option<ChainState>, ChainError>> + Send;
+
+    /// Returns the block header at `height`, or `None` if above this view's tip.
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> impl Future<Output = Result<Option<BlockHeader>, ChainError>> + Send;
 
     /// Returns the block at `height`, or `None` if above this view's tip.
-    async fn get_block(&self, height: BlockHeight) -> Result<Option<Block>, ChainError>;
+    fn get_block(
+        &self,
+        height: BlockHeight,
+    ) -> impl Future<Output = Result<Option<Block>, ChainError>> + Send;
 
     /// Streams blocks from `start` to this view's tip, inclusive.
     fn stream_blocks_to_tip(&self, start: BlockHeight) -> BoxStream<'_, Result<Block, ChainError>>;
@@ -87,17 +98,28 @@ pub(crate) trait ChainView: Clone + Send + Sync + 'static {
     /// Streams the current mempool. The stream ends when this view's tip changes.
     ///
     /// Returns `None` if the tip has already changed since the view was captured.
-    async fn get_mempool_stream(&self) -> Result<Option<BoxStream<'_, Transaction>>, ChainError>;
+    fn get_mempool_stream(
+        &self,
+    ) -> impl Future<Output = Result<Option<BoxStream<'_, Transaction>>, ChainError>> + Send;
 
     /// Returns the transaction with the given txid, if known.
-    async fn get_transaction(&self, txid: TxId) -> Result<Option<ChainTx>, ChainError>;
+    fn get_transaction(
+        &self,
+        txid: TxId,
+    ) -> impl Future<Output = Result<Option<ChainTx>, ChainError>> + Send;
 
     /// Returns the current status of the given transaction.
-    async fn get_transaction_status(&self, txid: TxId) -> Result<TransactionStatus, ChainError>;
+    fn get_transaction_status(
+        &self,
+        txid: TxId,
+    ) -> impl Future<Output = Result<TransactionStatus, ChainError>> + Send;
 
     /// Returns the height of the given block if it is on this view's main chain.
     #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
-    async fn block_height(&self, hash: &BlockHash) -> Result<Option<BlockHeight>, ChainError>;
+    fn block_height(
+        &self,
+        hash: &BlockHash,
+    ) -> impl Future<Output = Result<Option<BlockHeight>, ChainError>> + Send;
 }
 
 /// A block's height and hash.
