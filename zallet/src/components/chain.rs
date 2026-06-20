@@ -38,6 +38,9 @@ use crate::{
 
 use super::TaskHandle;
 
+mod error;
+pub(crate) use error::ChainError;
+
 /// Converts a `zcash_protocol` block height into a Zaino block height.
 fn to_zaino_height(height: BlockHeight) -> zaino_state::Height {
     u32::from(height)
@@ -206,15 +209,14 @@ impl ZainoChain {
     /// Returns an error if the transaction failed to be submitted to a single node. No
     /// broadcast guarantees are provided beyond this; transactions should be periodically
     /// rebroadcast while they are unmined and unexpired.
-    pub(crate) async fn broadcast_transaction(&self, tx: &Transaction) -> Result<(), Error> {
+    pub(crate) async fn broadcast_transaction(&self, tx: &Transaction) -> Result<(), ChainError> {
         let mut tx_bytes = vec![];
-        tx.write(&mut tx_bytes)
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+        tx.write(&mut tx_bytes).map_err(ChainError::backend)?;
 
         self.fetcher
             .send_raw_transaction(hex::encode(&tx_bytes))
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+            .map_err(ChainError::backend)?;
 
         Ok(())
     }
@@ -224,12 +226,12 @@ impl ZainoChain {
     /// The data viewable through the returned [`ZainoChainView`] is guaranteed to be available
     /// as long as (any clone of) the returned instance is live, regardless of what new
     /// blocks or reorgs are observed by the underlying chain indexer.
-    pub(crate) async fn snapshot(&self) -> Result<ZainoChainView, Error> {
+    pub(crate) async fn snapshot(&self) -> Result<ZainoChainView, ChainError> {
         let snapshot = self
             .subscriber
             .snapshot_nonfinalized_state()
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+            .map_err(ChainError::backend)?;
 
         Ok(ZainoChainView {
             chain: self.subscriber.clone(),
@@ -240,11 +242,11 @@ impl ZainoChain {
 
     pub(crate) async fn get_sapling_subtree_roots(
         &self,
-    ) -> Result<Vec<CommitmentTreeRoot<sapling::Node>>, Error> {
+    ) -> Result<Vec<CommitmentTreeRoot<sapling::Node>>, ChainError> {
         self.subscriber
             .get_subtree_roots(ShieldedPool::Sapling, 0, None)
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?
+            .map_err(ChainError::backend)?
             .into_iter()
             .map(|(root_hash, end_height)| {
                 Ok(CommitmentTreeRoot::from_parts(
@@ -253,16 +255,16 @@ impl ZainoChain {
                         .expect("zaino should provide canonical encodings"),
                 ))
             })
-            .collect::<Result<Vec<_>, Error>>()
+            .collect::<Result<Vec<_>, ChainError>>()
     }
 
     pub(crate) async fn get_orchard_subtree_roots(
         &self,
-    ) -> Result<Vec<CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>>, Error> {
+    ) -> Result<Vec<CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>>, ChainError> {
         self.subscriber
             .get_subtree_roots(ShieldedPool::Orchard, 0, None)
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?
+            .map_err(ChainError::backend)?
             .into_iter()
             .map(|(root_hash, end_height)| {
                 Ok(CommitmentTreeRoot::from_parts(
@@ -271,7 +273,7 @@ impl ZainoChain {
                         .expect("zaino should provide canonical encodings"),
                 ))
             })
-            .collect::<Result<Vec<_>, Error>>()
+            .collect::<Result<Vec<_>, ChainError>>()
     }
 }
 
@@ -289,12 +291,12 @@ pub(crate) struct ZainoChainView {
 
 impl ZainoChainView {
     /// Returns the current chain tip.
-    pub(crate) async fn tip(&self) -> Result<ChainBlock, Error> {
+    pub(crate) async fn tip(&self) -> Result<ChainBlock, ChainError> {
         let best_tip = self
             .chain
             .best_chaintip(&self.snapshot)
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+            .map_err(ChainError::backend)?;
 
         Ok(ChainBlock::from_zaino((best_tip.hash, best_tip.height)))
     }
@@ -305,12 +307,12 @@ impl ZainoChainView {
     pub(crate) async fn block_height(
         &self,
         hash: &BlockHash,
-    ) -> Result<Option<BlockHeight>, Error> {
+    ) -> Result<Option<BlockHeight>, ChainError> {
         Ok(self
             .chain
             .get_block_height(&self.snapshot, zaino_state::BlockHash(hash.0))
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?
+            .map_err(ChainError::backend)?
             .map(|height| BlockHeight::from_u32(height.into())))
     }
 
@@ -320,12 +322,12 @@ impl ZainoChainView {
     pub(crate) async fn find_fork_point(
         &self,
         other: &BlockHash,
-    ) -> Result<Option<ChainBlock>, Error> {
+    ) -> Result<Option<ChainBlock>, ChainError> {
         Ok(self
             .chain
             .find_fork_point(&self.snapshot, &zaino_state::BlockHash(other.0))
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?
+            .map_err(ChainError::backend)?
             .map(ChainBlock::from_zaino))
     }
 
@@ -336,19 +338,19 @@ impl ZainoChainView {
     pub(crate) async fn tree_state_as_of(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<ChainState>, Error> {
+    ) -> Result<Option<ChainState>, ChainError> {
         let block_hash = self
             .chain
             .get_block_hash(&self.snapshot, to_zaino_height(height))
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+            .map_err(ChainError::backend)?;
 
         let chain_state = if let Some(hash) = block_hash {
             let (sapling_treestate, orchard_treestate) = self
                 .chain
                 .get_treestate(&hash)
                 .await
-                .map_err(|e| ErrorKind::Generic.context(e))?;
+                .map_err(ChainError::backend)?;
 
             let final_sapling_tree = match sapling_treestate {
                 None => CommitmentTree::empty(),
@@ -357,7 +359,7 @@ impl ZainoChainView {
                     _,
                     { sapling::NOTE_COMMITMENT_TREE_DEPTH },
                 >(&sapling_tree_bytes[..])
-                .map_err(|e| ErrorKind::Generic.context(e))?,
+                .map_err(ChainError::backend)?,
             }
             .to_frontier();
 
@@ -368,7 +370,7 @@ impl ZainoChainView {
                     _,
                     { orchard::NOTE_COMMITMENT_TREE_DEPTH as u8 },
                 >(&orchard_tree_bytes[..])
-                .map_err(|e| ErrorKind::Generic.context(e))?,
+                .map_err(ChainError::backend)?,
             }
             .to_frontier();
 
@@ -390,21 +392,19 @@ impl ZainoChainView {
     pub(crate) async fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<BlockHeader>, Error> {
+    ) -> Result<Option<BlockHeader>, ChainError> {
         self.get_block_inner(height, |block_bytes| {
             // Read the header, ignore the transactions.
-            BlockHeader::read(block_bytes.as_slice())
-                .map_err(|e| ErrorKind::Generic.context(e).into())
+            BlockHeader::read(block_bytes.as_slice()).map_err(ChainError::backend)
         })
         .await
     }
 
     /// Returns the block at the given height, or `None` if the height is above this
     /// view's chain tip.
-    pub(crate) async fn get_block(&self, height: BlockHeight) -> Result<Option<Block>, Error> {
+    pub(crate) async fn get_block(&self, height: BlockHeight) -> Result<Option<Block>, ChainError> {
         self.get_block_inner(height, |block_bytes| {
-            Block::read(block_bytes.as_slice(), &self.params)
-                .map_err(|e| ErrorKind::Generic.context(e).into())
+            Block::read(block_bytes.as_slice(), &self.params).map_err(ChainError::backend)
         })
         .await
     }
@@ -412,8 +412,8 @@ impl ZainoChainView {
     async fn get_block_inner<T>(
         &self,
         height: BlockHeight,
-        f: impl FnOnce(Vec<u8>) -> Result<T, Error>,
-    ) -> Result<Option<T>, Error> {
+        f: impl FnOnce(Vec<u8>) -> Result<T, ChainError>,
+    ) -> Result<Option<T>, ChainError> {
         let height = to_zaino_height(height);
         // TODO: Should return `impl futures::TryStream` if it is to be fallible.
         if let Some(stream) = self
@@ -423,7 +423,7 @@ impl ZainoChainView {
             tokio::pin!(stream);
             let block_bytes = match stream.next().await {
                 None => return Ok(None),
-                Some(ret) => ret.map_err(|e| ErrorKind::Generic.context(e)),
+                Some(ret) => ret.map_err(ChainError::backend),
             }?;
 
             f(block_bytes).map(Some)
@@ -439,7 +439,7 @@ impl ZainoChainView {
     pub(crate) fn stream_blocks_to_tip(
         &self,
         start: BlockHeight,
-    ) -> impl futures::Stream<Item = Result<Block, Error>> {
+    ) -> impl futures::Stream<Item = Result<Block, ChainError>> {
         self.stream_blocks_inner(start, None)
     }
 
@@ -450,7 +450,7 @@ impl ZainoChainView {
     pub(crate) fn stream_blocks(
         &self,
         range: &Range<BlockHeight>,
-    ) -> impl futures::Stream<Item = Result<Block, Error>> {
+    ) -> impl futures::Stream<Item = Result<Block, ChainError>> {
         self.stream_blocks_inner(range.start, Some(range.end - 1))
     }
 
@@ -459,7 +459,7 @@ impl ZainoChainView {
         &self,
         start: BlockHeight,
         end: Option<BlockHeight>,
-    ) -> impl futures::Stream<Item = Result<Block, Error>> {
+    ) -> impl futures::Stream<Item = Result<Block, ChainError>> {
         // TODO: Should return `impl futures::TryStream` if it is to be fallible.
         if let Some(stream) = self.chain.get_block_range(
             &self.snapshot,
@@ -468,11 +468,10 @@ impl ZainoChainView {
         ) {
             stream
                 .map(|res| {
-                    res.map_err(|e| ErrorKind::Generic.context(e).into())
-                        .and_then(|block_bytes| {
-                            Block::read(block_bytes.as_slice(), &self.params)
-                                .map_err(|e| ErrorKind::Sync.context(e).into())
-                        })
+                    res.map_err(ChainError::backend).and_then(|block_bytes| {
+                        Block::read(block_bytes.as_slice(), &self.params)
+                            .map_err(ChainError::invalid_data)
+                    })
                 })
                 .boxed()
         } else {
@@ -488,7 +487,7 @@ impl ZainoChainView {
     /// Returns `None` if the chain tip has changed since this view was captured.
     pub(crate) async fn get_mempool_stream(
         &self,
-    ) -> Result<Option<impl futures::Stream<Item = Transaction>>, Error> {
+    ) -> Result<Option<impl futures::Stream<Item = Transaction>>, ChainError> {
         let mempool_height = self.tip().await?.height + 1;
         let consensus_branch_id = consensus::BranchId::for_height(&self.params, mempool_height);
 
@@ -512,21 +511,20 @@ impl ZainoChainView {
     }
 
     /// Returns the transaction with the given txid, if known.
-    pub(crate) async fn get_transaction(&self, txid: TxId) -> Result<Option<ChainTx>, Error> {
+    pub(crate) async fn get_transaction(&self, txid: TxId) -> Result<Option<ChainTx>, ChainError> {
         let zaino_txid = zaino_state::TransactionHash::from(*txid.as_ref());
 
         let (inner, raw) = match self
             .chain
             .get_raw_transaction(&self.snapshot, &zaino_txid)
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?
+            .map_err(ChainError::backend)?
         {
             None => return Ok(None),
             Some((raw_tx, branch_id)) => {
                 let consensus_branch_id = match branch_id {
                     // If `try_from` fails, it indicates a dependency versioning problem.
-                    Some(id) => consensus::BranchId::try_from(id)
-                        .map_err(|e| ErrorKind::Generic.context(e))?,
+                    Some(id) => consensus::BranchId::try_from(id).map_err(ChainError::backend)?,
                     // Zaino could not determine the consensus branch ID. This happens for
                     // mempool transactions (when the snapshot's mempool height is unknown)
                     // and for pre-Overwinter transactions (which predate consensus branch
@@ -542,7 +540,7 @@ impl ZainoChainView {
                 };
 
                 let tx = Transaction::read(raw_tx.as_slice(), consensus_branch_id)
-                    .map_err(|e| ErrorKind::Generic.context(e))?;
+                    .map_err(ChainError::backend)?;
 
                 (tx, raw_tx)
             }
@@ -552,7 +550,7 @@ impl ZainoChainView {
             .chain
             .get_transaction_status(&self.snapshot, &zaino_txid)
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?
+            .map_err(ChainError::backend)?
         {
             (Some(BestChainLocation::Block(hash, height)), _) => (
                 Some(BlockHash(hash.0)),
@@ -594,14 +592,14 @@ impl ZainoChainView {
     pub(crate) async fn get_transaction_status(
         &self,
         txid: TxId,
-    ) -> Result<TransactionStatus, Error> {
+    ) -> Result<TransactionStatus, ChainError> {
         let zaino_txid = zaino_state::TransactionHash::from(*txid.as_ref());
 
         let status = self
             .chain
             .get_transaction_status(&self.snapshot, &zaino_txid)
             .await
-            .map_err(|e| ErrorKind::Generic.context(e))?;
+            .map_err(ChainError::backend)?;
 
         Ok(match status {
             (Some(BestChainLocation::Block(_, height)), _) => {

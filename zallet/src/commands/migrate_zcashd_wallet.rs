@@ -32,7 +32,11 @@ use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
     cli::MigrateZcashdWalletCmd,
-    components::{chain::ZainoChain, database::Database, keystore::KeyStore},
+    components::{
+        chain::{ChainError, ZainoChain},
+        database::Database,
+        keystore::KeyStore,
+    },
     error::{Error, ErrorKind},
     fl,
     prelude::*,
@@ -1126,6 +1130,12 @@ impl From<Error> for MigrateError {
 
 impl From<abscissa_core::error::Context<ErrorKind>> for MigrateError {
     fn from(value: abscissa_core::error::Context<ErrorKind>) -> Self {
+        MigrateError::Wrapped(value.into())
+    }
+}
+
+impl From<ChainError> for MigrateError {
+    fn from(value: ChainError) -> Self {
         MigrateError::Wrapped(value.into())
     }
 }

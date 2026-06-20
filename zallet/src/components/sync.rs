@@ -54,14 +54,10 @@ use zip32::Scope;
 
 use super::{
     TaskHandle,
-    chain::{ChainBlock, ZainoChain},
+    chain::{ChainBlock, ChainError, ZainoChain},
     database::{Database, DbConnection},
 };
-use crate::{
-    config::ZalletConfig,
-    error::{Error, ErrorKind},
-    network::Network,
-};
+use crate::{config::ZalletConfig, error::Error, network::Network};
 
 mod error;
 pub(crate) use error::SyncError;
@@ -279,15 +275,11 @@ async fn steady_state(
                 .await
                 .map_err(SyncError::Chain)?
                 .ok_or_else(|| {
-                    SyncError::Chain(
-                        ErrorKind::Sync
-                            .context(format!(
-                                "Could not determine the reorg point: the wallet's previous \
-                                 chain tip {} (height {}) is not known to the chain indexer",
-                                prev_tip.hash, prev_tip.height,
-                            ))
-                            .into(),
-                    )
+                    SyncError::Chain(ChainError::backend(format!(
+                        "Could not determine the reorg point: the wallet's previous \
+                         chain tip {} (height {}) is not known to the chain indexer",
+                        prev_tip.hash, prev_tip.height,
+                    )))
                 })?;
             assert!(fork_point.height <= current_tip.height);
 

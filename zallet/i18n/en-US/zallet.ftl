@@ -113,6 +113,7 @@ migrate-wallet-legacy-seed-fp =
 
 err-kind-generic = Error
 err-kind-init = Failed to initialize {-zallet}
+err-kind-chain = An error occurred while accessing chain data.
 err-kind-sync = Failed to synchronize {-zallet}
 
 err-init-cannot-find-home-dir =
