@@ -8,7 +8,7 @@ use zcash_client_backend::data_api::{Account as _, AccountBirthday, WalletRead, 
 use zcash_protocol::consensus::BlockHeight;
 
 use crate::components::{
-    chain::ZainoChain,
+    chain::{Chain, ChainView, ZainoChain},
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,

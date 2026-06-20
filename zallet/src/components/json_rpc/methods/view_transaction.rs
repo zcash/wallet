@@ -23,7 +23,7 @@ use zcash_protocol::{
 };
 
 use crate::components::{
-    chain::{ZainoChain, ZainoChainView},
+    chain::{Chain, ChainView, ZainoChain, ZainoChainView},
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,

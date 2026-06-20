@@ -9,7 +9,10 @@ use zcash_keys::address::Address;
 use zcash_protocol::{PoolType, ShieldedProtocol, TxId, memo::MemoBytes};
 
 use crate::{
-    components::{chain::ZainoChain, database::DbConnection},
+    components::{
+        chain::{Chain, ZainoChain},
+        database::DbConnection,
+    },
     fl,
     prelude::APP,
 };

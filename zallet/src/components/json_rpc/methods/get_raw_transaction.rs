@@ -13,7 +13,7 @@ use zcash_script::script::{Asm, Code};
 use super::decode_script::{TransparentScript, script_to_json};
 use crate::{
     components::{
-        chain::ZainoChain,
+        chain::{Chain, ChainView, ZainoChain},
         database::DbConnection,
         json_rpc::{
             server::LegacyCode,

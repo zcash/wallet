@@ -7,6 +7,7 @@ use crate::components::{chain::ZainoChain, database::DbConnection, json_rpc::ser
 
 #[cfg(feature = "transparent-key-import")]
 use {
+    crate::components::chain::{Chain, ChainView},
     crate::network::Network,
     jsonrpsee::types::ErrorCode as RpcErrorCode,
     secp256k1::PublicKey,

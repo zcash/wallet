@@ -54,7 +54,7 @@ use zip32::Scope;
 
 use super::{
     TaskHandle,
-    chain::{ChainBlock, ChainError, ZainoChain},
+    chain::{Chain, ChainBlock, ChainError, ChainView, ZainoChain},
     database::{Database, DbConnection},
 };
 use crate::{config::ZalletConfig, error::Error, network::Network};

@@ -9,7 +9,11 @@ use zcash_client_backend::data_api::{
 use zcash_client_sqlite::{AccountUuid, WalletDb, error::SqliteClientError, util::SystemClock};
 
 use crate::{
-    components::{chain::ZainoChain, database::DbConnection, json_rpc::server::LegacyCode},
+    components::{
+        chain::{Chain, ChainView, ZainoChain},
+        database::DbConnection,
+        json_rpc::server::LegacyCode,
+    },
     network::Network,
 };
 

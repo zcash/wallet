@@ -19,7 +19,7 @@ use zip32::Scope;
 
 use crate::{
     components::{
-        chain::{ChainError, ZainoChain, ZainoChainView},
+        chain::{Chain, ChainError, ChainView, ZainoChain, ZainoChainView},
         database::DbConnection,
     },
     network::Network,

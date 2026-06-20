@@ -5,7 +5,7 @@ use serde::Serialize;
 use zcash_client_backend::data_api::{AccountBirthday, WalletRead, WalletWrite};
 
 use crate::components::{
-    chain::ZainoChain,
+    chain::{Chain, ChainView, ZainoChain},
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
