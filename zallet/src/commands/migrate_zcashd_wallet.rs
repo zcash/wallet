@@ -1,5 +1,3 @@
-#![allow(deprecated)] // For zaino
-
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
     path::PathBuf,
@@ -12,8 +10,6 @@ use secp256k1::PublicKey;
 use secrecy::{ExposeSecret, SecretVec};
 use shardtree::error::ShardTreeError;
 use transparent::address::TransparentAddress;
-use zaino_fetch::jsonrpsee::response::block_header::GetBlockHeader;
-use zaino_state::{FetchServiceError, LightWalletIndexer, ZcashIndexer};
 use zcash_client_backend::{
     data_api::{
         Account as _, AccountBirthday, AccountPurpose, AccountSource, WalletRead, WalletWrite as _,
@@ -40,7 +36,6 @@ use crate::{
     error::{Error, ErrorKind},
     fl,
     prelude::*,
-    rosetta::to_chainstate,
 };
 
 use super::{AsyncRunnable, migrate_zcash_conf};
@@ -153,50 +148,6 @@ impl MigrateZcashdWalletCmd {
                     .into(),
             ))
         }
-    }
-
-    async fn chain_tip<C: LightWalletIndexer>(
-        chain: &C,
-    ) -> Result<Option<BlockHeight>, MigrateError>
-    where
-        MigrateError: From<C::Error>,
-    {
-        let tip_height = chain.get_latest_block().await?.height;
-        let chain_tip = if tip_height == 0 {
-            None
-        } else {
-            // TODO: this error should go away when we have a better chain data API
-            Some(BlockHeight::try_from(tip_height).map_err(|e| {
-                ErrorKind::Generic.context(fl!(
-                    "err-migrate-wallet-invalid-chain-data",
-                    err = e.to_string()
-                ))
-            })?)
-        };
-
-        Ok(chain_tip)
-    }
-
-    async fn get_birthday<C: LightWalletIndexer>(
-        chain: &C,
-        birthday_height: BlockHeight,
-        recover_until: Option<BlockHeight>,
-    ) -> Result<AccountBirthday, MigrateError>
-    where
-        MigrateError: From<C::Error>,
-    {
-        // Fetch the tree state corresponding to the last block prior to the wallet's
-        // birthday height.
-        let chain_state = to_chainstate(
-            chain
-                .get_tree_state(zaino_proto::proto::service::BlockId {
-                    height: u64::from(birthday_height.saturating_sub(1)),
-                    hash: vec![],
-                })
-                .await?,
-        )?;
-
-        Ok(AccountBirthday::from_parts(chain_state, recover_until))
     }
 
     fn check_network(
@@ -386,10 +337,13 @@ impl MigrateZcashdWalletCmd {
 
         // Obtain information about the current state of the chain, so that we can set the recovery
         // height properly.
-        let (chain_subscriber, chain_tip) = if let Some(chain) = &chain {
-            let subscriber = chain.subscribe().await?.inner();
-            let tip = Self::chain_tip(&subscriber).await?;
-            (Some(subscriber), tip)
+        let (chain_view, chain_tip) = if let Some(chain) = &chain {
+            let chain_view = chain.snapshot().await?;
+            let tip = chain_view.tip().await?;
+            // A chain tip at height zero means the chain consists of only the genesis
+            // block, and contains no usable tree state.
+            let tip_height = (tip.height > BlockHeight::from_u32(0)).then_some(tip.height);
+            (Some(chain_view), tip_height)
         } else {
             info!("No-scan mode: skipping chain scanning");
             (None, None)
@@ -408,18 +362,15 @@ impl MigrateZcashdWalletCmd {
             wallet.transactions().len(),
         );
         let mut main_chain_block_heights = HashMap::new();
-        if let Some(chain_subscriber) = chain_subscriber.as_ref() {
+        if let Some(chain_view) = chain_view.as_ref() {
             for wallet_tx in wallet.transactions().values() {
                 let block_hash = BlockHash(*wallet_tx.hash_block().as_ref());
                 // Skip transactions that were unmined when the zcashd wallet was last written.
                 if block_hash.0 != [0; 32] {
                     if let Entry::Vacant(entry) = main_chain_block_heights.entry(block_hash) {
                         // Ignore any blocks that are not in the main chain.
-                        if let GetBlockHeader::Verbose(header) = chain_subscriber
-                            .get_block_header(block_hash.to_string(), true)
-                            .await?
-                        {
-                            entry.insert(BlockHeight::from_u32(header.height));
+                        if let Some(height) = chain_view.block_height(&block_hash).await? {
+                            entry.insert(height);
                         }
                     }
                 }
@@ -446,23 +397,30 @@ impl MigrateZcashdWalletCmd {
         // range. We don't have a good source of individual per-account birthday information at
         // this point; once we've imported all of the transaction data into the wallet then we'll
         // be able to choose per-account birthdays without difficulty.
-        let wallet_birthday = if let Some(chain_subscriber) = chain_subscriber.as_ref() {
-            Self::get_birthday(
-                chain_subscriber,
-                // Fall back to the chain tip height, and then Sapling activation as a last resort.
-                // If we have a birthday height, max() that with sapling activation; that will be
-                // the minimum possible wallet birthday that is relevant to future recovery
-                // scenarios.
-                tx_heights
-                    .values()
-                    .flat_map(|(h, _)| h)
-                    .min()
-                    .copied()
-                    .or(chain_tip)
-                    .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation)),
-                chain_tip,
-            )
-            .await?
+        let wallet_birthday = if let Some(chain_view) = chain_view.as_ref() {
+            // Fall back to the chain tip height, and then Sapling activation as a last resort.
+            // If we have a birthday height, max() that with sapling activation; that will be
+            // the minimum possible wallet birthday that is relevant to future recovery
+            // scenarios.
+            let birthday_height = tx_heights
+                .values()
+                .flat_map(|(h, _)| h)
+                .min()
+                .copied()
+                .or(chain_tip)
+                .map_or(sapling_activation, |h| std::cmp::max(h, sapling_activation));
+
+            // Fetch the tree state corresponding to the last block prior to the wallet's
+            // birthday height.
+            let treestate_height = birthday_height.saturating_sub(1);
+            let chain_state = chain_view.tree_state_as_of(treestate_height).await?.ok_or(
+                ErrorKind::Generic.context(fl!(
+                    "err-migrate-wallet-invalid-chain-data",
+                    err = format!("missing tree state for height {treestate_height}")
+                )),
+            )?;
+
+            AccountBirthday::from_parts(chain_state, chain_tip)
         } else {
             // In no-scan mode, no chain is available, and we cannot determine actual transaction
             // mined heights. Instead, we estimate the wallet's birthday, and then conservatively
@@ -1051,7 +1009,6 @@ pub(crate) enum MigrateError {
     Database(SqliteClientError),
     Tree(ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>),
     Io(std::io::Error),
-    Fetch(Box<FetchServiceError>),
     KeyDerivation(DerivationError),
     HdPath(PathParseError),
     AccountIdInvalid(u32),
@@ -1119,9 +1076,6 @@ impl From<MigrateError> for Error {
                 ErrorKind::Generic
                     .context(fl!("err-migrate-wallet-data-parse", err = e.to_string())),
             ),
-            MigrateError::Fetch(e) => Error::from(
-                ErrorKind::Generic.context(fl!("err-migrate-wallet-tx-fetch", err = e.to_string())),
-            ),
             MigrateError::KeyDerivation(e) => Error::from(
                 ErrorKind::Generic.context(fl!("err-migrate-wallet-key-data", err = e.to_string())),
             ),
@@ -1179,12 +1133,6 @@ impl From<abscissa_core::error::Context<ErrorKind>> for MigrateError {
 impl From<std::io::Error> for MigrateError {
     fn from(value: std::io::Error) -> Self {
         MigrateError::Io(value)
-    }
-}
-
-impl From<FetchServiceError> for MigrateError {
-    fn from(value: FetchServiceError) -> Self {
-        MigrateError::Fetch(Box::new(value))
     }
 }
 

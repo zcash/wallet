@@ -3,13 +3,16 @@ use std::{collections::HashSet, fmt};
 use abscissa_core::Application;
 use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
 use serde::Serialize;
-use zaino_state::{FetchServiceSubscriber, ZcashIndexer};
 use zcash_client_backend::{data_api::WalletRead, proposal::Proposal};
 use zcash_client_sqlite::wallet::Account;
 use zcash_keys::address::Address;
 use zcash_protocol::{PoolType, ShieldedProtocol, TxId, memo::MemoBytes};
 
-use crate::{components::database::DbConnection, fl, prelude::APP};
+use crate::{
+    components::{chain::Chain, database::DbConnection},
+    fl,
+    prelude::APP,
+};
 
 use super::server::LegacyCode;
 
@@ -454,7 +457,7 @@ pub(super) fn get_account_for_address(
 /// Broadcasts the specified transactions to the network, if configured to do so.
 pub(super) async fn broadcast_transactions(
     wallet: &DbConnection,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     txids: Vec<TxId>,
 ) -> RpcResult<SendResult> {
     if APP.config().external.broadcast() {
@@ -469,18 +472,10 @@ pub(super) async fn broadcast_transactions(
                         .with_message(format!("Wallet does not contain transaction {txid}"))
                 })?;
 
-            let mut tx_bytes = vec![];
-            tx.write(&mut tx_bytes)
-                .map_err(|e| LegacyCode::OutOfMemory.with_message(e.to_string()))?;
-            let raw_transaction_hex = hex::encode(&tx_bytes);
-
-            chain
-                .send_raw_transaction(raw_transaction_hex)
-                .await
-                .map_err(|e| {
-                    LegacyCode::Wallet
-                        .with_message(format!("SendTransaction: Transaction commit failed:: {e}"))
-                })?;
+            chain.broadcast_transaction(&tx).await.map_err(|e| {
+                LegacyCode::Wallet
+                    .with_message(format!("SendTransaction: Transaction commit failed:: {e}"))
+            })?;
         }
     }
 
