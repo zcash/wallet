@@ -10,7 +10,7 @@ use zcash_client_sqlite::{AccountUuid, WalletDb, error::SqliteClientError, util:
 
 use crate::{
     components::{
-        chain::{Chain, ChainView, ZainoChain},
+        chain::{Chain, ChainView},
         database::DbConnection,
         json_rpc::server::LegacyCode,
     },
@@ -85,7 +85,7 @@ struct Progress {
     denominator: u64,
 }
 
-pub(crate) async fn call(wallet: &DbConnection, chain: ZainoChain) -> Response {
+pub(crate) async fn call<C: Chain>(wallet: &DbConnection, chain: C) -> Response {
     let node_tip = chain
         .snapshot()
         .await

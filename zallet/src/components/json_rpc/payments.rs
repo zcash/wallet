@@ -9,10 +9,7 @@ use zcash_keys::address::Address;
 use zcash_protocol::{PoolType, ShieldedProtocol, TxId, memo::MemoBytes};
 
 use crate::{
-    components::{
-        chain::{Chain, ZainoChain},
-        database::DbConnection,
-    },
+    components::{chain::Chain, database::DbConnection},
     fl,
     prelude::APP,
 };
@@ -458,9 +455,9 @@ pub(super) fn get_account_for_address(
 }
 
 /// Broadcasts the specified transactions to the network, if configured to do so.
-pub(super) async fn broadcast_transactions(
+pub(super) async fn broadcast_transactions<C: Chain>(
     wallet: &DbConnection,
-    chain: ZainoChain,
+    chain: C,
     txids: Vec<TxId>,
 ) -> RpcResult<SendResult> {
     if APP.config().external.broadcast() {

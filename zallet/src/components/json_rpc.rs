@@ -14,7 +14,7 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-use super::{TaskHandle, chain::ZainoChain, database::Database};
+use super::{TaskHandle, chain::Chain, database::Database};
 
 #[cfg(zallet_build = "wallet")]
 use super::keystore::KeyStore;
@@ -31,11 +31,11 @@ pub(crate) mod utils;
 pub(crate) struct JsonRpc {}
 
 impl JsonRpc {
-    pub(crate) async fn spawn(
+    pub(crate) async fn spawn<C: Chain>(
         config: &ZalletConfig,
         db: Database,
         #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-        chain: ZainoChain,
+        chain: C,
     ) -> Result<TaskHandle, Error> {
         let rpc = config.rpc.clone();
 

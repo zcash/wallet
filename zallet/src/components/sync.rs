@@ -28,7 +28,7 @@
 //! TODO: Integrate or remove these other notes:
 //!
 //! - Zebra discards the non-finalized chain tip on restart, so Zallet needs to tolerate
-//!   the `ZainoChainView` being up to 100 blocks behind the wallet's view of the chain tip at
+//!   the `ChainView` being up to 100 blocks behind the wallet's view of the chain tip at
 //!   process start.
 
 use std::sync::{

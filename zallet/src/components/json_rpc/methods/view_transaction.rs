@@ -23,7 +23,7 @@ use zcash_protocol::{
 };
 
 use crate::components::{
-    chain::{Chain, ChainView, ZainoChain, ZainoChainView},
+    chain::{Chain, ChainView},
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
@@ -274,7 +274,7 @@ struct AccountEffect {
 
 pub(super) const PARAM_TXID_DESC: &str = "The ID of the transaction to view.";
 
-pub(crate) async fn call(wallet: &DbConnection, chain: ZainoChain, txid_str: &str) -> Response {
+pub(crate) async fn call<C: Chain>(wallet: &DbConnection, chain: C, txid_str: &str) -> Response {
     let txid = parse_txid(txid_str)?;
 
     let chain_view = chain
@@ -900,9 +900,9 @@ struct WalletTxInfo {
 
 impl WalletTxInfo {
     /// Logic adapted from `WalletTxToJSON` in `zcashd`, to match the semantics of the `gettransaction` fields.
-    async fn fetch(
+    async fn fetch<V: ChainView>(
         wallet: &DbConnection,
-        chain_view: &ZainoChainView,
+        chain_view: &V,
         tx: &zcash_primitives::transaction::Transaction,
         chain_height: BlockHeight,
     ) -> Result<Self, SqliteClientError> {

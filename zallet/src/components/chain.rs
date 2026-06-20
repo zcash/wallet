@@ -21,7 +21,7 @@ mod error;
 pub(crate) use error::ChainError;
 
 mod zaino;
-pub(crate) use zaino::{ZainoChain, ZainoChainView};
+pub(crate) use zaino::ZainoChain;
 
 /// A handle to a source of Zcash chain data.
 ///
