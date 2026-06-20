@@ -2,17 +2,17 @@ use documented::Documented;
 use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
-use zaino_state::FetchServiceSubscriber;
 
-use crate::components::{database::DbConnection, json_rpc::server::LegacyCode};
+use crate::components::{chain::Chain, database::DbConnection, json_rpc::server::LegacyCode};
 
 #[cfg(feature = "transparent-key-import")]
 use {
     crate::network::Network,
     jsonrpsee::types::ErrorCode as RpcErrorCode,
     secp256k1::PublicKey,
+    std::collections::HashSet,
     transparent::{address::TransparentAddress, util::hash160},
-    zcash_client_backend::data_api::WalletWrite,
+    zcash_client_backend::data_api::{WalletRead, WalletWrite},
     zcash_client_sqlite::AccountUuid,
     zcash_keys::encoding::AddressCodec,
     zcash_script::script::{Code, Redeem},
@@ -40,7 +40,7 @@ pub(super) const PARAM_RESCAN_DESC: &str =
 #[cfg(feature = "transparent-key-import")]
 pub(crate) async fn call(
     wallet: &mut DbConnection,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     account: &str,
     hex_data: &str,
     rescan: Option<bool>,
@@ -67,9 +67,33 @@ pub(crate) async fn call(
     };
 
     if rescan.unwrap_or(true) {
-        let params = *wallet.params();
-        crate::components::sync::fetch_transparent_utxos(&chain, &params, wallet)
+        // Trigger a re-scan from the account's existing birthday so the sync engine
+        // re-scans the already-synced range with the newly imported address tracked,
+        // discovering its transparent (and any shielded) history with correct block
+        // positions — including `tx_index = 0` for coinbase outputs, which the scanner
+        // records directly. This replaces the previous address-index UTXO fetch and its
+        // coinbase `tx_index` fix-up pass.
+        //
+        // We rewind the scan queue to the block before the account's birthday WITHOUT
+        // lowering any account's birthday (an empty `reset_account_birthdays`): the rewind
+        // target is the account's birthday floor, so no reset is required. The actual
+        // scanning then happens asynchronously in the background sync tasks.
+        let birthday = wallet
+            .get_account_birthday(account_id)
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+        let chain_view = chain
+            .snapshot()
             .await
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+        let prior_chain_state = chain_view
+            .tree_state_as_of(birthday - 1)
+            .await
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+            .ok_or_else(|| {
+                LegacyCode::Database.with_static("chain state unavailable for rescan")
+            })?;
+        wallet
+            .rewind_to_chain_state(prior_chain_state, HashSet::new())
             .map_err(|e| LegacyCode::Misc.with_message(format!("Rescan failed: {e}")))?;
     }
 
@@ -79,7 +103,7 @@ pub(crate) async fn call(
 #[cfg(not(feature = "transparent-key-import"))]
 pub(crate) async fn call(
     _wallet: &mut DbConnection,
-    _chain: FetchServiceSubscriber,
+    _chain: Chain,
     _account: &str,
     _hex_data: &str,
     _rescan: Option<bool>,

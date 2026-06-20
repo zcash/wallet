@@ -13,6 +13,7 @@ be considered breaking changes.
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`
+  - `getwalletstatus`
   - `verifymessage`
   - `z_converttex`
   - `z_importaddress`
@@ -20,6 +21,23 @@ be considered breaking changes.
 
 ### Changed
 
+- **This release is not compatible with wallets created by earlier alpha
+  releases.** The embedded Zaino chain indexer made a backwards-incompatible
+  change to its database format (zingolabs/zaino#914), which this release pulls
+  in. Zallet now refuses to open wallet databases last used by `0.1.0-alpha.3`
+  or earlier; start again with a fresh Zallet wallet or a new data directory.
+- Updated the Zaino chain indexer to a pre-release `rc-0.4.0` build
+  (zingolabs/zaino#1238) that retains NU 6.2 support and adds optional
+  ("ephemeral") finalised state. The embedded indexer now runs in ephemeral
+  mode, serving finalised chain data directly from the validator instead of
+  maintaining a persistent finalised-state database.
+- The wallet sync engine has been migrated to Zaino's `ChainIndex` interface,
+  and now scans full blocks instead of compact blocks:
+  - Shielded outputs are trial-decrypted by a batched decryption engine.
+  - Transparent outputs are detected directly while scanning blocks, instead
+    of by polling the backing node's address index on every chain tip change.
+  - Chain queries made by RPC methods now operate against a stable snapshot of
+    the chain state.
 - `getrawtransaction` now correctly reports the fields `asm`, `reqSigs`, `kind`,
   and `addresses` for transparent outputs.
 - `z_viewtransaction`: The `outgoing` field is now omitted on outputs that
@@ -29,11 +47,6 @@ be considered breaking changes.
   during migration.
 
 ### Fixed
-
-- `walletpassphrase` unlock timeouts are now capped at 100,000,000 seconds,
-  matching Bitcoin Core.
-- Cached age identities are now zeroized on drop when the keystore is locked or
-  auto-relocks.
 - `listaddresses` no longer returns an internal error when the wallet contains
   standalone imported transparent keys (e.g. from a `zcashd` migration).
 - No longer crashes in regtest mode when a Sapling or NU5 activation height is
