@@ -31,7 +31,7 @@ use zcash_protocol::value::Zatoshis;
 use crate::components::json_rpc::payments::enforce_privacy_policy;
 use crate::{
     components::{
-        chain::Chain,
+        chain::ZainoChain,
         database::{DbConnection, DbHandle},
         json_rpc::{
             asyncop::{ContextInfo, OperationId},
@@ -144,7 +144,7 @@ pub(super) const COINBASE_INPUTS_WARN_THRESHOLD: u64 = 400;
 pub(crate) async fn call(
     mut wallet: DbHandle,
     keystore: KeyStore,
-    chain: Chain,
+    chain: ZainoChain,
     fromaddress: String,
     toaddress: String,
     fee: Option<JsonValue>,
@@ -501,7 +501,7 @@ fn enumerate_eligible(
 /// Construct and broadcast the shielding transaction.
 async fn run(
     mut wallet: DbHandle,
-    chain: Chain,
+    chain: ZainoChain,
     proposal: Proposal<StandardFeeRule, Infallible>,
     spending_keys: SpendingKeys,
 ) -> RpcResult<SendResult> {

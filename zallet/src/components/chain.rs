@@ -54,7 +54,7 @@ fn to_zaino_height(height: BlockHeight) -> zaino_state::Height {
 const ZAINO_FINALISED_DB_VERSION: u32 = 1;
 
 #[derive(Clone)]
-pub(crate) struct Chain {
+pub(crate) struct ZainoChain {
     subscriber: NodeBackedChainIndexSubscriber,
     /// Used for submitting transactions to the network (`ChainIndex` is a read-only view
     /// of the chain).
@@ -62,13 +62,13 @@ pub(crate) struct Chain {
     params: Network,
 }
 
-impl fmt::Debug for Chain {
+impl fmt::Debug for ZainoChain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Chain").finish_non_exhaustive()
+        f.debug_struct("ZainoChain").finish_non_exhaustive()
     }
 }
 
-impl Chain {
+impl ZainoChain {
     pub(crate) async fn new(config: &ZalletConfig) -> Result<(Self, TaskHandle), Error> {
         let params = config.consensus.network();
 
@@ -221,17 +221,17 @@ impl Chain {
 
     /// Returns a stable view of the chain as of the current chain tip.
     ///
-    /// The data viewable through the returned [`ChainView`] is guaranteed to be available
+    /// The data viewable through the returned [`ZainoChainView`] is guaranteed to be available
     /// as long as (any clone of) the returned instance is live, regardless of what new
     /// blocks or reorgs are observed by the underlying chain indexer.
-    pub(crate) async fn snapshot(&self) -> Result<ChainView, Error> {
+    pub(crate) async fn snapshot(&self) -> Result<ZainoChainView, Error> {
         let snapshot = self
             .subscriber
             .snapshot_nonfinalized_state()
             .await
             .map_err(|e| ErrorKind::Generic.context(e))?;
 
-        Ok(ChainView {
+        Ok(ZainoChainView {
             chain: self.subscriber.clone(),
             snapshot,
             params: self.params,
@@ -277,17 +277,17 @@ impl Chain {
 
 /// A stable view of the chain as of a particular chain tip.
 ///
-/// The data viewable through an instance of `ChainView` is guaranteed to be available
+/// The data viewable through an instance of `ZainoChainView` is guaranteed to be available
 /// as long as (any clone of) the instance is live, regardless of what new blocks or
 /// reorgs are observed by the underlying chain indexer.
 #[derive(Clone)]
-pub(crate) struct ChainView {
+pub(crate) struct ZainoChainView {
     chain: NodeBackedChainIndexSubscriber,
     snapshot: ChainIndexSnapshot,
     params: Network,
 }
 
-impl ChainView {
+impl ZainoChainView {
     /// Returns the current chain tip.
     pub(crate) async fn tip(&self) -> Result<ChainBlock, Error> {
         let best_tip = self

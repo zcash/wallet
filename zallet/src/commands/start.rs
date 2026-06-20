@@ -6,7 +6,7 @@ use tokio::{pin, select};
 use crate::{
     cli::StartCmd,
     commands::AsyncRunnable,
-    components::{chain::Chain, database::Database, json_rpc::JsonRpc, sync::WalletSync},
+    components::{chain::ZainoChain, database::Database, json_rpc::JsonRpc, sync::WalletSync},
     config::ZalletConfig,
     error::Error,
     fl,
@@ -48,7 +48,7 @@ impl AsyncRunnable for StartCmd {
         let keystore = KeyStore::new(&config, db.clone())?;
 
         // Start monitoring the chain.
-        let (chain, chain_indexer_task_handle) = Chain::new(&config).await?;
+        let (chain, chain_indexer_task_handle) = ZainoChain::new(&config).await?;
 
         // Launch RPC server.
         let rpc_task_handle = JsonRpc::spawn(

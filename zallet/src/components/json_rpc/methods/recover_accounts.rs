@@ -8,7 +8,7 @@ use zcash_client_backend::data_api::{Account as _, AccountBirthday, WalletRead, 
 use zcash_protocol::consensus::BlockHeight;
 
 use crate::components::{
-    chain::Chain,
+    chain::ZainoChain,
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
@@ -53,7 +53,7 @@ pub(super) const PARAM_ACCOUNTS_REQUIRED: bool = true;
 pub(crate) async fn call(
     wallet: &mut DbConnection,
     keystore: &KeyStore,
-    chain: Chain,
+    chain: ZainoChain,
     accounts: Vec<AccountParameter<'_>>,
 ) -> Response {
     ensure_wallet_is_unlocked(keystore).await?;

@@ -19,7 +19,7 @@ use zip32::Scope;
 
 use crate::{
     components::{
-        chain::{Chain, ChainView},
+        chain::{ZainoChain, ZainoChainView},
         database::DbConnection,
     },
     error::ErrorKind,
@@ -29,7 +29,7 @@ use crate::{
 use super::{SyncError, decryptor};
 
 pub(super) async fn update_subtree_roots(
-    chain: &Chain,
+    chain: &ZainoChain,
     db_data: &mut DbConnection,
 ) -> Result<(), SyncError> {
     // TODO: Query and insert only the subtree roots added since our last query (via the
@@ -83,7 +83,7 @@ fn scan_block_error(e: ScanBlockError<Infallible>) -> SyncError {
 
 /// Scans a contiguous sequence of blocks in the main chain.
 pub(super) async fn scan_blocks(
-    chain_view: ChainView,
+    chain_view: ZainoChainView,
     db_data: &mut DbConnection,
     params: &Network,
     scan_range: &ScanRange,
@@ -161,7 +161,7 @@ pub(super) async fn scan_blocks(
 
 /// Scans a block in the main chain.
 pub(super) async fn scan_block(
-    chain_view: &ChainView,
+    chain_view: &ZainoChainView,
     db_data: &mut DbConnection,
     params: &Network,
     block: Block,

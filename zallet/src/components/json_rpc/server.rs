@@ -7,7 +7,7 @@ use jsonrpsee::{
 use tokio::task::JoinHandle;
 
 use crate::{
-    components::{chain::Chain, database::Database},
+    components::{chain::ZainoChain, database::Database},
     config::RpcSection,
     error::{Error, ErrorKind},
     fl,
@@ -34,7 +34,7 @@ pub(crate) async fn spawn(
     config: RpcSection,
     wallet: Database,
     #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-    chain: Chain,
+    chain: ZainoChain,
 ) -> Result<ServerTask, Error> {
     // Caller should make sure `bind` only contains a single address (for now).
     assert_eq!(config.bind.len(), 1);

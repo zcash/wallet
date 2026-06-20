@@ -14,7 +14,7 @@ use crate::{
     error::{Error, ErrorKind},
 };
 
-use super::{TaskHandle, chain::Chain, database::Database};
+use super::{TaskHandle, chain::ZainoChain, database::Database};
 
 #[cfg(zallet_build = "wallet")]
 use super::keystore::KeyStore;
@@ -35,7 +35,7 @@ impl JsonRpc {
         config: &ZalletConfig,
         db: Database,
         #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-        chain: Chain,
+        chain: ZainoChain,
     ) -> Result<TaskHandle, Error> {
         let rpc = config.rpc.clone();
 

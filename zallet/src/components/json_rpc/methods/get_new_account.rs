@@ -5,7 +5,7 @@ use serde::Serialize;
 use zcash_client_backend::data_api::{AccountBirthday, WalletRead, WalletWrite};
 
 use crate::components::{
-    chain::Chain,
+    chain::ZainoChain,
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
@@ -36,7 +36,7 @@ pub(super) const PARAM_SEEDFP_DESC: &str =
 pub(crate) async fn call(
     wallet: &mut DbConnection,
     keystore: &KeyStore,
-    chain: Chain,
+    chain: ZainoChain,
     account_name: &str,
     seedfp: Option<&str>,
 ) -> Response {

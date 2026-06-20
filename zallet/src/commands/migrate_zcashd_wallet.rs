@@ -32,7 +32,7 @@ use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
     cli::MigrateZcashdWalletCmd,
-    components::{chain::Chain, database::Database, keystore::KeyStore},
+    components::{chain::ZainoChain, database::Database, keystore::KeyStore},
     error::{Error, ErrorKind},
     fl,
     prelude::*,
@@ -63,7 +63,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
         let (chain, _chain_indexer_task_handle) = if self.no_scan {
             (None, None)
         } else {
-            let (c, h) = Chain::new(&config).await?;
+            let (c, h) = ZainoChain::new(&config).await?;
             (Some(c), Some(h))
         };
         let db = Database::open(&config).await?;
@@ -176,7 +176,7 @@ impl MigrateZcashdWalletCmd {
     async fn migrate_zcashd_wallet(
         db: Database,
         keystore: KeyStore,
-        chain: Option<Chain>,
+        chain: Option<ZainoChain>,
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,

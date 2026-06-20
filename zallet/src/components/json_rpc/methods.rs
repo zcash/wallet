@@ -5,7 +5,7 @@ use jsonrpsee::{
 };
 
 use crate::components::{
-    chain::Chain,
+    chain::ZainoChain,
     database::{Database, DbHandle},
 };
 
@@ -643,7 +643,7 @@ pub(crate) struct RpcImpl {
     wallet: Database,
     #[cfg(zallet_build = "wallet")]
     keystore: KeyStore,
-    chain: Chain,
+    chain: ZainoChain,
 }
 
 impl RpcImpl {
@@ -651,7 +651,7 @@ impl RpcImpl {
     pub(crate) fn new(
         wallet: Database,
         #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-        chain: Chain,
+        chain: ZainoChain,
     ) -> Self {
         Self {
             wallet,
@@ -668,7 +668,7 @@ impl RpcImpl {
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
 
-    async fn chain(&self) -> RpcResult<Chain> {
+    async fn chain(&self) -> RpcResult<ZainoChain> {
         Ok(self.chain.clone())
     }
 }
@@ -683,7 +683,7 @@ pub(crate) struct WalletRpcImpl {
 #[cfg(zallet_build = "wallet")]
 impl WalletRpcImpl {
     /// Creates a new instance of the wallet-specific RPC handler.
-    pub(crate) fn new(wallet: Database, keystore: KeyStore, chain_view: Chain) -> Self {
+    pub(crate) fn new(wallet: Database, keystore: KeyStore, chain_view: ZainoChain) -> Self {
         Self {
             general: RpcImpl::new(wallet, keystore.clone(), chain_view),
             keystore,
@@ -695,7 +695,7 @@ impl WalletRpcImpl {
         self.general.wallet().await
     }
 
-    async fn chain(&self) -> RpcResult<Chain> {
+    async fn chain(&self) -> RpcResult<ZainoChain> {
         self.general.chain().await
     }
 

@@ -33,7 +33,7 @@ use zcash_protocol::{
 
 use crate::{
     components::{
-        chain::Chain,
+        chain::ZainoChain,
         database::DbHandle,
         json_rpc::{
             asyncop::{ContextInfo, OperationId},
@@ -86,7 +86,7 @@ pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
 pub(crate) async fn call(
     mut wallet: DbHandle,
     keystore: KeyStore,
-    chain: Chain,
+    chain: ZainoChain,
     fromaddress: String,
     amounts: Vec<AmountParameter>,
     minconf: Option<u32>,
@@ -402,7 +402,7 @@ pub(crate) async fn call(
 ///    could also try to use them.
 async fn run(
     mut wallet: DbHandle,
-    chain: Chain,
+    chain: ZainoChain,
     proposal: Proposal<StandardFeeRule, ReceivedNoteId>,
     spending_keys: SpendingKeys,
 ) -> RpcResult<SendResult> {

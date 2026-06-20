@@ -13,7 +13,7 @@ use zcash_script::script::{Asm, Code};
 use super::decode_script::{TransparentScript, script_to_json};
 use crate::{
     components::{
-        chain::Chain,
+        chain::ZainoChain,
         database::DbConnection,
         json_rpc::{
             server::LegacyCode,
@@ -470,7 +470,7 @@ pub(super) const PARAM_BLOCKHASH_DESC: &str = "The block in which to look for th
 
 pub(crate) async fn call(
     wallet: &DbConnection,
-    chain: Chain,
+    chain: ZainoChain,
     txid_str: &str,
     verbose: Option<u64>,
     blockhash: Option<String>,

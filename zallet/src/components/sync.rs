@@ -28,7 +28,7 @@
 //! TODO: Integrate or remove these other notes:
 //!
 //! - Zebra discards the non-finalized chain tip on restart, so Zallet needs to tolerate
-//!   the `ChainView` being up to 100 blocks behind the wallet's view of the chain tip at
+//!   the `ZainoChainView` being up to 100 blocks behind the wallet's view of the chain tip at
 //!   process start.
 
 use std::sync::{
@@ -54,7 +54,7 @@ use zip32::Scope;
 
 use super::{
     TaskHandle,
-    chain::{Chain, ChainBlock},
+    chain::{ChainBlock, ZainoChain},
     database::{Database, DbConnection},
 };
 use crate::{
@@ -79,7 +79,7 @@ impl WalletSync {
     pub(crate) async fn spawn(
         config: &ZalletConfig,
         db: Database,
-        chain: Chain,
+        chain: ZainoChain,
     ) -> Result<(TaskHandle, TaskHandle, TaskHandle, TaskHandle), Error> {
         let params = config.consensus.network();
 
@@ -179,7 +179,7 @@ fn update_boundary(current_boundary: BlockHeight, tip_height: BlockHeight) -> Bl
 /// Returns the boundary block between [`steady_state`] and [`recover_history`] syncing.
 #[tracing::instrument(skip_all)]
 async fn initialize(
-    chain: &Chain,
+    chain: &ZainoChain,
     params: &Network,
     db_data: &mut DbConnection,
     decryptor: decryptor::Handle<AccountUuid, (AccountUuid, Scope)>,
@@ -239,7 +239,7 @@ async fn initialize(
 /// Keeps the wallet state up-to-date with the chain tip, and handles the mempool.
 #[tracing::instrument(skip_all)]
 async fn steady_state(
-    chain: Chain,
+    chain: ZainoChain,
     params: &Network,
     db_data: &mut DbConnection,
     mut prev_tip: ChainBlock,
@@ -363,7 +363,7 @@ async fn steady_state(
 /// This function only operates on finalized chain state, and does not handle reorgs.
 #[tracing::instrument(skip_all)]
 async fn recover_history(
-    chain: Chain,
+    chain: ZainoChain,
     params: &Network,
     db_data: &mut DbConnection,
     upper_boundary: Arc<AtomicU32>,
@@ -432,7 +432,7 @@ async fn recover_history(
 /// history.
 #[tracing::instrument(skip_all)]
 async fn data_requests(
-    chain: Chain,
+    chain: ZainoChain,
     params: &Network,
     db_data: &mut DbConnection,
     tip_change_signal: Arc<Notify>,
