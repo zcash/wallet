@@ -10,7 +10,6 @@ use secrecy::ExposeSecret;
 use serde::Serialize;
 use transparent::address::TransparentAddress;
 use uuid::Uuid;
-use zaino_state::FetchServiceSubscriber;
 use zcash_address::ZcashAddress;
 use zcash_client_backend::{
     data_api::{
@@ -32,6 +31,7 @@ use zcash_protocol::value::Zatoshis;
 use crate::components::json_rpc::payments::enforce_privacy_policy;
 use crate::{
     components::{
+        chain::Chain,
         database::{DbConnection, DbHandle},
         json_rpc::{
             asyncop::{ContextInfo, OperationId},
@@ -144,7 +144,7 @@ pub(super) const COINBASE_INPUTS_WARN_THRESHOLD: u64 = 400;
 pub(crate) async fn call(
     mut wallet: DbHandle,
     keystore: KeyStore,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     fromaddress: String,
     toaddress: String,
     fee: Option<JsonValue>,
@@ -501,7 +501,7 @@ fn enumerate_eligible(
 /// Construct and broadcast the shielding transaction.
 async fn run(
     mut wallet: DbHandle,
-    chain: FetchServiceSubscriber,
+    chain: Chain,
     proposal: Proposal<StandardFeeRule, Infallible>,
     spending_keys: SpendingKeys,
 ) -> RpcResult<SendResult> {
