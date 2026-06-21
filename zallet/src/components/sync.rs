@@ -62,6 +62,7 @@ use crate::{config::ZalletConfig, error::Error, network::Network};
 mod error;
 pub(crate) use error::SyncError;
 
+mod locator;
 mod steps;
 
 /// The maximum number of blocks that the history-recovery task downloads and scans in a
@@ -313,8 +314,9 @@ async fn steady_state<C: Chain>(
             tip_change_signal.notify_one();
 
             // Figure out the diff between the previous and current chain tips.
+            let locator = locator::build_block_locator(db_data, prev_tip.height)?;
             let fork_point = chain_view
-                .find_fork_point(&prev_tip.hash)
+                .find_fork_point(&locator)
                 .await
                 .map_err(SyncError::Chain)?
                 .ok_or_else(|| {

@@ -296,14 +296,19 @@ impl ChainView for ZainoChainView {
 
     async fn find_fork_point(
         &self,
-        known_tip: &BlockHash,
+        locator: &[BlockHash],
     ) -> Result<Option<ChainBlock>, ChainError> {
-        Ok(self
-            .chain
-            .find_fork_point(&self.snapshot, &zaino_state::BlockHash(known_tip.0))
-            .await
-            .map_err(ChainError::backend)?
-            .map(ChainBlock::from_zaino))
+        for known_tip in locator {
+            if let Some(fork) = self
+                .chain
+                .find_fork_point(&self.snapshot, &zaino_state::BlockHash(known_tip.0))
+                .await
+                .map_err(ChainError::backend)?
+            {
+                return Ok(Some(ChainBlock::from_zaino(fork)));
+            }
+        }
+        Ok(None)
     }
 
     async fn tree_state_as_of(
