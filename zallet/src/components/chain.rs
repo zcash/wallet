@@ -62,11 +62,12 @@ pub(crate) trait ChainView: Clone + Send + Sync + 'static {
     /// Returns this view's chain tip.
     fn tip(&self) -> impl Future<Output = Result<ChainBlock, ChainError>> + Send;
 
-    /// Returns the most recent ancestor of the caller's chain (identified by `known_tip`)
-    /// that lies on this view's best chain, or `None` if it cannot be located.
+    /// Returns the most recent entry of the caller-supplied block `locator` (the caller's
+    /// own block hashes, highest height first) that lies on this view's best chain — the
+    /// fork point — or `None` if no locator entry is on the best chain.
     fn find_fork_point(
         &self,
-        known_tip: &BlockHash,
+        locator: &[BlockHash],
     ) -> impl Future<Output = Result<Option<ChainBlock>, ChainError>> + Send;
 
     /// Returns the final note commitment tree state for each shielded pool as of `height`,
@@ -173,11 +174,11 @@ mod tests {
 
         async fn find_fork_point(
             &self,
-            known_tip: &BlockHash,
+            locator: &[BlockHash],
         ) -> Result<Option<ChainBlock>, ChainError> {
             // The mock knows only its own tip, so the fork point is locatable only when
-            // the caller's known tip is that block; any other tip cannot be located.
-            Ok((known_tip == &self.tip.hash).then_some(self.tip))
+            // the caller's locator includes that block; otherwise it cannot be located.
+            Ok(locator.contains(&self.tip.hash).then_some(self.tip))
         }
 
         async fn tree_state_as_of(
@@ -243,10 +244,11 @@ mod tests {
         };
         let view = MockChainView { tip };
         assert_eq!(view.tip().await.unwrap(), tip);
-        // The fork point resolves for the view's own tip, and not for an unknown one.
-        assert_eq!(view.find_fork_point(&tip.hash).await.unwrap(), Some(tip));
+        // The fork point resolves when the locator includes the view's own tip, and
+        // not for a locator that excludes it.
+        assert_eq!(view.find_fork_point(&[tip.hash]).await.unwrap(), Some(tip));
         assert_eq!(
-            view.find_fork_point(&BlockHash([0u8; 32])).await.unwrap(),
+            view.find_fork_point(&[BlockHash([0u8; 32])]).await.unwrap(),
             None,
         );
     }
