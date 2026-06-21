@@ -68,7 +68,6 @@ impl ValidatorRpcClient {
     }
 
     /// `getrawmempool()` — returns the mempool txid hex strings.
-    #[allow(dead_code)] // used by the mempool stream (a later plan)
     pub(crate) async fn get_raw_mempool(&self) -> Result<Vec<String>, Error> {
         self.client
             .request("getrawmempool", ArrayParams::new())
@@ -77,7 +76,6 @@ impl ValidatorRpcClient {
     }
 
     /// `getrawtransaction(txid, 0)` — returns the raw transaction hex string.
-    #[allow(dead_code)] // used by transaction lookups (a later plan)
     pub(crate) async fn get_raw_transaction(&self, txid_hex: String) -> Result<String, Error> {
         let mut params = ArrayParams::new();
         params
