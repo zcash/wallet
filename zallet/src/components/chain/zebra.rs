@@ -5,10 +5,12 @@
 //! indexer interface, and uses a small direct JSON-RPC client for mempool access and
 //! transaction submission.
 
+use std::collections::BTreeMap;
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use futures::stream::BoxStream;
+use futures::{StreamExt as _, stream::BoxStream};
+use incrementalmerkletree::frontier::CommitmentTree;
 use jsonrpsee::tracing::info;
 use tokio::net::lookup_host;
 use zcash_client_backend::data_api::{
@@ -17,11 +19,12 @@ use zcash_client_backend::data_api::{
 };
 use zcash_primitives::{
     block::{Block, BlockHash, BlockHeader},
+    merkle_tree::read_commitment_tree,
     transaction::Transaction,
 };
 use zcash_protocol::{TxId, consensus::BlockHeight};
 use zebra_rpc::sync::init_read_state_with_syncer;
-use zebra_state::{ChainTipChange, LatestChainTip, ReadStateService};
+use zebra_state::{ChainTipChange, ReadStateService};
 
 use super::{Chain, ChainBlock, ChainError, ChainTx, ChainView};
 use crate::{
@@ -32,8 +35,15 @@ use crate::{
     network::Network,
 };
 
+mod convert;
+mod reader;
 mod rpc;
+use reader::{ChainReader, ReadStateChainReader};
 use rpc::ValidatorRpcClient;
+
+/// The maximum reorg depth (`zebra-state`'s `MAX_BLOCK_REORG_HEIGHT`); blocks deeper than
+/// this below the captured tip are treated as finalized and served by height.
+const MAX_REORG_DEPTH: u32 = 1000;
 
 /// Aborts the wrapped syncer task when the last clone of the owning [`Arc`] is dropped.
 struct AbortOnDrop(tokio::task::JoinHandle<()>);
@@ -48,7 +58,7 @@ impl Drop for AbortOnDrop {
 #[derive(Clone)]
 pub(crate) struct ZebraChain {
     read_state_service: ReadStateService,
-    latest_tip: LatestChainTip,
+    #[allow(dead_code)] // used by the mempool stream (Plan 4)
     tip_change: ChainTipChange,
     validator_rpc: ValidatorRpcClient,
     params: Network,
@@ -145,7 +155,7 @@ impl ZebraChain {
         }
 
         info!("Initializing read-only Zebra state service");
-        let (read_state_service, latest_tip, tip_change, sync_task) =
+        let (read_state_service, _latest_tip, tip_change, sync_task) =
             init_read_state_with_syncer(zebra_config, &zebra_network, grpc_addr)
                 .await
                 // Outer JoinError from the spawned init task.
@@ -155,7 +165,6 @@ impl ZebraChain {
 
         let chain = Self {
             read_state_service,
-            latest_tip,
             tip_change,
             validator_rpc,
             params,
@@ -176,7 +185,7 @@ impl ZebraChain {
 }
 
 impl Chain for ZebraChain {
-    type View = ZebraChainView;
+    type View = ZebraChainView<ReadStateChainReader>;
 
     async fn broadcast_transaction(&self, tx: &Transaction) -> Result<(), ChainError> {
         let mut tx_bytes = vec![];
@@ -191,100 +200,449 @@ impl Chain for ZebraChain {
     async fn get_sapling_subtree_roots(
         &self,
     ) -> Result<Vec<CommitmentTreeRoot<sapling::Node>>, ChainError> {
-        todo!("Plan 3: SaplingSubtrees read request")
+        self.reader().sapling_subtree_roots().await
     }
 
     async fn get_orchard_subtree_roots(
         &self,
     ) -> Result<Vec<CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>>, ChainError> {
-        todo!("Plan 3: OrchardSubtrees read request")
+        self.reader().orchard_subtree_roots().await
     }
 
-    async fn snapshot(&self) -> Result<ZebraChainView, ChainError> {
-        // Plan 3 captures the tip and builds the height->hash cache here.
+    async fn snapshot(&self) -> Result<Self::View, ChainError> {
+        let reader = self.reader();
+        let tip = reader
+            .tip()
+            .await?
+            .ok_or_else(|| ChainError::unavailable("the chain state has no tip yet"))?;
+        let finalized_floor =
+            BlockHeight::from_u32(u32::from(tip.height).saturating_sub(MAX_REORG_DEPTH));
+        let mut cache = BTreeMap::new();
+        cache.insert(tip.height, tip.hash);
         Ok(ZebraChainView {
-            read_state_service: self.read_state_service.clone(),
-            latest_tip: self.latest_tip.clone(),
-            tip_change: self.tip_change.clone(),
+            reader,
             validator_rpc: self.validator_rpc.clone(),
             params: self.params,
+            tip,
+            finalized_floor,
+            cache: Arc::new(Mutex::new(cache)),
         })
     }
 }
 
-/// A pinned view of the chain as of a captured tip.
-#[derive(Clone)]
-pub(crate) struct ZebraChainView {
-    #[allow(dead_code)]
-    read_state_service: ReadStateService,
-    #[allow(dead_code)]
-    latest_tip: LatestChainTip,
-    #[allow(dead_code)]
-    tip_change: ChainTipChange,
-    #[allow(dead_code)]
-    validator_rpc: ValidatorRpcClient,
-    #[allow(dead_code)]
-    params: Network,
+impl ZebraChain {
+    fn reader(&self) -> ReadStateChainReader {
+        ReadStateChainReader {
+            read_state: self.read_state_service.clone(),
+        }
+    }
 }
 
-impl ChainView for ZebraChainView {
+/// A pinned view of the chain as of a captured tip.
+///
+/// Reads in the finalized region (`height <= finalized_floor`) are served by height
+/// directly (stable on disk); non-finalized reads are pinned to the captured tip's chain
+/// by resolving each height to a hash (memoized in `cache`) and reading by that hash.
+#[derive(Clone)]
+pub(crate) struct ZebraChainView<R: ChainReader = ReadStateChainReader> {
+    reader: R,
+    validator_rpc: ValidatorRpcClient,
+    params: Network,
+    tip: ChainBlock,
+    finalized_floor: BlockHeight,
+    cache: Arc<Mutex<BTreeMap<BlockHeight, BlockHash>>>,
+}
+
+impl<R: ChainReader> ZebraChainView<R> {
+    /// The pinned hash at `height` for this view, or `None` if above the captured tip.
+    async fn resolve(&self, height: BlockHeight) -> Result<Option<BlockHash>, ChainError> {
+        if height > self.tip.height {
+            return Ok(None);
+        }
+        if height <= self.finalized_floor {
+            // Finalized region: stable on disk, served by height.
+            return self.reader.best_chain_block_hash(height).await;
+        }
+        // Fast path: already memoized.
+        if let Some(h) = self.cache.lock().unwrap().get(&height).copied() {
+            return Ok(Some(h));
+        }
+        // Walk down from the lowest cached entry at or above `height`, memoizing every step.
+        let (mut cur_height, mut cur_hash) = {
+            let cache = self.cache.lock().unwrap();
+            cache
+                .range(height..)
+                .next()
+                .map(|(h, hash)| (*h, *hash))
+                .expect("the tip is always cached at or above any non-finalized height")
+        };
+        while cur_height > height {
+            let header = self
+                .reader
+                .block_header_by_hash(cur_hash)
+                .await?
+                .ok_or_else(|| {
+                    ChainError::unavailable("pinned block reorged away during resolve")
+                })?;
+            cur_hash = header.previous_block_hash;
+            cur_height = BlockHeight::from_u32(u32::from(cur_height) - 1);
+            self.cache.lock().unwrap().insert(cur_height, cur_hash);
+        }
+        Ok(Some(cur_hash))
+    }
+
+    fn stream_blocks_inner(
+        &self,
+        start: BlockHeight,
+        end: BlockHeight,
+    ) -> BoxStream<'_, Result<Block, ChainError>> {
+        let view = self.clone();
+        futures::stream::try_unfold(start, move |height| {
+            let view = view.clone();
+            async move {
+                if height > end {
+                    return Ok(None);
+                }
+                match view.get_block(height).await? {
+                    Some(block) => Ok(Some((block, height + 1))),
+                    None => Ok(None),
+                }
+            }
+        })
+        .boxed()
+    }
+}
+
+impl<R: ChainReader> ChainView for ZebraChainView<R> {
     async fn tip(&self) -> Result<ChainBlock, ChainError> {
-        todo!("Plan 3: capture tip from latest_tip")
+        Ok(self.tip)
     }
 
     async fn find_fork_point(
         &self,
-        _locator: &[BlockHash],
+        locator: &[BlockHash],
     ) -> Result<Option<ChainBlock>, ChainError> {
-        todo!("Plan 3: FindForkPoint read request")
+        self.reader.find_fork_point(locator).await
     }
 
     async fn tree_state_as_of(
         &self,
-        _height: BlockHeight,
+        height: BlockHeight,
     ) -> Result<Option<ChainState>, ChainError> {
-        todo!("Plan 3: SaplingTree/OrchardTree by pinned hash")
+        let Some(hash) = self.resolve(height).await? else {
+            return Ok(None);
+        };
+        // For a finalized pinned hash, `None` tree bytes mean the pool was not yet active
+        // at that height (empty tree). For a non-finalized pinned hash (best-chain-only
+        // treestate lookups), `None` means the hash reorged off the best chain.
+        let pinned_finalized = height <= self.finalized_floor;
+
+        let final_sapling_tree = match self.reader.sapling_tree_bytes(hash).await? {
+            Some(bytes) => {
+                read_commitment_tree::<sapling::Node, _, { sapling::NOTE_COMMITMENT_TREE_DEPTH }>(
+                    &bytes[..],
+                )
+                .map_err(ChainError::invalid_data)?
+            }
+            None if pinned_finalized => CommitmentTree::empty(),
+            None => {
+                return Err(ChainError::unavailable(
+                    "pinned sapling treestate reorged away",
+                ));
+            }
+        }
+        .to_frontier();
+
+        let final_orchard_tree = match self.reader.orchard_tree_bytes(hash).await? {
+            Some(bytes) => read_commitment_tree::<
+                orchard::tree::MerkleHashOrchard,
+                _,
+                { orchard::NOTE_COMMITMENT_TREE_DEPTH as u8 },
+            >(&bytes[..])
+            .map_err(ChainError::invalid_data)?,
+            None if pinned_finalized => CommitmentTree::empty(),
+            None => {
+                return Err(ChainError::unavailable(
+                    "pinned orchard treestate reorged away",
+                ));
+            }
+        }
+        .to_frontier();
+
+        Ok(Some(ChainState::new(
+            height,
+            hash,
+            final_sapling_tree,
+            final_orchard_tree,
+        )))
     }
 
     async fn get_block_header(
         &self,
-        _height: BlockHeight,
+        height: BlockHeight,
     ) -> Result<Option<BlockHeader>, ChainError> {
-        todo!("Plan 3: BlockHeader by pinned hash")
+        let Some(hash) = self.resolve(height).await? else {
+            return Ok(None);
+        };
+        let Some(bytes) = self.reader.raw_block_by_hash(hash).await? else {
+            return Ok(None);
+        };
+        // The header is the prefix of the block serialization.
+        Ok(Some(
+            BlockHeader::read(&bytes[..]).map_err(ChainError::invalid_data)?,
+        ))
     }
 
-    async fn get_block(&self, _height: BlockHeight) -> Result<Option<Block>, ChainError> {
-        todo!("Plan 3: AnyChainBlock by pinned hash")
+    async fn get_block(&self, height: BlockHeight) -> Result<Option<Block>, ChainError> {
+        let Some(hash) = self.resolve(height).await? else {
+            return Ok(None);
+        };
+        let Some(bytes) = self.reader.raw_block_by_hash(hash).await? else {
+            return Ok(None);
+        };
+        Ok(Some(convert::block(&bytes, &self.params)?))
     }
 
-    fn stream_blocks_to_tip(
-        &self,
-        _start: BlockHeight,
-    ) -> BoxStream<'_, Result<Block, ChainError>> {
-        todo!("Plan 3: block stream")
+    fn stream_blocks_to_tip(&self, start: BlockHeight) -> BoxStream<'_, Result<Block, ChainError>> {
+        self.stream_blocks_inner(start, self.tip.height)
     }
 
     fn stream_blocks(
         &self,
-        _range: &Range<BlockHeight>,
+        range: &Range<BlockHeight>,
     ) -> BoxStream<'_, Result<Block, ChainError>> {
-        todo!("Plan 3: block stream")
+        self.stream_blocks_inner(range.start, range.end - 1)
     }
 
     async fn get_mempool_stream(&self) -> Result<Option<BoxStream<'_, Transaction>>, ChainError> {
         todo!("Plan 4: JSON-RPC mempool stream ended by ChainTipChange")
     }
 
-    async fn get_transaction(&self, _txid: TxId) -> Result<Option<ChainTx>, ChainError> {
-        todo!("Plan 3: Transaction/AnyChainTransaction + mempool fallback")
+    async fn get_transaction(&self, txid: TxId) -> Result<Option<ChainTx>, ChainError> {
+        let ztxid = convert::to_zebra_txid(txid);
+
+        // Best chain (mined).
+        if let Some(mined) = self.reader.transaction(ztxid).await? {
+            let inner = convert::transaction(&mined.raw, &self.params, mined.height)?;
+            return Ok(Some(ChainTx {
+                inner,
+                raw: mined.raw,
+                block_hash: self.resolve(mined.height).await?,
+                mined_height: Some(mined.height),
+                block_time: Some(mined.block_time),
+            }));
+        }
+
+        // Side (non-best) chain: parse at the mempool branch (recent, same network upgrade).
+        let mempool_height = self.tip.height + 1;
+        if let Some(side) = self.reader.side_chain_transaction(ztxid).await? {
+            let inner = convert::transaction(&side.raw, &self.params, mempool_height)?;
+            return Ok(Some(ChainTx {
+                inner,
+                raw: side.raw,
+                block_hash: Some(side.block_hash),
+                mined_height: None,
+                block_time: None,
+            }));
+        }
+
+        // Mempool.
+        let mempool = self
+            .validator_rpc
+            .get_raw_mempool()
+            .await
+            .map_err(ChainError::backend)?;
+        if mempool.iter().any(|t| *t == txid.to_string()) {
+            let raw_hex = self
+                .validator_rpc
+                .get_raw_transaction(txid.to_string())
+                .await
+                .map_err(ChainError::backend)?;
+            let raw = hex::decode(raw_hex).map_err(ChainError::invalid_data)?;
+            let inner = convert::transaction(&raw, &self.params, mempool_height)?;
+            return Ok(Some(ChainTx {
+                inner,
+                raw,
+                block_hash: None,
+                mined_height: None,
+                block_time: None,
+            }));
+        }
+
+        Ok(None)
     }
 
-    async fn get_transaction_status(&self, _txid: TxId) -> Result<TransactionStatus, ChainError> {
-        todo!("Plan 3: transaction status")
+    async fn get_transaction_status(&self, txid: TxId) -> Result<TransactionStatus, ChainError> {
+        let ztxid = convert::to_zebra_txid(txid);
+        if let Some(mined) = self.reader.transaction(ztxid).await? {
+            return Ok(TransactionStatus::Mined(mined.height));
+        }
+        if self.reader.side_chain_transaction(ztxid).await?.is_some() {
+            return Ok(TransactionStatus::NotInMainChain);
+        }
+        let mempool = self
+            .validator_rpc
+            .get_raw_mempool()
+            .await
+            .map_err(ChainError::backend)?;
+        if mempool.iter().any(|t| *t == txid.to_string()) {
+            return Ok(TransactionStatus::NotInMainChain);
+        }
+        Ok(TransactionStatus::TxidNotRecognized)
     }
 
     #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
-    async fn block_height(&self, _hash: &BlockHash) -> Result<Option<BlockHeight>, ChainError> {
-        todo!("Plan 3: BlockHeader(hash).height")
+    async fn block_height(&self, hash: &BlockHash) -> Result<Option<BlockHeight>, ChainError> {
+        Ok(self
+            .reader
+            .block_header_by_hash(*hash)
+            .await?
+            .map(|info| info.height))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    use zcash_client_backend::data_api::chain::CommitmentTreeRoot;
+    use zcash_protocol::consensus::NetworkType;
+
+    use super::reader::{ChainReader, HeaderInfo, MinedTxInfo, SideTxInfo};
+    use super::*;
+
+    /// Deterministic block hash for a height (`< 256`): `[height; 32]`.
+    fn h(height: u32) -> BlockHash {
+        BlockHash([height as u8; 32])
+    }
+
+    /// A mock linear chain: `block_header_by_hash([n; 32])` yields parent `[n-1; 32]`,
+    /// and counts header lookups so tests can assert the resolve walk doesn't re-fetch
+    /// cached ranges.
+    #[derive(Clone)]
+    struct MockChainReader {
+        tip_height: u32,
+        header_calls: Arc<AtomicU32>,
+    }
+
+    impl ChainReader for MockChainReader {
+        async fn tip(&self) -> Result<Option<ChainBlock>, ChainError> {
+            Ok(Some(ChainBlock {
+                height: BlockHeight::from_u32(self.tip_height),
+                hash: h(self.tip_height),
+            }))
+        }
+        async fn best_chain_block_hash(
+            &self,
+            height: BlockHeight,
+        ) -> Result<Option<BlockHash>, ChainError> {
+            Ok(Some(h(u32::from(height))))
+        }
+        async fn raw_block_by_hash(&self, _hash: BlockHash) -> Result<Option<Vec<u8>>, ChainError> {
+            Ok(None)
+        }
+        async fn block_header_by_hash(
+            &self,
+            hash: BlockHash,
+        ) -> Result<Option<HeaderInfo>, ChainError> {
+            self.header_calls.fetch_add(1, Ordering::SeqCst);
+            let height = u32::from(hash.0[0]);
+            Ok(Some(HeaderInfo {
+                height: BlockHeight::from_u32(height),
+                previous_block_hash: h(height.saturating_sub(1)),
+            }))
+        }
+        async fn sapling_tree_bytes(&self, _: BlockHash) -> Result<Option<Vec<u8>>, ChainError> {
+            Ok(None)
+        }
+        async fn orchard_tree_bytes(&self, _: BlockHash) -> Result<Option<Vec<u8>>, ChainError> {
+            Ok(None)
+        }
+        async fn find_fork_point(&self, _: &[BlockHash]) -> Result<Option<ChainBlock>, ChainError> {
+            Ok(None)
+        }
+        async fn transaction(
+            &self,
+            _: zebra_chain::transaction::Hash,
+        ) -> Result<Option<MinedTxInfo>, ChainError> {
+            Ok(None)
+        }
+        async fn side_chain_transaction(
+            &self,
+            _: zebra_chain::transaction::Hash,
+        ) -> Result<Option<SideTxInfo>, ChainError> {
+            Ok(None)
+        }
+        async fn sapling_subtree_roots(
+            &self,
+        ) -> Result<Vec<CommitmentTreeRoot<sapling::Node>>, ChainError> {
+            Ok(vec![])
+        }
+        async fn orchard_subtree_roots(
+            &self,
+        ) -> Result<Vec<CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>>, ChainError> {
+            Ok(vec![])
+        }
+    }
+
+    fn test_view(
+        tip_height: u32,
+        floor: u32,
+        calls: Arc<AtomicU32>,
+    ) -> ZebraChainView<MockChainReader> {
+        let tip = ChainBlock {
+            height: BlockHeight::from_u32(tip_height),
+            hash: h(tip_height),
+        };
+        let mut cache = BTreeMap::new();
+        cache.insert(tip.height, tip.hash);
+        ZebraChainView {
+            reader: MockChainReader {
+                tip_height,
+                header_calls: calls,
+            },
+            validator_rpc: ValidatorRpcClient::new("127.0.0.1:1", "", "", None).unwrap(),
+            params: Network::from_type(NetworkType::Main, &[]),
+            tip,
+            finalized_floor: BlockHeight::from_u32(floor),
+            cache: Arc::new(Mutex::new(cache)),
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_walks_and_memoizes() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let view = test_view(10, 2, calls.clone());
+
+        // The tip is seeded in the cache: a hit, no header walk.
+        assert_eq!(
+            view.resolve(BlockHeight::from_u32(10)).await.unwrap(),
+            Some(h(10))
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+        // Non-finalized walk from the tip down to 7: three header lookups.
+        assert_eq!(
+            view.resolve(BlockHeight::from_u32(7)).await.unwrap(),
+            Some(h(7))
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+
+        // Resolving 5 reuses the cached 7..=10; only two more lookups (7→6→5).
+        assert_eq!(
+            view.resolve(BlockHeight::from_u32(5)).await.unwrap(),
+            Some(h(5))
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 5);
+
+        // Finalized region (<= floor) is served by height, with no header walk.
+        assert_eq!(
+            view.resolve(BlockHeight::from_u32(1)).await.unwrap(),
+            Some(h(1))
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 5);
+
+        // Above the captured tip.
+        assert_eq!(view.resolve(BlockHeight::from_u32(11)).await.unwrap(), None);
     }
 }
