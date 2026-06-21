@@ -133,7 +133,7 @@ shadow-rs.workspace = true
 shardtree.workspace = true
 time.workspace = true
 tempfile.workspace = true
-tokio = { workspace = true, features = ["fs", "io-std", "io-util", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["fs", "io-std", "io-util", "rt-multi-thread", "signal"] }
 toml.workspace = true
 tonic.workspace = true
 tower = { workspace = true, features = ["timeout"] }
@@ -144,9 +144,9 @@ transparent.workspace = true
 uuid.workspace = true
 which = { workspace = true, optional = true }
 xdg.workspace = true
-zaino-common.workspace = true
-zaino-fetch.workspace = true
-zaino-state.workspace = true
+zaino-common = { workspace = true, optional = true }
+zaino-fetch = { workspace = true, optional = true }
+zaino-state = { workspace = true, optional = true }
 zcash_address.workspace = true
 zcash_client_backend = { workspace = true, features = [
     "lightwalletd-tonic-tls-webpki-roots",
@@ -165,7 +165,10 @@ zcash_primitives.workspace = true
 zcash_proofs = { workspace = true, features = ["bundled-prover"] }
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
 zcash_script.workspace = true
-zebra-rpc.workspace = true
+zebra-chain = { workspace = true, optional = true }
+zebra-rpc = { workspace = true, optional = true }
+zebra-state = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 zip32.workspace = true
 zewif = { workspace = true, optional = true }
 zewif-zcashd = { workspace = true, optional = true }
@@ -196,6 +199,22 @@ regex.workspace = true
 trycmd.workspace = true
 
 [features]
+default = ["zaino"]
+
+## Zaino-backed chain-data backend (default). Mutually exclusive with `zebra-state`.
+zaino = ["dep:zaino-common", "dep:zaino-fetch", "dep:zaino-state"]
+
+## zebra-state + Zebra-RPC chain-data backend. Mutually exclusive with `zaino`.
+## Requires a co-located zebrad built with the `indexer` feature; no regtest support.
+zebra-state = [
+  "dep:zebra-chain",
+  "dep:zebra-rpc",
+  "dep:zebra-state",
+  "dep:jsonrpsee-http-client",
+  "jsonrpsee/async-client",
+  "dep:base64",
+]
+
 ## `zallet rpc` CLI support
 rpc-cli = ["jsonrpsee/async-client", "dep:jsonrpsee-http-client"]
 

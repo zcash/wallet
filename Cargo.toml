@@ -124,7 +124,13 @@ secp256k1 = { version = "0.29", features = ["recovery"] }
 zaino-common = "0.1.1"
 zaino-fetch = "0.2"
 zaino-state = "0.3"
-zebra-rpc = "9.0"
+# Zebra crates for the zebra-state backend, pinned to the find-fork-point branch
+# (direct git, NOT via [patch.crates-io]: a global patch would also rewrite Zaino's
+# transitive zebra deps and break the default build).
+zebra-chain = { git = "https://github.com/nuttycom/zebra.git", rev = "dd415da2f7fbf4db9cdd69de1235c6b125dbe576" }
+zebra-rpc = { git = "https://github.com/nuttycom/zebra.git", rev = "dd415da2f7fbf4db9cdd69de1235c6b125dbe576" }
+zebra-state = { git = "https://github.com/nuttycom/zebra.git", rev = "dd415da2f7fbf4db9cdd69de1235c6b125dbe576" }
+base64 = "0.22"
 
 # Zcash wallet
 deadpool = "0.12"

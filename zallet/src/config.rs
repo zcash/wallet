@@ -95,6 +95,7 @@ impl ZalletConfig {
     }
 
     /// Returns the path to the indexer's database.
+    #[cfg(feature = "zaino")]
     pub(crate) fn indexer_db_path(&self) -> PathBuf {
         resolve_datadir_path(self.datadir(), self.indexer.db_path())
     }
@@ -483,6 +484,16 @@ pub struct IndexerSection {
     /// Note that on Windows, you must either use single quotes for this field's value, or
     /// replace all backslashes `\` with forward slashes `/`.
     pub db_path: Option<PathBuf>,
+
+    /// Settings for reading chain state directly from a local zebrad's state database
+    /// (read-only) instead of fetching all chain data over JSON-RPC.
+    ///
+    /// When this section is present, Zallet opens the running zebrad's state database
+    /// as a read-only RocksDB secondary instance and follows the non-finalized chain
+    /// tip via zebrad's gRPC indexer interface. The JSON-RPC settings above are still
+    /// required: they are used for mempool access, transaction submission, and any
+    /// non-best-chain block reads.
+    pub read_state_service: Option<ReadStateServiceSection>,
 }
 
 impl IndexerSection {
@@ -496,6 +507,28 @@ impl IndexerSection {
             .as_deref()
             .unwrap_or_else(|| Path::new("zaino"))
     }
+}
+
+/// Settings for the read-state-service indexer backend.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct ReadStateServiceSection {
+    /// Address (`host:port`) of zebrad's gRPC indexer interface.
+    ///
+    /// Used to follow zebrad's non-finalized chain tip. This must match the
+    /// `indexer_listen_addr` set in zebrad's `[rpc]` config section. Note that the
+    /// indexer interface is only available in a `zebrad` built with the `indexer`
+    /// feature flag; it is not present in a default build.
+    pub grpc_address: String,
+
+    /// Path to the running zebrad's existing state cache directory.
+    ///
+    /// Zallet opens this read-only (as a RocksDB secondary instance); it never writes
+    /// to or deletes it. It must be on the same machine as Zallet, and zebrad's on-disk
+    /// state format must be compatible with Zallet's `zebra-state` version.
+    ///
+    /// This can be either an absolute path, or a path relative to the data directory.
+    pub zebra_state_path: PathBuf,
 }
 
 /// Settings for the key store.
@@ -693,6 +726,8 @@ impl ZalletConfig {
             indexer("validator_user", &conf.indexer.validator_user),
             indexer("validator_password", &conf.indexer.validator_password),
             indexer("db_path", conf.indexer.db_path()),
+            read_state_service("grpc_address", "127.0.0.1:8230"),
+            read_state_service("zebra_state_path", "/home/<username>/.cache/zebra"),
             #[cfg(zallet_build = "wallet")]
             keystore("encryption_identity", conf.keystore.encryption_identity()),
             #[cfg(zallet_build = "wallet")]
@@ -723,6 +758,7 @@ impl ZalletConfig {
         const FEATURES_DEPRECATED: &str = "features.deprecated";
         const FEATURES_EXPERIMENTAL: &str = "features.experimental";
         const INDEXER: &str = "indexer";
+        const READ_STATE_SERVICE: &str = "indexer.read_state_service";
         #[cfg(zallet_build = "wallet")]
         const KEYSTORE: &str = "keystore";
         #[cfg(zallet_build = "wallet")]
@@ -770,6 +806,12 @@ impl ZalletConfig {
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(INDEXER, f, d)
+        }
+        fn read_state_service<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(READ_STATE_SERVICE, f, d)
         }
         #[cfg(zallet_build = "wallet")]
         fn keystore<T: Serialize>(
@@ -846,6 +888,35 @@ impl ZalletConfig {
             write_section_inner::<T>(config, section_name, true, sec_def);
         }
 
+        fn write_optional_section<'a, T: Documented + DocumentedFields>(
+            config: &mut String,
+            section_name: &'static str,
+            sec_def: &impl Fn(&'static str, &'static str) -> Option<&'a toml::Value>,
+        ) {
+            writeln!(config).unwrap();
+            writeln!(config, "#").unwrap();
+            for line in T::DOCS.lines() {
+                if line.is_empty() {
+                    writeln!(config, "#").unwrap();
+                } else {
+                    writeln!(config, "# {line}").unwrap();
+                }
+            }
+            writeln!(config, "#").unwrap();
+            writeln!(
+                config,
+                "# This section is optional. Uncomment the header and fields below to enable it."
+            )
+            .unwrap();
+            writeln!(config, "#").unwrap();
+            writeln!(config, "#[{section_name}]").unwrap();
+            writeln!(config).unwrap();
+
+            for field_name in T::FIELD_NAMES {
+                write_field::<T>(config, field_name, false, sec_def(section_name, field_name));
+            }
+        }
+
         fn write_section_inner<'a, T: Documented + DocumentedFields>(
             config: &mut String,
             section_name: &'static str,
@@ -894,6 +965,11 @@ impl ZalletConfig {
                     (RPC, "auth") => {
                         write_list_section::<RpcAuthSection>(config, RPC_AUTH, sec_def)
                     }
+                    (INDEXER, "read_state_service") => write_optional_section::<
+                        ReadStateServiceSection,
+                    >(
+                        config, READ_STATE_SERVICE, sec_def
+                    ),
                     // Ignore flattened fields (present to support parsing old configs).
                     (FEATURES_DEPRECATED, "other") | (FEATURES_EXPERIMENTAL, "other") => (),
                     // Render section field.
@@ -971,5 +1047,30 @@ impl ZalletConfig {
         }
 
         config
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ReadStateServiceSection;
+
+    #[test]
+    fn read_state_service_section_parses() {
+        let toml = r#"
+grpc_address = "127.0.0.1:8231"
+zebra_state_path = "/home/user/.cache/zebra"
+"#;
+        let section: ReadStateServiceSection = toml::from_str(toml).unwrap();
+        assert_eq!(section.grpc_address, "127.0.0.1:8231");
+        assert_eq!(
+            section.zebra_state_path,
+            std::path::PathBuf::from("/home/user/.cache/zebra")
+        );
+    }
+
+    #[test]
+    fn read_state_service_section_requires_all_fields() {
+        let toml = r#"grpc_address = "127.0.0.1:8231""#;
+        assert!(toml::from_str::<ReadStateServiceSection>(toml).is_err());
     }
 }

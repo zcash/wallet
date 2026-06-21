@@ -20,8 +20,22 @@ use zcash_protocol::{TxId, consensus::BlockHeight};
 mod error;
 pub(crate) use error::ChainError;
 
+#[cfg(feature = "zaino")]
 mod zaino;
+#[cfg(feature = "zaino")]
 pub(crate) use zaino::ZainoChain;
+
+#[cfg(feature = "zebra-state")]
+mod zebra;
+#[cfg(feature = "zebra-state")]
+pub(crate) use zebra::ZebraChain;
+
+/// The concrete chain backend selected at compile time by the `zaino` / `zebra-state`
+/// feature. Construction sites name this; everything else is generic over [`Chain`].
+#[cfg(feature = "zaino")]
+pub(crate) type ChainBackend = ZainoChain;
+#[cfg(feature = "zebra-state")]
+pub(crate) type ChainBackend = ZebraChain;
 
 /// A handle to a source of Zcash chain data.
 ///
