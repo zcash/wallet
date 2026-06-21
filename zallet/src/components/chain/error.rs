@@ -21,6 +21,7 @@ pub(crate) enum ChainError {
     /// The chain source returned data that could not be decoded, or that violated an
     /// invariant the wallet relies on (a non-canonical encoding, an unexpected response
     /// shape). Not retryable; indicates a bug, corruption, or a version mismatch.
+    #[allow(dead_code)] // unused by whichever backend is not compiled
     InvalidData(BoxError),
     /// A backend-specific failure with no finer classification.
     Backend(BoxError),
@@ -39,6 +40,7 @@ impl ChainError {
     }
 
     /// Wraps an arbitrary error as a [`ChainError::InvalidData`].
+    #[allow(dead_code)] // unused by whichever backend is not compiled
     pub(crate) fn invalid_data(source: impl Into<BoxError>) -> Self {
         ChainError::InvalidData(source.into())
     }
