@@ -276,6 +276,18 @@ async fn initialize<C: Chain>(
     Ok((current_tip, starting_boundary))
 }
 
+/// How long to wait before re-pinning the chain view after a stale-view error, so a
+/// backend that is briefly unable to serve reads (still syncing its non-finalized state,
+/// or a reorg in progress) is not polled in a tight loop.
+const REORG_RETRY_BACKOFF: Duration = Duration::from_millis(200);
+
+/// Whether a sync error reflects a chain view that went stale mid-read — the captured
+/// snapshot referenced a non-finalized block that was reorged away — and so should be
+/// retried by re-pinning to the current tip, rather than propagated as fatal.
+fn is_retryable(error: &SyncError) -> bool {
+    matches!(error, SyncError::Chain(ChainError::Unavailable(_)))
+}
+
 /// Keeps the wallet state up-to-date with the chain tip, and handles the mempool.
 #[tracing::instrument(skip_all)]
 async fn steady_state<C: Chain>(
@@ -294,105 +306,140 @@ async fn steady_state<C: Chain>(
     tip_change_signal.notify_one();
 
     loop {
-        let chain_view = chain.snapshot().await.map_err(SyncError::Chain)?;
-        let current_tip = chain_view.tip().await.map_err(SyncError::Chain)?;
-        let tip_changed = current_tip != prev_tip;
-
-        if tip_changed {
-            info!("New chain tip: {} {}", current_tip.height, current_tip.hash);
-            lower_boundary
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current_boundary| {
-                    Some(
-                        update_boundary(
-                            BlockHeight::from_u32(current_boundary),
-                            current_tip.height,
-                        )
-                        .into(),
-                    )
-                })
-                .expect("closure always returns Some");
-            tip_change_signal.notify_one();
-
-            // Figure out the diff between the previous and current chain tips.
-            let locator = locator::build_block_locator(db_data, prev_tip.height)?;
-            let fork_point = chain_view
-                .find_fork_point(&locator)
-                .await
-                .map_err(SyncError::Chain)?
-                .ok_or_else(|| {
-                    SyncError::Chain(ChainError::backend(format!(
-                        "Could not determine the reorg point: the wallet's previous \
-                         chain tip {} (height {}) is not known to the chain indexer",
-                        prev_tip.hash, prev_tip.height,
-                    )))
-                })?;
-            assert!(fork_point.height <= current_tip.height);
-
-            // Fetch blocks that need to be applied to the wallet.
-            let blocks_to_apply = chain_view.stream_blocks_to_tip(fork_point.height + 1);
-            tokio::pin!(blocks_to_apply);
-
-            // If the fork point is equal to `prev_tip` then no reorg has occurred.
-            if fork_point != prev_tip {
-                // Ensured by `find_fork_point`.
-                assert!(fork_point.height < prev_tip.height);
-
-                // Rewind the wallet to the fork point. `truncate_to_height` fully resets
-                // the wallet state to that height, so the blocks in the old fork need no
-                // further handling.
-                info!(
-                    "Chain reorg detected, rewinding to {} {}",
-                    fork_point.height, fork_point.hash
-                );
-                db_data.truncate_to_height(fork_point.height)?;
-                prev_tip = fork_point;
-            };
-
-            // Notify the wallet of block connections.
-            while let Some(block) = blocks_to_apply.try_next().await.map_err(SyncError::Chain)? {
-                let height = block.claimed_height();
-                assert_eq!(height, prev_tip.height + 1);
-                let current_block = ChainBlock {
-                    height,
-                    hash: block.header().hash(),
-                };
-                db_data.update_chain_tip(height)?;
-
-                steps::scan_block(&chain_view, db_data, params, block, &decryptor).await?;
-
-                // Now that we're done applying the block, update our chain pointer.
-                prev_tip = current_block;
-            }
-        }
-
-        // If we have caught up to the chain tip, stream the mempool state into the wallet.
-        match chain_view
-            .get_mempool_stream()
-            .await
-            .map_err(SyncError::Chain)?
+        if let Err(error) = steady_state_iteration(
+            &chain,
+            params,
+            db_data,
+            &mut prev_tip,
+            &lower_boundary,
+            &tip_change_signal,
+            &decryptor,
+        )
+        .await
         {
-            Some(mempool_stream) => {
-                info!("Reached chain tip, streaming mempool");
-                tokio::pin!(mempool_stream);
-                while let Some(tx) = mempool_stream.next().await {
-                    info!("Scanning mempool tx {}", tx.txid());
-                    // TODO: Route individual-transaction scanning through the batch
-                    // decryptor (`Handle::queue_tx`) once a single-tx store path exists.
-                    // See zcash/wallet#477.
-                    decrypt_and_store_transaction(params, db_data, &tx, None)?;
-                }
-
-                // Mempool stream ended, signalling that the chain tip has changed.
+            // A stale-view error means the captured snapshot referenced a non-finalized
+            // block that was reorged away mid-read. Discard the view, pause briefly, and
+            // loop to re-pin to the current tip. Progress already committed to the wallet
+            // (and recorded in `prev_tip`) is preserved across the retry.
+            if is_retryable(&error) {
+                warn!("Chain view became stale, re-pinning to the current tip: {error}");
+                time::sleep(REORG_RETRY_BACKOFF).await;
+                continue;
             }
-            // The chain tip already changed since this view was captured; loop around
-            // immediately to observe it.
-            None if tip_changed => (),
-            // The chain tip has not changed, and no mempool stream is available (e.g.
-            // because the chain indexer is still syncing its finalized state). Pause
-            // briefly to avoid spinning.
-            None => time::sleep(Duration::from_millis(500)).await,
+            return Err(error);
         }
     }
+}
+
+/// Performs one pass of [`steady_state`]: captures a fresh chain view, applies any new or
+/// reorged blocks to the wallet (advancing `prev_tip`), then streams the mempool until the
+/// view's tip changes.
+async fn steady_state_iteration<C: Chain>(
+    chain: &C,
+    params: &Network,
+    db_data: &mut DbConnection,
+    prev_tip: &mut ChainBlock,
+    lower_boundary: &AtomicU32,
+    tip_change_signal: &Notify,
+    decryptor: &decryptor::Handle<AccountUuid, (AccountUuid, Scope)>,
+) -> Result<(), SyncError> {
+    let chain_view = chain.snapshot().await.map_err(SyncError::Chain)?;
+    let current_tip = chain_view.tip().await.map_err(SyncError::Chain)?;
+    let tip_changed = current_tip != *prev_tip;
+
+    if tip_changed {
+        info!("New chain tip: {} {}", current_tip.height, current_tip.hash);
+        lower_boundary
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current_boundary| {
+                Some(
+                    update_boundary(BlockHeight::from_u32(current_boundary), current_tip.height)
+                        .into(),
+                )
+            })
+            .expect("closure always returns Some");
+        tip_change_signal.notify_one();
+
+        // Figure out the diff between the previous and current chain tips.
+        let locator = locator::build_block_locator(db_data, prev_tip.height)?;
+        let fork_point = chain_view
+            .find_fork_point(&locator)
+            .await
+            .map_err(SyncError::Chain)?
+            .ok_or_else(|| {
+                SyncError::Chain(ChainError::backend(format!(
+                    "Could not determine the reorg point: the wallet's previous \
+                     chain tip {} (height {}) is not known to the chain indexer",
+                    prev_tip.hash, prev_tip.height,
+                )))
+            })?;
+        assert!(fork_point.height <= current_tip.height);
+
+        // Fetch blocks that need to be applied to the wallet.
+        let blocks_to_apply = chain_view.stream_blocks_to_tip(fork_point.height + 1);
+        tokio::pin!(blocks_to_apply);
+
+        // If the fork point is equal to `prev_tip` then no reorg has occurred.
+        if fork_point != *prev_tip {
+            // Ensured by `find_fork_point`.
+            assert!(fork_point.height < prev_tip.height);
+
+            // Rewind the wallet to the fork point. `truncate_to_height` fully resets
+            // the wallet state to that height, so the blocks in the old fork need no
+            // further handling.
+            info!(
+                "Chain reorg detected, rewinding to {} {}",
+                fork_point.height, fork_point.hash
+            );
+            db_data.truncate_to_height(fork_point.height)?;
+            *prev_tip = fork_point;
+        };
+
+        // Notify the wallet of block connections.
+        while let Some(block) = blocks_to_apply.try_next().await.map_err(SyncError::Chain)? {
+            let height = block.claimed_height();
+            assert_eq!(height, prev_tip.height + 1);
+            let current_block = ChainBlock {
+                height,
+                hash: block.header().hash(),
+            };
+            db_data.update_chain_tip(height)?;
+
+            steps::scan_block(&chain_view, db_data, params, block, decryptor).await?;
+
+            // Now that we're done applying the block, update our chain pointer.
+            *prev_tip = current_block;
+        }
+    }
+
+    // If we have caught up to the chain tip, stream the mempool state into the wallet.
+    match chain_view
+        .get_mempool_stream()
+        .await
+        .map_err(SyncError::Chain)?
+    {
+        Some(mempool_stream) => {
+            info!("Reached chain tip, streaming mempool");
+            tokio::pin!(mempool_stream);
+            while let Some(tx) = mempool_stream.next().await {
+                info!("Scanning mempool tx {}", tx.txid());
+                // TODO: Route individual-transaction scanning through the batch
+                // decryptor (`Handle::queue_tx`) once a single-tx store path exists.
+                // See zcash/wallet#477.
+                decrypt_and_store_transaction(params, db_data, &tx, None)?;
+            }
+
+            // Mempool stream ended, signalling that the chain tip has changed.
+        }
+        // The chain tip already changed since this view was captured; loop around
+        // immediately to observe it.
+        None if tip_changed => (),
+        // The chain tip has not changed, and no mempool stream is available (e.g.
+        // because the chain indexer is still syncing its finalized state). Pause
+        // briefly to avoid spinning.
+        None => time::sleep(Duration::from_millis(500)).await,
+    }
+
+    Ok(())
 }
 
 /// Recovers historic wallet state.
@@ -546,4 +593,27 @@ async fn batch_decryptor(
             Ok::<_, SyncError>(scanning_keys)
         })
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ChainError, SyncError, is_retryable};
+
+    #[test]
+    fn stale_view_errors_are_retryable() {
+        assert!(is_retryable(&SyncError::Chain(ChainError::unavailable(
+            "pinned block reorged away",
+        ))));
+    }
+
+    #[test]
+    fn other_errors_are_fatal() {
+        assert!(!is_retryable(&SyncError::Chain(ChainError::backend(
+            "boom"
+        ))));
+        assert!(!is_retryable(&SyncError::Chain(ChainError::invalid_data(
+            "bad bytes",
+        ))));
+        assert!(!is_retryable(&SyncError::BatchDecryptorUnavailable));
+    }
 }
