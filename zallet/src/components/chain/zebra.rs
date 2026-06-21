@@ -5,13 +5,14 @@
 //! indexer interface, and uses a small direct JSON-RPC client for mempool access and
 //! transaction submission.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use futures::{StreamExt as _, stream::BoxStream};
 use incrementalmerkletree::frontier::CommitmentTree;
-use jsonrpsee::tracing::info;
+use jsonrpsee::tracing::{info, warn};
 use tokio::net::lookup_host;
 use zcash_client_backend::data_api::{
     TransactionStatus,
@@ -22,9 +23,12 @@ use zcash_primitives::{
     merkle_tree::read_commitment_tree,
     transaction::Transaction,
 };
-use zcash_protocol::{TxId, consensus::BlockHeight};
+use zcash_protocol::{
+    TxId,
+    consensus::{BlockHeight, BranchId},
+};
 use zebra_rpc::sync::init_read_state_with_syncer;
-use zebra_state::{ChainTipChange, ReadStateService};
+use zebra_state::ReadStateService;
 
 use super::{Chain, ChainBlock, ChainError, ChainTx, ChainView};
 use crate::{
@@ -58,8 +62,6 @@ impl Drop for AbortOnDrop {
 #[derive(Clone)]
 pub(crate) struct ZebraChain {
     read_state_service: ReadStateService,
-    #[allow(dead_code)] // used by the mempool stream (Plan 4)
-    tip_change: ChainTipChange,
     validator_rpc: ValidatorRpcClient,
     params: Network,
     _syncer: Arc<AbortOnDrop>,
@@ -155,7 +157,7 @@ impl ZebraChain {
         }
 
         info!("Initializing read-only Zebra state service");
-        let (read_state_service, _latest_tip, tip_change, sync_task) =
+        let (read_state_service, _latest_tip, _tip_change, sync_task) =
             init_read_state_with_syncer(zebra_config, &zebra_network, grpc_addr)
                 .await
                 // Outer JoinError from the spawned init task.
@@ -165,7 +167,6 @@ impl ZebraChain {
 
         let chain = Self {
             read_state_service,
-            tip_change,
             validator_rpc,
             params,
             _syncer: Arc::new(AbortOnDrop(sync_task)),
@@ -415,7 +416,86 @@ impl<R: ChainReader> ChainView for ZebraChainView<R> {
     }
 
     async fn get_mempool_stream(&self) -> Result<Option<BoxStream<'_, Transaction>>, ChainError> {
-        todo!("Plan 4: JSON-RPC mempool stream ended by ChainTipChange")
+        // If the tip already moved past the captured view, signal "tip changed" (no stream).
+        let current_tip = self.reader.tip().await?;
+        if current_tip.map(|t| t.hash) != Some(self.tip.hash) {
+            return Ok(None);
+        }
+
+        // Mempool transactions are parsed at the branch of the next block to be mined.
+        let branch_id = BranchId::for_height(&self.params, self.tip.height + 1);
+
+        struct State<R> {
+            reader: R,
+            rpc: ValidatorRpcClient,
+            tip_hash: BlockHash,
+            branch_id: BranchId,
+            seen: HashSet<String>,
+            pending: VecDeque<Transaction>,
+            interval: tokio::time::Interval,
+        }
+
+        let state = State {
+            reader: self.reader.clone(),
+            rpc: self.validator_rpc.clone(),
+            tip_hash: self.tip.hash,
+            branch_id,
+            seen: HashSet::new(),
+            pending: VecDeque::new(),
+            interval: tokio::time::interval(Duration::from_secs(1)),
+        };
+
+        let stream = futures::stream::unfold(state, |mut s| async move {
+            loop {
+                // Drain any transactions buffered from the last poll.
+                if let Some(tx) = s.pending.pop_front() {
+                    return Some((tx, s));
+                }
+
+                s.interval.tick().await;
+
+                // End the stream when the chain tip changes (a new block or a reorg).
+                match s.reader.tip().await {
+                    Ok(Some(tip)) if tip.hash == s.tip_hash => {}
+                    _ => return None,
+                }
+
+                // Poll the mempool and buffer newly-seen transactions.
+                let txids = match s.rpc.get_raw_mempool().await {
+                    Ok(txids) => txids,
+                    Err(e) => {
+                        warn!("error fetching mempool: {e}");
+                        continue;
+                    }
+                };
+                for txid in txids {
+                    if !s.seen.insert(txid.clone()) {
+                        continue;
+                    }
+                    let raw_hex = match s.rpc.get_raw_transaction(txid).await {
+                        Ok(hex) => hex,
+                        Err(e) => {
+                            warn!("error fetching mempool transaction: {e}");
+                            continue;
+                        }
+                    };
+                    let bytes = match hex::decode(&raw_hex) {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            warn!("invalid mempool transaction hex: {e}");
+                            continue;
+                        }
+                    };
+                    match Transaction::read(&bytes[..], s.branch_id) {
+                        Ok(tx) => s.pending.push_back(tx),
+                        Err(e) => warn!("invalid mempool transaction: {e}"),
+                    }
+                }
+            }
+        })
+        .boxed();
+
+        Ok(Some(stream))
     }
 
     async fn get_transaction(&self, txid: TxId) -> Result<Option<ChainTx>, ChainError> {
