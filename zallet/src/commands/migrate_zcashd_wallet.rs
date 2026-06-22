@@ -32,7 +32,11 @@ use zip32::{AccountId, fingerprint::SeedFingerprint};
 
 use crate::{
     cli::MigrateZcashdWalletCmd,
-    components::{chain::Chain, database::Database, keystore::KeyStore},
+    components::{
+        chain::{Chain, ChainError, ChainView, ZainoChain},
+        database::Database,
+        keystore::KeyStore,
+    },
     error::{Error, ErrorKind},
     fl,
     prelude::*,
@@ -63,7 +67,7 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
         let (chain, _chain_indexer_task_handle) = if self.no_scan {
             (None, None)
         } else {
-            let (c, h) = Chain::new(&config).await?;
+            let (c, h) = ZainoChain::new(&config).await?;
             (Some(c), Some(h))
         };
         let db = Database::open(&config).await?;
@@ -173,10 +177,10 @@ impl MigrateZcashdWalletCmd {
             .transpose()
     }
 
-    async fn migrate_zcashd_wallet(
+    async fn migrate_zcashd_wallet<C: Chain>(
         db: Database,
         keystore: KeyStore,
-        chain: Option<Chain>,
+        chain: Option<C>,
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
@@ -1126,6 +1130,12 @@ impl From<Error> for MigrateError {
 
 impl From<abscissa_core::error::Context<ErrorKind>> for MigrateError {
     fn from(value: abscissa_core::error::Context<ErrorKind>) -> Self {
+        MigrateError::Wrapped(value.into())
+    }
+}
+
+impl From<ChainError> for MigrateError {
+    fn from(value: ChainError) -> Self {
         MigrateError::Wrapped(value.into())
     }
 }

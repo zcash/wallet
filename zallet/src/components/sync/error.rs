@@ -4,12 +4,12 @@ use shardtree::error::ShardTreeError;
 use zcash_client_backend::scanning::ScanError;
 use zcash_client_sqlite::error::SqliteClientError;
 
-use crate::error::Error;
+use crate::components::chain::ChainError;
 
 #[derive(Debug)]
 pub(crate) enum SyncError {
     BatchDecryptorUnavailable,
-    Chain(Error),
+    Chain(ChainError),
     Scan(ScanError),
     Tree(Box<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>>),
     Other(Box<SqliteClientError>),

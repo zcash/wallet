@@ -83,10 +83,10 @@ pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
     "Policy for what information leakage is acceptable.";
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn call(
+pub(crate) async fn call<C: Chain>(
     mut wallet: DbHandle,
     keystore: KeyStore,
-    chain: Chain,
+    chain: C,
     fromaddress: String,
     amounts: Vec<AmountParameter>,
     minconf: Option<u32>,
@@ -400,9 +400,9 @@ pub(crate) async fn call(
 /// 2. #1360 Note selection is not optimal.
 /// 3. #1277 Spendable notes are not locked, so an operation running in parallel
 ///    could also try to use them.
-async fn run(
+async fn run<C: Chain>(
     mut wallet: DbHandle,
-    chain: Chain,
+    chain: C,
     proposal: Proposal<StandardFeeRule, ReceivedNoteId>,
     spending_keys: SpendingKeys,
 ) -> RpcResult<SendResult> {

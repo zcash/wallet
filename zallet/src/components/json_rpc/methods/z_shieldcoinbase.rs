@@ -141,10 +141,10 @@ pub(super) const PARAM_PRIVACY_POLICY_DESC: &str = "Policy for what information 
 pub(super) const COINBASE_INPUTS_WARN_THRESHOLD: u64 = 400;
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn call(
+pub(crate) async fn call<C: Chain>(
     mut wallet: DbHandle,
     keystore: KeyStore,
-    chain: Chain,
+    chain: C,
     fromaddress: String,
     toaddress: String,
     fee: Option<JsonValue>,
@@ -499,9 +499,9 @@ fn enumerate_eligible(
 }
 
 /// Construct and broadcast the shielding transaction.
-async fn run(
+async fn run<C: Chain>(
     mut wallet: DbHandle,
-    chain: Chain,
+    chain: C,
     proposal: Proposal<StandardFeeRule, Infallible>,
     spending_keys: SpendingKeys,
 ) -> RpcResult<SendResult> {

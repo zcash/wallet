@@ -13,7 +13,7 @@ use zcash_script::script::{Asm, Code};
 use super::decode_script::{TransparentScript, script_to_json};
 use crate::{
     components::{
-        chain::Chain,
+        chain::{Chain, ChainView},
         database::DbConnection,
         json_rpc::{
             server::LegacyCode,
@@ -468,9 +468,9 @@ pub(super) const PARAM_TXID_DESC: &str = "The ID of the transaction to fetch.";
 pub(super) const PARAM_VERBOSE_DESC: &str = "If 0, return a string of hex-encoded data. If non-zero, return a JSON object with information about `txid`";
 pub(super) const PARAM_BLOCKHASH_DESC: &str = "The block in which to look for the transaction.";
 
-pub(crate) async fn call(
+pub(crate) async fn call<C: Chain>(
     wallet: &DbConnection,
-    chain: Chain,
+    chain: C,
     txid_str: &str,
     verbose: Option<u64>,
     blockhash: Option<String>,

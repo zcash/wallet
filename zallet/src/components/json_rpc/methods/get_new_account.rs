@@ -5,7 +5,7 @@ use serde::Serialize;
 use zcash_client_backend::data_api::{AccountBirthday, WalletRead, WalletWrite};
 
 use crate::components::{
-    chain::Chain,
+    chain::{Chain, ChainView},
     database::DbConnection,
     json_rpc::{
         server::LegacyCode,
@@ -33,10 +33,10 @@ pub(super) const PARAM_ACCOUNT_NAME_DESC: &str = "A human-readable name for the 
 pub(super) const PARAM_SEEDFP_DESC: &str =
     "ZIP 32 seed fingerprint for the BIP 39 mnemonic phrase from which to derive the account.";
 
-pub(crate) async fn call(
+pub(crate) async fn call<C: Chain>(
     wallet: &mut DbConnection,
     keystore: &KeyStore,
-    chain: Chain,
+    chain: C,
     account_name: &str,
     seedfp: Option<&str>,
 ) -> Response {

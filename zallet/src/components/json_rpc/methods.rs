@@ -639,19 +639,19 @@ pub(crate) trait WalletRpc {
     ) -> z_shieldcoinbase::Response;
 }
 
-pub(crate) struct RpcImpl {
+pub(crate) struct RpcImpl<C: Chain> {
     wallet: Database,
     #[cfg(zallet_build = "wallet")]
     keystore: KeyStore,
-    chain: Chain,
+    chain: C,
 }
 
-impl RpcImpl {
+impl<C: Chain> RpcImpl<C> {
     /// Creates a new instance of the general RPC handler.
     pub(crate) fn new(
         wallet: Database,
         #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-        chain: Chain,
+        chain: C,
     ) -> Self {
         Self {
             wallet,
@@ -668,22 +668,22 @@ impl RpcImpl {
             .map_err(|_| jsonrpsee::types::ErrorCode::InternalError.into())
     }
 
-    async fn chain(&self) -> RpcResult<Chain> {
+    async fn chain(&self) -> RpcResult<C> {
         Ok(self.chain.clone())
     }
 }
 
 #[cfg(zallet_build = "wallet")]
-pub(crate) struct WalletRpcImpl {
-    general: RpcImpl,
+pub(crate) struct WalletRpcImpl<C: Chain> {
+    general: RpcImpl<C>,
     keystore: KeyStore,
     async_ops: RwLock<Vec<AsyncOperation>>,
 }
 
 #[cfg(zallet_build = "wallet")]
-impl WalletRpcImpl {
+impl<C: Chain> WalletRpcImpl<C> {
     /// Creates a new instance of the wallet-specific RPC handler.
-    pub(crate) fn new(wallet: Database, keystore: KeyStore, chain_view: Chain) -> Self {
+    pub(crate) fn new(wallet: Database, keystore: KeyStore, chain_view: C) -> Self {
         Self {
             general: RpcImpl::new(wallet, keystore.clone(), chain_view),
             keystore,
@@ -695,7 +695,7 @@ impl WalletRpcImpl {
         self.general.wallet().await
     }
 
-    async fn chain(&self) -> RpcResult<Chain> {
+    async fn chain(&self) -> RpcResult<C> {
         self.general.chain().await
     }
 
@@ -713,7 +713,7 @@ impl WalletRpcImpl {
 }
 
 #[async_trait]
-impl RpcServer for RpcImpl {
+impl<C: Chain> RpcServer for RpcImpl<C> {
     async fn get_wallet_status(&self) -> get_wallet_status::Response {
         get_wallet_status::call(self.wallet().await?.as_ref(), self.chain().await?).await
     }
@@ -830,7 +830,7 @@ impl RpcServer for RpcImpl {
 
 #[cfg(zallet_build = "wallet")]
 #[async_trait]
-impl WalletRpcServer for WalletRpcImpl {
+impl<C: Chain> WalletRpcServer for WalletRpcImpl<C> {
     fn help(&self, command: Option<&str>) -> help::Response {
         help::call(command)
     }

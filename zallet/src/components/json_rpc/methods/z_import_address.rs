@@ -7,6 +7,7 @@ use crate::components::{chain::Chain, database::DbConnection, json_rpc::server::
 
 #[cfg(feature = "transparent-key-import")]
 use {
+    crate::components::chain::ChainView,
     crate::network::Network,
     jsonrpsee::types::ErrorCode as RpcErrorCode,
     secp256k1::PublicKey,
@@ -38,9 +39,9 @@ pub(super) const PARAM_RESCAN_DESC: &str =
     "If true (default), rescan the chain for UTXOs belonging to all wallet transparent addresses.";
 
 #[cfg(feature = "transparent-key-import")]
-pub(crate) async fn call(
+pub(crate) async fn call<C: Chain>(
     wallet: &mut DbConnection,
-    chain: Chain,
+    chain: C,
     account: &str,
     hex_data: &str,
     rescan: Option<bool>,
@@ -101,9 +102,9 @@ pub(crate) async fn call(
 }
 
 #[cfg(not(feature = "transparent-key-import"))]
-pub(crate) async fn call(
+pub(crate) async fn call<C: Chain>(
     _wallet: &mut DbConnection,
-    _chain: Chain,
+    _chain: C,
     _account: &str,
     _hex_data: &str,
     _rescan: Option<bool>,

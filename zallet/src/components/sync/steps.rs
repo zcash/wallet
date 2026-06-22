@@ -19,17 +19,16 @@ use zip32::Scope;
 
 use crate::{
     components::{
-        chain::{Chain, ChainView},
+        chain::{Chain, ChainError, ChainView},
         database::DbConnection,
     },
-    error::ErrorKind,
     network::Network,
 };
 
 use super::{SyncError, decryptor};
 
-pub(super) async fn update_subtree_roots(
-    chain: &Chain,
+pub(super) async fn update_subtree_roots<C: Chain>(
+    chain: &C,
     db_data: &mut DbConnection,
 ) -> Result<(), SyncError> {
     // TODO: Query and insert only the subtree roots added since our last query (via the
@@ -77,13 +76,13 @@ fn scan_block_error(e: ScanBlockError<Infallible>) -> SyncError {
         ScanBlockError::Scan(e) => SyncError::Scan(e),
         // The address lookup is infallible, and `ScanBlockError` is non-exhaustive, so
         // map any future variants to a generic error rather than panicking.
-        other => SyncError::Chain(ErrorKind::Sync.context(other.to_string()).into()),
+        other => SyncError::Chain(ChainError::backend(other.to_string())),
     }
 }
 
 /// Scans a contiguous sequence of blocks in the main chain.
-pub(super) async fn scan_blocks(
-    chain_view: ChainView,
+pub(super) async fn scan_blocks<V: ChainView>(
+    chain_view: V,
     db_data: &mut DbConnection,
     params: &Network,
     scan_range: &ScanRange,
@@ -160,8 +159,8 @@ pub(super) async fn scan_blocks(
 }
 
 /// Scans a block in the main chain.
-pub(super) async fn scan_block(
-    chain_view: &ChainView,
+pub(super) async fn scan_block<V: ChainView>(
+    chain_view: &V,
     db_data: &mut DbConnection,
     params: &Network,
     block: Block,
@@ -174,11 +173,9 @@ pub(super) async fn scan_block(
         .await
         .map_err(SyncError::Chain)?
         .ok_or_else(|| {
-            SyncError::Chain(
-                ErrorKind::Sync
-                    .context("Programming error: tried to scan block ahead of the chain view's tip")
-                    .into(),
-            )
+            SyncError::Chain(ChainError::backend(
+                "Programming error: tried to scan block ahead of the chain view's tip",
+            ))
         })?;
 
     info!("Scanning block {} ({})", height, block.header().hash());

@@ -33,6 +33,7 @@ macro_rules! wlnfl {
 pub(crate) enum ErrorKind {
     Generic,
     Init,
+    Chain,
     #[cfg(feature = "rpc-cli")]
     RpcCli(RpcCliError),
     Sync,
@@ -43,6 +44,7 @@ impl fmt::Display for ErrorKind {
         match self {
             ErrorKind::Generic => wfl!(f, "err-kind-generic"),
             ErrorKind::Init => wfl!(f, "err-kind-init"),
+            ErrorKind::Chain => wfl!(f, "err-kind-chain"),
             #[cfg(feature = "rpc-cli")]
             ErrorKind::RpcCli(e) => e.fmt(f),
             ErrorKind::Sync => wfl!(f, "err-kind-sync"),

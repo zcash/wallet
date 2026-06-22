@@ -31,11 +31,11 @@ pub(crate) mod utils;
 pub(crate) struct JsonRpc {}
 
 impl JsonRpc {
-    pub(crate) async fn spawn(
+    pub(crate) async fn spawn<C: Chain>(
         config: &ZalletConfig,
         db: Database,
         #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-        chain: Chain,
+        chain: C,
     ) -> Result<TaskHandle, Error> {
         let rpc = config.rpc.clone();
 

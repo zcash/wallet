@@ -455,9 +455,9 @@ pub(super) fn get_account_for_address(
 }
 
 /// Broadcasts the specified transactions to the network, if configured to do so.
-pub(super) async fn broadcast_transactions(
+pub(super) async fn broadcast_transactions<C: Chain>(
     wallet: &DbConnection,
-    chain: Chain,
+    chain: C,
     txids: Vec<TxId>,
 ) -> RpcResult<SendResult> {
     if APP.config().external.broadcast() {

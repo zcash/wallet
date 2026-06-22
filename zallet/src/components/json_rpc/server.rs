@@ -30,11 +30,11 @@ mod rpc_call_compatibility;
 
 type ServerTask = JoinHandle<Result<(), Error>>;
 
-pub(crate) async fn spawn(
+pub(crate) async fn spawn<C: Chain>(
     config: RpcSection,
     wallet: Database,
     #[cfg(zallet_build = "wallet")] keystore: KeyStore,
-    chain: Chain,
+    chain: C,
 ) -> Result<ServerTask, Error> {
     // Caller should make sure `bind` only contains a single address (for now).
     assert_eq!(config.bind.len(), 1);
