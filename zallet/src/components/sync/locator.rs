@@ -4,10 +4,10 @@
 //! heights, used to find where the wallet's chain diverges from a backend's best chain.
 
 use zcash_client_backend::data_api::WalletRead as _;
-use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
 
 use super::SyncError;
+use crate::components::chain::{BlockLocator, ChainBlock};
 use crate::components::database::DbConnection;
 
 /// The maximum depth below the tip that a locator spans, matching Zebra's
@@ -34,21 +34,22 @@ pub(super) fn locator_block_heights(tip: BlockHeight) -> Vec<BlockHeight> {
         .collect()
 }
 
-/// Builds a block locator from the wallet's own chain history, for fork-point detection.
+/// Builds a [`BlockLocator`] from the wallet's own chain history, for fork-point detection.
 ///
-/// Returns the wallet's block hashes at [`locator_block_heights`], highest height first,
-/// skipping any heights the wallet does not have a hash for.
+/// Returns the wallet's blocks at [`locator_block_heights`], highest height first, skipping
+/// any heights the wallet does not have a hash for. Those heights are strictly decreasing,
+/// so the resulting locator satisfies [`BlockLocator`]'s construction invariant.
 pub(super) fn build_block_locator(
     db_data: &DbConnection,
     tip: BlockHeight,
-) -> Result<Vec<BlockHash>, SyncError> {
-    let mut locator = Vec::new();
+) -> Result<BlockLocator, SyncError> {
+    let mut blocks = Vec::new();
     for height in locator_block_heights(tip) {
         if let Some(hash) = db_data.get_block_hash(height)? {
-            locator.push(hash);
+            blocks.push(ChainBlock { height, hash });
         }
     }
-    Ok(locator)
+    Ok(BlockLocator::from_blocks(blocks))
 }
 
 #[cfg(test)]

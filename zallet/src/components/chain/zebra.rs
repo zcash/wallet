@@ -30,7 +30,7 @@ use zcash_protocol::{
 use zebra_rpc::sync::init_read_state_with_syncer;
 use zebra_state::ReadStateService;
 
-use super::{Chain, ChainBlock, ChainError, ChainTx, ChainView};
+use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView};
 use crate::{
     commands::resolve_datadir_path,
     components::TaskHandle,
@@ -321,7 +321,7 @@ impl<R: ChainReader> ChainView for ZebraChainView<R> {
 
     async fn find_fork_point(
         &self,
-        locator: &[BlockHash],
+        locator: &BlockLocator,
     ) -> Result<Option<ChainBlock>, ChainError> {
         self.reader.find_fork_point(locator).await
     }
@@ -638,7 +638,10 @@ mod tests {
         async fn orchard_tree_bytes(&self, _: BlockHash) -> Result<Option<Vec<u8>>, ChainError> {
             Ok(None)
         }
-        async fn find_fork_point(&self, _: &[BlockHash]) -> Result<Option<ChainBlock>, ChainError> {
+        async fn find_fork_point(
+            &self,
+            _: &BlockLocator,
+        ) -> Result<Option<ChainBlock>, ChainError> {
             Ok(None)
         }
         async fn transaction(

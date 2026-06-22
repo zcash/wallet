@@ -12,7 +12,7 @@ use zcash_protocol::consensus::BlockHeight;
 use zebra_chain::subtree::NoteCommitmentSubtreeIndex;
 use zebra_state::{HashOrHeight, ReadRequest, ReadResponse, ReadStateService};
 
-use super::super::{ChainBlock, ChainError};
+use super::super::{BlockLocator, ChainBlock, ChainError};
 use super::convert;
 
 /// The header data the height→hash resolve walk needs.
@@ -63,7 +63,7 @@ pub(crate) trait ChainReader: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<Option<Vec<u8>>, ChainError>> + Send;
     fn find_fork_point(
         &self,
-        locator: &[BlockHash],
+        locator: &BlockLocator,
     ) -> impl Future<Output = Result<Option<ChainBlock>, ChainError>> + Send;
     fn transaction(
         &self,
@@ -189,9 +189,13 @@ impl ChainReader for ReadStateChainReader {
 
     async fn find_fork_point(
         &self,
-        locator: &[BlockHash],
+        locator: &BlockLocator,
     ) -> Result<Option<ChainBlock>, ChainError> {
-        let known_blocks = locator.iter().map(convert::to_zebra_hash).collect();
+        let known_blocks = locator
+            .hashes()
+            .iter()
+            .map(convert::to_zebra_hash)
+            .collect();
         match self
             .call(ReadRequest::FindForkPoint { known_blocks })
             .await?

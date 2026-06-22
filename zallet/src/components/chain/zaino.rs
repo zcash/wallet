@@ -39,7 +39,7 @@ use crate::{
     network::Network,
 };
 
-use super::{Chain, ChainBlock, ChainError, ChainTx, ChainView};
+use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView};
 
 /// Converts a `zcash_protocol` block height into a Zaino block height.
 fn to_zaino_height(height: BlockHeight) -> zaino_state::Height {
@@ -296,9 +296,9 @@ impl ChainView for ZainoChainView {
 
     async fn find_fork_point(
         &self,
-        locator: &[BlockHash],
+        locator: &BlockLocator,
     ) -> Result<Option<ChainBlock>, ChainError> {
-        for known_tip in locator {
+        for known_tip in locator.hashes() {
             if let Some(fork) = self
                 .chain
                 .find_fork_point(&self.snapshot, &zaino_state::BlockHash(known_tip.0))

@@ -76,12 +76,12 @@ pub(crate) trait ChainView: Clone + Send + Sync + 'static {
     /// Returns this view's chain tip.
     fn tip(&self) -> impl Future<Output = Result<ChainBlock, ChainError>> + Send;
 
-    /// Returns the most recent entry of the caller-supplied block `locator` (the caller's
-    /// own block hashes, highest height first) that lies on this view's best chain — the
-    /// fork point — or `None` if no locator entry is on the best chain.
+    /// Returns the most recent entry of the caller-supplied block [`BlockLocator`] that
+    /// lies on this view's best chain — the fork point — or `None` if no locator entry is
+    /// on the best chain.
     fn find_fork_point(
         &self,
-        locator: &[BlockHash],
+        locator: &BlockLocator,
     ) -> impl Future<Output = Result<Option<ChainBlock>, ChainError>> + Send;
 
     /// Returns the final note commitment tree state for each shielded pool as of `height`,
@@ -148,6 +148,46 @@ pub(crate) struct ChainBlock {
     pub(crate) hash: BlockHash,
 }
 
+/// An ordered list of a caller's own block hashes, highest chain height first, used to
+/// locate where the caller's chain diverges from a backend's best chain (see
+/// [`ChainView::find_fork_point`]).
+pub(crate) struct BlockLocator(Vec<BlockHash>);
+
+impl BlockLocator {
+    /// Builds a locator from the caller's known blocks, highest height first.
+    ///
+    /// # Panics
+    ///
+    /// Panics unless `blocks` are in strictly-decreasing height order. This is a
+    /// construction invariant, not input validation: a locator must list blocks from the
+    /// chain tip downward so that fork-point detection returns the *highest* shared block,
+    /// and the only producer builds it from its own contiguous history — so a violation is
+    /// always a programming error, caught here rather than surfacing as a silently wrong
+    /// fork point.
+    pub(crate) fn from_blocks(blocks: impl IntoIterator<Item = ChainBlock>) -> Self {
+        let mut hashes = Vec::new();
+        let mut prev_height: Option<BlockHeight> = None;
+        for block in blocks {
+            if let Some(prev) = prev_height {
+                assert!(
+                    block.height < prev,
+                    "block locator heights must strictly decrease, but {} follows {}",
+                    block.height,
+                    prev,
+                );
+            }
+            prev_height = Some(block.height);
+            hashes.push(block.hash);
+        }
+        Self(hashes)
+    }
+
+    /// The locator's block hashes, highest chain height first.
+    pub(crate) fn hashes(&self) -> &[BlockHash] {
+        &self.0
+    }
+}
+
 /// A transaction together with the chain metadata the wallet needs to ingest it.
 pub(crate) struct ChainTx {
     pub(crate) inner: Transaction,
@@ -172,7 +212,7 @@ mod tests {
     };
     use zcash_protocol::{TxId, consensus::BlockHeight};
 
-    use super::{ChainBlock, ChainError, ChainTx, ChainView};
+    use super::{BlockLocator, ChainBlock, ChainError, ChainTx, ChainView};
 
     /// A trivial in-memory [`ChainView`], proving the trait is implementable by a non-Zaino
     /// backend and locking the contract.
@@ -188,11 +228,14 @@ mod tests {
 
         async fn find_fork_point(
             &self,
-            locator: &[BlockHash],
+            locator: &BlockLocator,
         ) -> Result<Option<ChainBlock>, ChainError> {
             // The mock knows only its own tip, so the fork point is locatable only when
             // the caller's locator includes that block; otherwise it cannot be located.
-            Ok(locator.contains(&self.tip.hash).then_some(self.tip))
+            Ok(locator
+                .hashes()
+                .contains(&self.tip.hash)
+                .then_some(self.tip))
         }
 
         async fn tree_state_as_of(
@@ -260,10 +303,35 @@ mod tests {
         assert_eq!(view.tip().await.unwrap(), tip);
         // The fork point resolves when the locator includes the view's own tip, and
         // not for a locator that excludes it.
-        assert_eq!(view.find_fork_point(&[tip.hash]).await.unwrap(), Some(tip));
+        let on_chain = BlockLocator::from_blocks([tip]);
+        assert_eq!(view.find_fork_point(&on_chain).await.unwrap(), Some(tip));
+        let off_chain = BlockLocator::from_blocks([ChainBlock {
+            height: BlockHeight::from_u32(41),
+            hash: BlockHash([0u8; 32]),
+        }]);
+        assert_eq!(view.find_fork_point(&off_chain).await.unwrap(), None);
+    }
+
+    fn block(height: u32, hash: u8) -> ChainBlock {
+        ChainBlock {
+            height: BlockHeight::from_u32(height),
+            hash: BlockHash([hash; 32]),
+        }
+    }
+
+    #[test]
+    fn block_locator_keeps_hashes_in_descending_order() {
+        let locator = BlockLocator::from_blocks([block(10, 10), block(9, 9), block(5, 5)]);
         assert_eq!(
-            view.find_fork_point(&[BlockHash([0u8; 32])]).await.unwrap(),
-            None,
+            locator.hashes(),
+            &[BlockHash([10; 32]), BlockHash([9; 32]), BlockHash([5; 32])],
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "strictly decrease")]
+    fn block_locator_rejects_non_descending_heights() {
+        // Equal heights violate the strictly-decreasing construction invariant.
+        let _ = BlockLocator::from_blocks([block(10, 10), block(10, 9)]);
     }
 }
