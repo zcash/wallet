@@ -223,6 +223,31 @@ as_of_version = "0.1.0-alpha.4"
 
 
 #
+# Settings for the read-state-service indexer backend.
+#
+# This section is optional. Uncomment the header and fields below to enable it.
+#
+#[indexer.read_state_service]
+
+# Address (`host:port`) of zebrad's gRPC indexer interface.
+#
+# Used to follow zebrad's non-finalized chain tip. This must match the
+# `indexer_listen_addr` set in zebrad's `[rpc]` config section. Note that the
+# indexer interface is only available in a `zebrad` built with the `indexer`
+# feature flag; it is not present in a default build.
+#grpc_address = "127.0.0.1:8230"
+
+# Path to the running zebrad's existing state cache directory.
+#
+# Zallet opens this read-only (as a RocksDB secondary instance); it never writes
+# to or deletes it. It must be on the same machine as Zallet, and zebrad's on-disk
+# state format must be compatible with Zallet's `zebra-state` version.
+#
+# This can be either an absolute path, or a path relative to the data directory.
+#zebra_state_path = "/home/<username>/.cache/zebra"
+
+
+#
 # Settings for the key store.
 #
 [keystore]
