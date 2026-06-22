@@ -181,6 +181,19 @@ impl AuthorizationLayer {
 
         Ok(Self { users })
     }
+
+    /// Creates an `AuthorizationLayer` authorizing a single user with the given cleartext
+    /// password.
+    ///
+    /// The password is salted and hashed in memory; it is never written to disk. This is
+    /// used by the in-process TUI frontend to authenticate to its self-hosted ephemeral
+    /// JSON-RPC server.
+    #[cfg(feature = "tui")]
+    pub(crate) fn single(user: String, password: &str) -> Self {
+        let mut users = HashMap::with_capacity(1);
+        users.insert(user, PasswordHash::from_bare(password));
+        Self { users }
+    }
 }
 
 impl<S> tower::Layer<S> for AuthorizationLayer {

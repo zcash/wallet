@@ -44,6 +44,9 @@ mod migrate_zcashd_wallet;
 #[cfg(feature = "rpc-cli")]
 pub(crate) mod rpc_cli;
 
+#[cfg(all(feature = "tui", zallet_build = "wallet"))]
+mod tui;
+
 /// Zallet Configuration Filename
 pub const CONFIG_FILE: &str = "zallet.toml";
 
@@ -123,6 +126,22 @@ impl EntryPoint {
                 })
                 .map(|base| base.join(".zallet"))
         }
+    }
+}
+
+impl EntryPoint {
+    /// Returns the path to which `tracing` output should be diverted, if this command
+    /// takes over the terminal (and so must not write logs to it).
+    ///
+    /// This is the case for the interactive terminal UI (`zallet tui`), which writes its
+    /// logs to `<datadir>/tui.log` instead of the terminal.
+    pub(crate) fn tui_log_path(&self) -> Option<PathBuf> {
+        #[cfg(all(feature = "tui", zallet_build = "wallet"))]
+        if matches!(self.cmd, ZalletCmd::Tui(_)) {
+            let datadir = self.datadir().ok()?;
+            return Some(resolve_datadir_path(&datadir, Path::new("tui.log")));
+        }
+        None
     }
 }
 

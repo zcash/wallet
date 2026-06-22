@@ -12,7 +12,12 @@ use abscissa_core::{
 use abscissa_tokio::TokioComponent;
 use i18n_embed::unic_langid::LanguageIdentifier;
 
-use crate::{cli::EntryPoint, components::tracing::Tracing, config::ZalletConfig, i18n};
+use crate::{
+    cli::EntryPoint,
+    components::tracing::{LogTarget, Tracing},
+    config::ZalletConfig,
+    i18n,
+};
 
 /// Application state
 pub static APP: AppCell<ZalletApp> = AppCell::new();
@@ -69,8 +74,16 @@ impl Application for ZalletApp {
 
     fn register_components(&mut self, command: &Self::Cmd) -> Result<(), FrameworkError> {
         let mut components = self.framework_components(command)?;
+
+        // The interactive terminal UI takes over the terminal, so log output must be
+        // diverted to a file to avoid corrupting its display.
+        let tui_log_path = command.tui_log_path();
+        let log_target = match &tui_log_path {
+            Some(path) => LogTarget::File(path),
+            None => LogTarget::Stderr,
+        };
         components.push(Box::new(
-            Tracing::new(self.term_colors(command))
+            Tracing::new(self.term_colors(command), log_target)
                 .expect("tracing subsystem failed to initialize"),
         ));
         components.push(Box::new(

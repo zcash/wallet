@@ -20,6 +20,8 @@ use {
 mod convert_tex;
 mod decode_raw_transaction;
 mod decode_script;
+#[cfg(zallet_build = "wallet")]
+mod export_mnemonic;
 mod get_account;
 mod get_address_for_account;
 #[cfg(zallet_build = "wallet")]
@@ -364,6 +366,21 @@ pub(crate) trait WalletRpc {
         account_name: &str,
         seedfp: Option<&str>,
     ) -> get_new_account::Response;
+
+    /// Reveals the plaintext BIP 39 mnemonic phrase from which the given account was
+    /// derived.
+    ///
+    /// The wallet must be unlocked. The account must have been derived from a seed.
+    ///
+    /// SECURITY: The returned mnemonic phrase is the wallet's most sensitive secret.
+    /// Anyone who obtains it can spend all funds derived from it and recover the full
+    /// transaction history.
+    ///
+    /// # Arguments
+    /// - `account_uuid` (string, required): The UUID of an account derived from the
+    ///   mnemonic phrase to export.
+    #[method(name = "z_exportmnemonic")]
+    async fn export_mnemonic(&self, account_uuid: String) -> export_mnemonic::Response;
 
     /// Tells the wallet to track specific accounts.
     ///
@@ -893,6 +910,10 @@ impl<C: Chain> WalletRpcServer for WalletRpcImpl<C> {
             accounts,
         )
         .await
+    }
+
+    async fn export_mnemonic(&self, account_uuid: String) -> export_mnemonic::Response {
+        export_mnemonic::call(self.wallet().await?.as_ref(), &self.keystore, account_uuid).await
     }
 
     async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response {

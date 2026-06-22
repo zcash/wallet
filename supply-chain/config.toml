@@ -260,6 +260,14 @@ criteria = "safe-to-deploy"
 version = "0.1.9"
 criteria = "safe-to-deploy"
 
+[[exemptions.cassowary]]
+version = "0.3.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.castaway]]
+version = "0.2.4"
+criteria = "safe-to-deploy"
+
 [[exemptions.cbc]]
 version = "0.1.2"
 criteria = "safe-to-deploy"
@@ -314,6 +322,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.colorchoice]]
 version = "1.0.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.compact_str]]
+version = "0.8.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.console]]
@@ -396,6 +408,14 @@ criteria = "safe-to-deploy"
 version = "0.8.20"
 criteria = "safe-to-deploy"
 
+[[exemptions.crossterm]]
+version = "0.28.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.crossterm_winapi]]
+version = "0.9.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.crypto-bigint]]
 version = "0.5.5"
 criteria = "safe-to-deploy"
@@ -421,15 +441,15 @@ version = "0.8.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.darling]]
-version = "0.20.11"
+version = "0.13.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.darling_core]]
-version = "0.20.11"
+version = "0.13.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.darling_macro]]
-version = "0.20.11"
+version = "0.13.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.dashmap]]
@@ -550,14 +570,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.eyre]]
 version = "0.6.12"
-criteria = "safe-to-deploy"
-
-[[exemptions.fallible-iterator]]
-version = "0.3.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.fallible-streaming-iterator]]
-version = "0.1.9"
 criteria = "safe-to-deploy"
 
 [[exemptions.ff]]
@@ -792,6 +804,14 @@ criteria = "safe-to-deploy"
 version = "1.9.3"
 criteria = "safe-to-deploy"
 
+[[exemptions.indoc]]
+version = "2.0.7"
+criteria = "safe-to-deploy"
+
+[[exemptions.instability]]
+version = "0.3.7"
+criteria = "safe-to-deploy"
+
 [[exemptions.interprocess]]
 version = "2.2.3"
 criteria = "safe-to-deploy"
@@ -822,6 +842,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.itertools]]
 version = "0.11.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.itertools]]
+version = "0.13.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.jobserver]]
@@ -926,6 +950,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.lock_api]]
 version = "0.4.12"
+criteria = "safe-to-deploy"
+
+[[exemptions.lru]]
+version = "0.12.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.lz4-sys]]
@@ -1220,6 +1248,10 @@ criteria = "safe-to-deploy"
 version = "21.1.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.qrcode]]
+version = "0.14.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.quickcheck]]
 version = "0.9.2"
 criteria = "safe-to-deploy"
@@ -1266,6 +1298,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.rand_xoshiro]]
 version = "0.6.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.ratatui]]
+version = "0.29.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.recvmsg]]
@@ -1506,6 +1542,14 @@ criteria = "safe-to-deploy"
 
 [[exemptions.shadow-rs]]
 version = "1.2.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.signal-hook]]
+version = "0.3.18"
+criteria = "safe-to-deploy"
+
+[[exemptions.signal-hook-mio]]
+version = "0.2.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.signal-hook-registry]]
@@ -1772,6 +1816,10 @@ criteria = "safe-to-deploy"
 version = "2.9.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.unicode-truncate]]
+version = "1.1.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.untrusted]]
 version = "0.9.0"
 criteria = "safe-to-deploy"
@@ -1864,8 +1912,20 @@ criteria = "safe-to-deploy"
 version = "1.2.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.winapi]]
+version = "0.3.9"
+criteria = "safe-to-deploy"
+
+[[exemptions.winapi-i686-pc-windows-gnu]]
+version = "0.4.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.winapi-util]]
 version = "0.1.9"
+criteria = "safe-to-deploy"
+
+[[exemptions.winapi-x86_64-pc-windows-gnu]]
+version = "0.4.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.winnow]]

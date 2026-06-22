@@ -715,6 +715,20 @@ impl KeyStore {
         Ok(seed)
     }
 
+    /// Returns the plaintext mnemonic phrase corresponding to the given seed fingerprint.
+    ///
+    /// This requires the wallet to be unlocked. Unlike [`Self::export_mnemonic`], which
+    /// re-encrypts the phrase to the wallet's age recipients for safe storage on disk,
+    /// this returns the phrase in the clear. Callers are responsible for handling the
+    /// returned secret appropriately (it is wrapped in [`SecretString`] and zeroized on
+    /// drop).
+    pub(crate) async fn reveal_mnemonic(
+        &self,
+        seed_fp: &SeedFingerprint,
+    ) -> Result<SecretString, Error> {
+        self.decrypt_mnemonic(seed_fp).await
+    }
+
     /// Exports the mnemonic phrase corresponding to the given seed fingerprint.
     pub(crate) async fn export_mnemonic(
         &self,

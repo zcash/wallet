@@ -16,12 +16,20 @@ be considered breaking changes.
   wallet. It supports both plain and passphrase-encrypted identities; in
   non-interactive contexts the passphrase is read from the
   `ZALLET_IDENTITY_PASSPHRASE` environment variable.
+- An interactive terminal UI, available as `zallet tui` when built with the
+  `tui` feature. It connects to a Zallet JSON-RPC interface: either an
+  in-process server it spawns itself (the default, bound to an ephemeral
+  loopback port with an in-memory credential), or a remote `zallet start`
+  instance via `--rpc-url`. It provides dashboard, accounts, balances, receive
+  (with QR codes and a per-account selector), transactions, send, seed phrase,
+  and logs views, with a persistent wallet-wide sync indicator.
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`
   - `getwalletstatus`
   - `verifymessage`
   - `z_converttex`
+  - `z_exportmnemonic`
   - `z_importaddress`
   - `z_shieldcoinbase`
 
