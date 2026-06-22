@@ -245,15 +245,11 @@ async fn initialize<C: Chain>(
                             .await
                             .map_err(SyncError::Chain)?
                             .ok_or_else(|| {
-                                SyncError::Chain(
-                                    ErrorKind::Sync
-                                        .context(format!(
-                                            "chain view did not return its own tip \
-                                             block at height {}",
-                                            current_tip.height
-                                        ))
-                                        .into(),
-                                )
+                                SyncError::Chain(ChainError::backend(format!(
+                                    "chain view did not return its own tip \
+                                     block at height {}",
+                                    current_tip.height
+                                )))
                             })?;
                         steps::scan_block(&chain_view, db_data, params, tip_block, &decryptor).await
                     };
