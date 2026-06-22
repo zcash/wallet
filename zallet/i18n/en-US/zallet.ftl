@@ -152,6 +152,11 @@ err-init-identity-not-passphrase-encrypted = {$path} is not encrypted with a pas
 err-init-path-not-utf8 = {$path} is not currently supported (not UTF-8)
 err-init-identity-not-usable = Identity file at {$path} is not usable: {$error}
 err-init-rpc-auth-invalid = Invalid '{-cfg-rpc-auth}' configuration
+err-init-incompatible-consensus =
+    The backing full node follows consensus rules that this {-zallet} build does
+    not recognize, so {-zallet} cannot maintain a correct view of the chain.
+    Unrecognized network upgrades: {$upgrades}.
+    Upgrade {-zallet} to a release that supports these network upgrades.
 
 ## Keystore errors
 
