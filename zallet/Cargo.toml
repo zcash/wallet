@@ -76,7 +76,10 @@ assets = [
 
     ["../README.md", "usr/share/doc/zallet/README.md", "644"],
 ]
-features = ["rpc-cli", "zcashd-import"]
+# Explicitly pin the `zebra-state` backend for released packages (the default), rather
+# than inheriting default-features, so the `.deb` is unaffected by future default changes.
+default-features = false
+features = ["zebra-state", "rpc-cli", "zcashd-import"]
 separate-debug-symbols = true
 
 [[test]]
@@ -199,12 +202,13 @@ regex.workspace = true
 trycmd.workspace = true
 
 [features]
-default = ["zaino"]
+default = ["zebra-state"]
 
-## Zaino-backed chain-data backend (default). Mutually exclusive with `zebra-state`.
+## Zaino-backed chain-data backend. Mutually exclusive with `zebra-state`.
+## Enable with `--no-default-features --features zaino`.
 zaino = ["dep:zaino-common", "dep:zaino-fetch", "dep:zaino-state"]
 
-## zebra-state + Zebra-RPC chain-data backend. Mutually exclusive with `zaino`.
+## zebra-state + Zebra-RPC chain-data backend (default). Mutually exclusive with `zaino`.
 ## Requires a co-located zebrad built with the `indexer` feature; no regtest support.
 zebra-state = [
   "dep:zebra-chain",

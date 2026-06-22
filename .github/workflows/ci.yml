@@ -37,7 +37,8 @@ jobs:
         run: >
           cargo test
           --workspace
-          --features zcashd-import,rpc-cli,tokio-console
+          --no-default-features
+          --features zaino,zcashd-import,rpc-cli,tokio-console
       - name: Run tests (zebra-state backend)
         run: >
           cargo test
@@ -94,7 +95,8 @@ jobs:
         run: >
           cargo test
           --workspace
-          --features zcashd-import,rpc-cli,tokio-console
+          --no-default-features
+          --features zaino,zcashd-import,rpc-cli,tokio-console
       - name: Verify working directory is clean
         run: git diff --exit-code
 
@@ -121,7 +123,8 @@ jobs:
           cargo build
           --workspace
           --all-targets
-          --features zcashd-import,rpc-cli,tokio-console
+          --no-default-features
+          --features zaino,zcashd-import,rpc-cli,tokio-console
       - name: Build crates (zebra-state backend)
         if: runner.os == 'Linux'
         run: >
