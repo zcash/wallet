@@ -177,10 +177,10 @@ impl MigrateZcashdWalletCmd {
             .transpose()
     }
 
-    async fn migrate_zcashd_wallet(
+    async fn migrate_zcashd_wallet<C: Chain>(
         db: Database,
         keystore: KeyStore,
-        chain: Option<ZainoChain>,
+        chain: Option<C>,
         wallet: ZcashdWallet,
         buffer_wallet_transactions: bool,
         allow_multiple_wallet_imports: bool,
