@@ -115,6 +115,10 @@ pub(crate) trait ChainView: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<TransactionStatus, ChainError>> + Send;
 
     /// Returns the height of the given block if it is on this view's main chain.
+    ///
+    /// Gated to the `zcashd-import` migration: its only caller resolves block hashes to
+    /// heights for transactions imported from a `zcashd` wallet, so backends need not
+    /// implement it in builds that cannot perform that import.
     #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
     fn block_height(
         &self,
@@ -169,9 +173,11 @@ mod tests {
 
         async fn find_fork_point(
             &self,
-            _known_tip: &BlockHash,
+            known_tip: &BlockHash,
         ) -> Result<Option<ChainBlock>, ChainError> {
-            Ok(Some(self.tip))
+            // The mock knows only its own tip, so the fork point is locatable only when
+            // the caller's known tip is that block; any other tip cannot be located.
+            Ok((known_tip == &self.tip.hash).then_some(self.tip))
         }
 
         async fn tree_state_as_of(
@@ -237,6 +243,11 @@ mod tests {
         };
         let view = MockChainView { tip };
         assert_eq!(view.tip().await.unwrap(), tip);
+        // The fork point resolves for the view's own tip, and not for an unknown one.
         assert_eq!(view.find_fork_point(&tip.hash).await.unwrap(), Some(tip));
+        assert_eq!(
+            view.find_fork_point(&BlockHash([0u8; 32])).await.unwrap(),
+            None,
+        );
     }
 }
