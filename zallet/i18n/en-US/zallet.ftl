@@ -157,6 +157,11 @@ err-init-identity-not-usable = Identity file at {$path} is not usable: {$error}
 err-init-rpc-auth-invalid = Invalid '{-cfg-rpc-auth}' configuration
 err-config-file-not-found = Configuration file at {$path} does not exist.
 err-config-file-invalid = Failed to parse configuration file at {$path}: {$error}
+err-init-incompatible-consensus =
+    The backing full node follows consensus rules that this {-zallet} build does
+    not recognize, so {-zallet} cannot maintain a correct view of the chain.
+    Unrecognized network upgrades: {$upgrades}.
+    Upgrade {-zallet} to a release that supports these network upgrades.
 
 ## Keystore errors
 

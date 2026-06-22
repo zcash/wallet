@@ -50,6 +50,10 @@ impl AsyncRunnable for StartCmd {
         // Start monitoring the chain.
         let (chain, chain_indexer_task_handle) = ChainBackend::new(&config).await?;
 
+        // Refuse to start if the backing full node follows consensus rules we do
+        // not recognize.
+        chain.check_consensus_compatibility().await?;
+
         // Launch RPC server.
         let rpc_task_handle = JsonRpc::spawn(
             &config,
