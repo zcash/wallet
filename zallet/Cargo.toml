@@ -132,7 +132,7 @@ sha2.workspace = true
 shadow-rs.workspace = true
 shardtree.workspace = true
 time.workspace = true
-tokio = { workspace = true, features = ["fs", "io-util", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["fs", "io-std", "io-util", "rt-multi-thread"] }
 toml.workspace = true
 tonic.workspace = true
 tower = { workspace = true, features = ["timeout"] }
