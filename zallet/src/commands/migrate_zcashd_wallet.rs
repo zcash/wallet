@@ -106,52 +106,48 @@ impl MigrateZcashdWalletCmd {
             self.path.to_path_buf()
         };
 
-        let db_dump_path = match &self.zcashd_install_dir {
+        // Resolve the `db_dump` utility. An explicit `--zcashd-install-dir` uses that
+        // installation's binary; otherwise prefer the BDB 6.2 `db_dump` vendored by
+        // `zewif-zcashd` (via `BDBDump::from_file`), which falls back to one on the `PATH`.
+        let db_dump = match &self.zcashd_install_dir {
             Some(path) => {
                 let db_dump_path = path.join("zcutil").join("bin").join("db_dump");
-                db_dump_path
-                    .is_file()
-                    .then_some(db_dump_path)
-                    .ok_or(which::Error::CannotFindBinaryPath)
-            }
-            None => which::which("db_dump"),
-        };
-
-        if let Ok(db_dump_path) = db_dump_path {
-            let db_dump =
+                if !db_dump_path.is_file() {
+                    return Err(MigrateError::Wrapped(
+                        ErrorKind::Generic
+                            .context(fl!("err-migrate-wallet-db-dump-not-found"))
+                            .into(),
+                    ));
+                }
                 BDBDump::from_file_with_path(db_dump_path.as_path(), wallet_path.as_path())
-                    .map_err(|e| MigrateError::Zewif {
-                        error_type: ZewifError::BdbDump,
-                        wallet_path: wallet_path.to_path_buf(),
-                        error: e,
-                    })?;
-
-            let zcashd_dump =
-                ZcashdDump::from_bdb_dump(&db_dump, self.allow_warnings).map_err(|e| {
-                    MigrateError::Zewif {
-                        error_type: ZewifError::ZcashdDump,
-                        wallet_path: wallet_path.clone(),
-                        error: e,
-                    }
-                })?;
-
-            let (zcashd_wallet, _unparsed_keys) =
-                ZcashdParser::parse_dump(&zcashd_dump, !self.allow_warnings).map_err(|e| {
-                    MigrateError::Zewif {
-                        error_type: ZewifError::ZcashdDump,
-                        wallet_path,
-                        error: e,
-                    }
-                })?;
-
-            Ok(zcashd_wallet)
-        } else {
-            Err(MigrateError::Wrapped(
-                ErrorKind::Generic
-                    .context(fl!("err-migrate-wallet-db-dump-not-found"))
-                    .into(),
-            ))
+            }
+            None => BDBDump::from_file(wallet_path.as_path()),
         }
+        .map_err(|e| MigrateError::Zewif {
+            error_type: ZewifError::BdbDump,
+            wallet_path: wallet_path.to_path_buf(),
+            error: e,
+        })?;
+
+        let zcashd_dump =
+            ZcashdDump::from_bdb_dump(&db_dump, self.allow_warnings).map_err(|e| {
+                MigrateError::Zewif {
+                    error_type: ZewifError::ZcashdDump,
+                    wallet_path: wallet_path.clone(),
+                    error: e,
+                }
+            })?;
+
+        let (zcashd_wallet, _unparsed_keys) =
+            ZcashdParser::parse_dump(&zcashd_dump, !self.allow_warnings).map_err(|e| {
+                MigrateError::Zewif {
+                    error_type: ZewifError::ZcashdDump,
+                    wallet_path,
+                    error: e,
+                }
+            })?;
+
+        Ok(zcashd_wallet)
     }
 
     fn check_network(
