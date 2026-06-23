@@ -7340,7 +7340,6 @@ dependencies = [
  "tracing-subscriber",
  "trycmd",
  "uuid",
- "which 8.0.0",
  "xdg 2.5.2",
  "zaino-common",
  "zaino-fetch",
