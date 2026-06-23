@@ -149,6 +149,13 @@ jobs:
       - name: Enable containerd image store
         uses: depot/use-containerd-snapshotter-action@2e6f905d28e7ca519b216e2219d00545537e9f46 # v1.0.0
 
+      # Bootstrap the BuildKit builder (which lazily pulls moby/buildkit from
+      # Docker Hub) BEFORE `docker login`. The zodlinc token is push-only and
+      # cannot pull, so if the builder is created after login, buildx's pull of
+      # moby/buildkit 401s. Pulling it anonymously here avoids that.
+      - name: Bootstrap BuildKit builder (anonymous pull)
+        run: docker buildx inspect --bootstrap
+
       - name: Log in to Docker registry
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
