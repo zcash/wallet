@@ -48,6 +48,19 @@
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
           PROTOC = "${pkgs.protobuf}/bin/protoc";
           doCheck = false;
+          # zallet/build.rs (clap_complete + clap_mangen) emits completions,
+          # manpages and debian-copyright into target/<triple>/release/{completions,
+          # manpages} + debian-copyright. crane installs only the binary, so copy
+          # those generated assets into $out/share/zallet — the deb matrix +
+          # the StageX export layout expect them there.
+          postInstall = ''
+            rel="target/${muslTarget}/release"
+            mkdir -p "$out/share/zallet"
+            for d in completions manpages; do
+              if [ -d "$rel/$d" ]; then cp -r "$rel/$d" "$out/share/zallet/"; fi
+            done
+            [ -f "$rel/debian-copyright" ] && cp "$rel/debian-copyright" "$out/share/zallet/" || true
+          '';
         };
       in { packages.default = zallet; packages.zallet = zallet; });
 }
