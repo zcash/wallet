@@ -88,6 +88,10 @@ pub(crate) enum ZalletCmd {
     #[cfg(feature = "rpc-cli")]
     Rpc(RpcCliCmd),
 
+    /// Run the interactive terminal UI for the wallet.
+    #[cfg(all(feature = "tui", zallet_build = "wallet"))]
+    Tui(TuiCmd),
+
     /// Commands for repairing broken wallet states.
     #[command(subcommand)]
     Repair(RepairCmd),
@@ -292,6 +296,32 @@ pub(crate) struct RpcCliCmd {
 
     /// Any parameters for the command.
     pub(crate) params: Vec<String>,
+}
+
+/// `tui` subcommand
+#[cfg(all(feature = "tui", zallet_build = "wallet"))]
+#[derive(Debug, Parser)]
+#[cfg_attr(outside_buildscript, derive(Command))]
+pub(crate) struct TuiCmd {
+    /// Connect to an already-running Zallet JSON-RPC server at this URL instead of
+    /// starting one.
+    ///
+    /// The value is the URL of the remote server (e.g. `http://127.0.0.1:28232`); a bare
+    /// `host:port` is also accepted and assumed to be `http`. Authentication is taken from
+    /// the `[[rpc.auth]]` entries in the configuration file, unless credentials are
+    /// embedded in the URL.
+    ///
+    /// When omitted, the TUI starts its own wallet backend and JSON-RPC server in-process
+    /// (bound to an ephemeral loopback port with an in-memory credential), and holds the
+    /// data directory lock for the duration of the session.
+    #[arg(long, value_name = "URL")]
+    pub(crate) rpc_url: Option<String>,
+
+    /// Client timeout in seconds during HTTP requests, or 0 for no timeout.
+    ///
+    /// Default is 900 seconds.
+    #[arg(long)]
+    pub(crate) timeout: Option<u64>,
 }
 
 #[derive(Debug, Parser)]

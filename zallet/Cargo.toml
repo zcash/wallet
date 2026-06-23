@@ -174,6 +174,11 @@ anyhow.workspace = true
 console-subscriber = { workspace = true, optional = true }
 jsonrpsee-http-client = { workspace = true, optional = true }
 
+# Terminal UI (feature = "tui")
+crossterm = { workspace = true, optional = true, features = ["event-stream"] }
+qrcode = { workspace = true, optional = true }
+ratatui = { workspace = true, optional = true }
+
 [build-dependencies]
 clap = { workspace = true, features = ["string", "unstable-styles"] }
 clap_complete.workspace = true
@@ -198,6 +203,18 @@ trycmd.workspace = true
 [features]
 ## `zallet rpc` CLI support
 rpc-cli = ["jsonrpsee/async-client", "dep:jsonrpsee-http-client"]
+
+## Terminal UI (`zallet tui`)
+##
+## Provides an interactive terminal frontend for the wallet. It connects to a
+## Zallet JSON-RPC interface: either an in-process server it spawns itself
+## (the default), or a remote `zallet start` instance (via `--rpc-url`).
+tui = [
+  "rpc-cli",
+  "dep:crossterm",
+  "dep:qrcode",
+  "dep:ratatui",
+]
 
 ## `tokio-console` support
 ##

@@ -20,6 +20,13 @@ be considered breaking changes.
   is generated on startup and written to `{datadir}/.cookie`, enabling
   `zallet rpc` to authenticate automatically without manual password setup.
   Cookie auth coexists with configured `[[rpc.auth]]` users.
+- An interactive terminal UI, available as `zallet tui` when built with the
+  `tui` feature. It connects to a Zallet JSON-RPC interface: either an
+  in-process server it spawns itself (the default, on the configured loopback
+  `rpc.bind` address, authenticating via the RPC cookie), or a remote `zallet
+  start` instance via `--rpc-url`. It provides dashboard, accounts, balances,
+  receive (with QR codes and a per-account selector), transactions, send, and
+  logs views, with a persistent wallet-wide sync indicator.
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`

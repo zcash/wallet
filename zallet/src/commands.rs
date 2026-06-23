@@ -44,6 +44,9 @@ mod migrate_zcashd_wallet;
 #[cfg(feature = "rpc-cli")]
 pub(crate) mod rpc_cli;
 
+#[cfg(all(feature = "tui", zallet_build = "wallet"))]
+mod tui;
+
 /// Zallet Configuration Filename
 pub const CONFIG_FILE: &str = "zallet.toml";
 
@@ -129,9 +132,14 @@ impl EntryPoint {
     /// to log to standard error (the default).
     ///
     /// File-based logging is used by commands that take over the terminal (and so must not
-    /// interleave log output with their display), and may in future be opted into by other
-    /// commands as an alternative to logging to standard error.
+    /// interleave log output with their display). The interactive terminal UI (`zallet
+    /// tui`) writes its logs to `<datadir>/tui.log` instead of the terminal.
     pub(crate) fn log_file_path(&self) -> Option<PathBuf> {
+        #[cfg(all(feature = "tui", zallet_build = "wallet"))]
+        if matches!(self.cmd, ZalletCmd::Tui(_)) {
+            let datadir = self.datadir().ok()?;
+            return Some(resolve_datadir_path(&datadir, Path::new("tui.log")));
+        }
         None
     }
 }
