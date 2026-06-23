@@ -25,7 +25,7 @@
 -allow-multiple-wallet-imports = --allow-multiple-wallet-imports
 -datadir = --datadir
 -db_dump = db_dump
--zcashd_install_dir = --zcashd_install_dir
+-zcashd-install-dir = --zcashd-install-dir
 
 -legacy_pool_seed_fingerprint = legacy_pool_seed_fingerprint
 -zallet_toml = zallet.toml
