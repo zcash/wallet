@@ -5,10 +5,14 @@
 `zallet migrate-zcashd-wallet` migrates a `zcashd` wallet file (`wallet.dat`) to a Zallet
 wallet (`wallet.db`).
 
-[`zallet init-wallet-encryption`] must be run before this command. In addition,
-the `db_dump` utility (provided either by global installation or a local
-source-based `zcashd` installation) must be available. Note that you specifically
-need the `db_dump` utility built for BDB version 6.2.23 for greatest reliability.
+[`zallet init-wallet-encryption`] must be run before this command.
+
+Parsing a `zcashd` wallet file requires the `db_dump` utility built for Berkeley DB
+version 6.2 (the version `zcashd` uses). When Zallet is built with the `zcashd-import`
+feature it compiles and uses a vendored copy of this utility automatically, so you
+normally do not need to provide one yourself. If that vendored utility is unavailable,
+Zallet falls back to a `db_dump` found on the system `$PATH`; you can also point Zallet
+at a specific `zcashd` installation's `db_dump` with `--zcashd-install-dir` (see below).
 
 The command requires at least one of the following two flag:
 
@@ -17,12 +21,14 @@ The command requires at least one of the following two flag:
   be relative (or omitted, in which case the default filename `wallet.dat` will be used).
 
 Additional CLI arguments:
-- `--zcashd-install-dir`: A path to a local `zcashd` installation directory,
-  for source-based builds of `zcashd`. This is used to find the installed
-  version of the `db_dump` utility, which is required for operation. If not
-  specified, Zallet will attempt to find `db_dump` on the system path; however,
-  it is recommended to use a `db_dump` provided via local `zcashd` installation
-  to ensure version compatibility with the `wallet.dat` file.
+- `--zcashd-install-dir`: A path to a local `zcashd` installation directory, for
+  source-based builds of `zcashd`. When set, Zallet uses the `db_dump` from that
+  installation's `zcutil/bin` directory instead of its vendored copy. This is rarely
+  needed, and generally not recommended: the vendored `db_dump` is built for the
+  Berkeley DB version (6.2) that `zcashd` wallets use, so prefer it unless you have a
+  specific reason to use your `zcashd` installation's utility (for example, a wallet
+  written by a non-standard Berkeley DB build). If neither this flag nor the vendored
+  `db_dump` is available, Zallet falls back to a `db_dump` on the system `$PATH`.
 - `--allow-multiple-wallet-imports`: An optional flag that must be set if a
   user wants to import keys and transactions from multiple `wallet.dat` files
   (not required for the first `wallet.dat` import.)
@@ -42,10 +48,10 @@ When run, Zallet will parse the `zcashd` wallet file, connect to the backing
 full node (to obtain necessary chain information for setting up wallet
 birthdays), create Zallet accounts corresponding to the structure of the
 `zcashd` wallet, and store the key material in the Zallet wallet. Parsing is
-performed using the `db_dump` command-line utility, which must either be
-present in the `zcutil/bin` directory of a `zcashd` source installation (as
-specified via the `--zcashd-install-dir` argument), or avaliable on the system
-`$PATH`.
+performed using the `db_dump` command-line utility. By default Zallet uses the
+copy it vendors and builds, which is the recommended choice; a `zcashd`-provided
+`db_dump` from the `zcutil/bin` directory of a source installation (via
+`--zcashd-install-dir`), or one on the system `$PATH`, are used otherwise.
 
 [`zcashd`]: https://github.com/zcash/zcash
 [`zallet init-wallet-encryption`]: init-wallet-encryption.md
