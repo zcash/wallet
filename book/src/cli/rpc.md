@@ -10,6 +10,16 @@ command-line shell.
 - `zallet rpc <method>` will call that JSON-RPC method. Parameters can be provided via
   additional CLI arguments (`zallet rpc <method> <param>`).
 
+## Authentication
+
+When Zallet starts its JSON-RPC server, it generates a random cookie credential and
+writes it to `{datadir}/.cookie`. The `zallet rpc` command automatically reads this
+cookie file to authenticate, so no manual password configuration is needed for local
+access.
+
+If `[[rpc.auth]]` users are configured in `zallet.toml`, `zallet rpc` will prefer
+those credentials over the cookie file. Cookie-based auth and configured users coexist.
+
 ## Comparison to `zcash-cli`
 
 The `zcashd` full node came bundled with a `zcash-cli` binary, which served an equivalent
@@ -24,8 +34,8 @@ below:
 | `zcash-cli -rpcconnect=<ip>`      | `rpc.bind` setting in config file  |
 | `zcash-cli -rpcport=<port>`       | `rpc.bind` setting in config file  |
 | `zcash-cli -rpcwait`              | Not implemented                    |
-| `zcash-cli -rpcuser=<user>`       | Not implemented                    |
-| `zcash-cli -rpcpassword=<pw>`     | Not implemented                    |
+| `zcash-cli -rpcuser=<user>`       | `[[rpc.auth]]` in config file      |
+| `zcash-cli -rpcpassword=<pw>`     | `[[rpc.auth]]` in config file      |
 | `zcash-cli -rpcclienttimeout=<n>` | `zallet rpc --timeout <n>`         |
 | Hostname, domain, or IP address   | Only IP address                    |
 | `zcash-cli <method> [<param> ..]` | `zallet rpc <method> [<param> ..]` |
