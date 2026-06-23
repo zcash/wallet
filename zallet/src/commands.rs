@@ -124,6 +124,16 @@ impl EntryPoint {
                 .map(|base| base.join(".zallet"))
         }
     }
+
+    /// Returns the path to which `tracing` output should be written as a file, or `None`
+    /// to log to standard error (the default).
+    ///
+    /// File-based logging is used by commands that take over the terminal (and so must not
+    /// interleave log output with their display), and may in future be opted into by other
+    /// commands as an alternative to logging to standard error.
+    pub(crate) fn log_file_path(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 impl Runnable for EntryPoint {
