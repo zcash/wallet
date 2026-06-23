@@ -50,10 +50,9 @@ fn to_zaino_height(height: BlockHeight) -> zaino_state::Height {
 
 /// The Zaino finalised-state database schema version to target.
 ///
-/// `1` selects Zaino's latest v1 finalised-state schema. We run the indexer in ephemeral
-/// mode (see [`BlockCacheConfig::new`] below), so no persistent finalised-state database
-/// is actually opened and this value has no on-disk effect; it is set to the current
-/// schema version for forward-compatibility if ephemeral mode is ever disabled.
+/// `1` selects Zaino's latest v1 finalised-state schema. The pinned Zaino always opens the
+/// persistent v1 finalised-state DB (the no-sync flag passed to [`BlockCacheConfig::new`]
+/// below is currently ignored), so this selects the on-disk schema version that is created.
 const ZAINO_FINALISED_DB_VERSION: u32 = 1;
 
 #[derive(Clone)]
@@ -147,18 +146,19 @@ impl ZainoChain {
                 cache: CacheConfig::default(),
                 database: DatabaseConfig {
                     path: config.indexer_db_path().to_path_buf(),
-                    // Unused in ephemeral mode (no persistent finalised-state
-                    // database is opened).
-                    size: zaino_common::DatabaseSize(0),
-                    // Unused in ephemeral mode (the finalised-state bulk-sync
-                    // write path is never exercised); inherit Zaino's default.
+                    // The pinned Zaino ignores the no-sync flag below and always opens the
+                    // persistent v1 finalised-state DB, sizing its LMDB map from this value.
+                    // A size of 0 makes LMDB fall back to its ~10 MiB default, which fills
+                    // after a few hundred blocks and dies with `MapFull`. Inherit Zaino's
+                    // default map size (a sparse virtual reservation) so the map never fills.
                     ..Default::default()
                 },
             },
             ZAINO_FINALISED_DB_VERSION,
             params.to_zaino(),
-            // Run the finalised state ephemerally: no persistent database, finalised
-            // reads are served from the backing validator.
+            // No-sync flag. The pinned Zaino discards this argument, so the persistent v1
+            // finalised-state DB is opened and synced regardless; it is sized by the
+            // `database.size` above.
             true,
         );
 
