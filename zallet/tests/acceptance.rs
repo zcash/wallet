@@ -132,11 +132,11 @@ fn setup_new_wallet() {
     }
 }
 
-/// The identity produced by `generate-identity` drives the full setup flow:
+/// The identity produced by `generate-encryption-identity` drives the full setup flow:
 /// `init-wallet-encryption` consumes it, and a mnemonic can then be generated.
 #[cfg(zallet_build = "wallet")]
 #[test]
-fn generate_identity_drives_setup() {
+fn generate_encryption_identity_drives_setup() {
     let datadir = tempdir().unwrap();
     let config_file = datadir.path().join("zallet.toml");
 
@@ -166,7 +166,7 @@ fn generate_identity_drives_setup() {
         let mut cmd = runner
             .arg("--datadir")
             .arg(datadir.path())
-            .arg("generate-identity")
+            .arg("generate-encryption-identity")
             .capture_stderr()
             .run();
         // The recipient is printed to stderr; drain past cargo's build output
@@ -181,7 +181,10 @@ fn generate_identity_drives_setup() {
             }
             line.clear();
         }
-        assert!(found, "generate-identity did not print the public key");
+        assert!(
+            found,
+            "generate-encryption-identity did not print the public key"
+        );
         cmd.wait().unwrap().expect_code(0);
     }
 
@@ -220,7 +223,7 @@ fn generate_identity_drives_setup() {
 /// owner (mode 0600) on creation.
 #[cfg(all(zallet_build = "wallet", unix))]
 #[test]
-fn generate_identity_sets_owner_only_permissions() {
+fn generate_encryption_identity_sets_owner_only_permissions() {
     use std::os::unix::fs::PermissionsExt;
 
     let datadir = tempdir().unwrap();
@@ -235,7 +238,7 @@ fn generate_identity_sets_owner_only_permissions() {
         let cmd = runner
             .arg("--datadir")
             .arg(datadir.path())
-            .arg("generate-identity")
+            .arg("generate-encryption-identity")
             .capture_stderr()
             .run();
         cmd.wait().unwrap().expect_code(0);
@@ -247,7 +250,7 @@ fn generate_identity_sets_owner_only_permissions() {
 /// and leaves the file untouched (clobbering would risk irrecoverable key loss).
 #[cfg(zallet_build = "wallet")]
 #[test]
-fn generate_identity_refuses_to_clobber() {
+fn generate_encryption_identity_refuses_to_clobber() {
     let datadir = tempdir().unwrap();
     let identity_file = datadir.path().join("encryption-identity.txt");
 
@@ -256,7 +259,7 @@ fn generate_identity_refuses_to_clobber() {
         let cmd = runner
             .arg("--datadir")
             .arg(datadir.path())
-            .arg("generate-identity")
+            .arg("generate-encryption-identity")
             .capture_stderr()
             .run();
         cmd.wait().unwrap().expect_code(0);
@@ -268,7 +271,7 @@ fn generate_identity_refuses_to_clobber() {
         let cmd = runner
             .arg("--datadir")
             .arg(datadir.path())
-            .arg("generate-identity")
+            .arg("generate-encryption-identity")
             .capture_stderr()
             .run();
         cmd.wait().unwrap().expect_code(1);
@@ -286,13 +289,13 @@ fn generate_identity_refuses_to_clobber() {
 /// directly so both streams can be inspected without `cargo run` build noise.
 #[cfg(zallet_build = "wallet")]
 #[test]
-fn generate_identity_writes_to_stdout() {
+fn generate_encryption_identity_writes_to_stdout() {
     let datadir = tempdir().unwrap();
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_zallet"))
         .arg("--datadir")
         .arg(datadir.path())
-        .arg("generate-identity")
+        .arg("generate-encryption-identity")
         .arg("-o")
         .arg("-")
         .output()
@@ -307,7 +310,7 @@ fn generate_identity_writes_to_stdout() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
         stdout.lines().any(|l| l.starts_with("AGE-SECRET-KEY-1")),
-        "generate-identity -o - did not write the secret key to stdout"
+        "generate-encryption-identity -o - did not write the secret key to stdout"
     );
 
     // The `Public key:` echo is suppressed for stdout output: no stderr line
@@ -316,14 +319,14 @@ fn generate_identity_writes_to_stdout() {
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(
         !stderr.lines().any(|l| l.starts_with("Public key:")),
-        "generate-identity -o - must not echo the public key to stderr; got: {stderr}"
+        "generate-encryption-identity -o - must not echo the public key to stderr; got: {stderr}"
     );
 }
 
 /// A missing parent directory for the output path is created.
 #[cfg(zallet_build = "wallet")]
 #[test]
-fn generate_identity_creates_missing_parent_dir() {
+fn generate_encryption_identity_creates_missing_parent_dir() {
     let datadir = tempdir().unwrap();
     let nested = datadir
         .path()
@@ -335,7 +338,7 @@ fn generate_identity_creates_missing_parent_dir() {
     let cmd = runner
         .arg("--datadir")
         .arg(datadir.path())
-        .arg("generate-identity")
+        .arg("generate-encryption-identity")
         .arg("-o")
         .arg(&nested)
         .capture_stderr()
@@ -353,14 +356,14 @@ fn generate_identity_creates_missing_parent_dir() {
 /// `unsafe` under edition 2024, and this file is `#![forbid(unsafe_code)]`).
 #[cfg(zallet_build = "wallet")]
 #[test]
-fn generate_identity_passphrase_writes_armored_file() {
+fn generate_encryption_identity_passphrase_writes_armored_file() {
     let datadir = tempdir().unwrap();
     let identity_file = datadir.path().join("encryption-identity.txt");
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_zallet"))
         .arg("--datadir")
         .arg(datadir.path())
-        .arg("generate-identity")
+        .arg("generate-encryption-identity")
         .arg("-p")
         .env("ZALLET_IDENTITY_PASSPHRASE", "test-passphrase")
         .output()

@@ -47,13 +47,13 @@ cmd-add-rpc-user-instructions = Add this to your {-zallet_toml} file:
 cmd-seed-fingerprint = Seed fingerprint: {$seedfp}
 cmd-import-mnemonic-prompt = Enter mnemonic:
 
-cmd-generate-identity-public-key = Public key: {$pubkey}
-cmd-generate-identity-written = Identity written to {$path}
-cmd-generate-identity-write-failed = Failed to write identity file to {$path}: {$error}
-cmd-generate-identity-exists = An identity already exists at {$path}; refusing to overwrite it to avoid irrecoverable key loss. Remove the file deliberately if you intend to regenerate.
-cmd-generate-identity-passphrase-prompt = Enter passphrase to encrypt the identity:
-cmd-generate-identity-passphrase-confirm = Confirm passphrase:
-cmd-generate-identity-passphrase-mismatch = Passphrases do not match
+cmd-generate-encryption-identity-public-key = Public key: {$pubkey}
+cmd-generate-encryption-identity-written = Encryption identity written to {$path}
+cmd-generate-encryption-identity-write-failed = Failed to write encryption identity to {$path}: {$error}
+cmd-generate-encryption-identity-exists = An encryption identity already exists at {$path}; refusing to overwrite it to avoid irrecoverable key loss.
+cmd-generate-encryption-identity-passphrase-prompt = Enter passphrase to encrypt the identity:
+cmd-generate-encryption-identity-passphrase-confirm = Confirm passphrase:
+cmd-generate-encryption-identity-passphrase-mismatch = Passphrases do not match
 
 ## Startup messages
 

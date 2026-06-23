@@ -1,4 +1,4 @@
-//! `generate-identity` subcommand
+//! `generate-encryption-identity` subcommand
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -13,7 +13,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::io::{self, AsyncWriteExt};
 
 use crate::{
-    cli::GenerateIdentityCmd,
+    cli::GenerateEncryptionIdentityCmd,
     commands::AsyncRunnable,
     error::{Error, ErrorKind},
     fl,
@@ -23,7 +23,7 @@ use crate::{
 /// Environment variable from which the passphrase is read in non-interactive contexts.
 const PASSPHRASE_ENV: &str = "ZALLET_IDENTITY_PASSPHRASE";
 
-impl AsyncRunnable for GenerateIdentityCmd {
+impl AsyncRunnable for GenerateEncryptionIdentityCmd {
     async fn run(&self) -> Result<(), Error> {
         let config = APP.config();
 
@@ -48,12 +48,12 @@ impl AsyncRunnable for GenerateIdentityCmd {
         };
 
         if let Some(path) = output_path {
-            // Ensure the parent directory exists; `generate-identity` is typically
-            // the first command run against a fresh data directory.
+            // Ensure the parent directory exists; `generate-encryption-identity`
+            // is typically the first command run against a fresh data directory.
             if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
                 tokio::fs::create_dir_all(parent).await.map_err(|e| {
                     ErrorKind::Init.context(fl!(
-                        "cmd-generate-identity-write-failed",
+                        "cmd-generate-encryption-identity-write-failed",
                         path = path.display().to_string(),
                         error = e.to_string(),
                     ))
@@ -64,7 +64,7 @@ impl AsyncRunnable for GenerateIdentityCmd {
             eprintln!(
                 "{}",
                 fl!(
-                    "cmd-generate-identity-written",
+                    "cmd-generate-encryption-identity-written",
                     path = path.display().to_string()
                 )
             );
@@ -75,7 +75,7 @@ impl AsyncRunnable for GenerateIdentityCmd {
             eprintln!(
                 "{}",
                 fl!(
-                    "cmd-generate-identity-public-key",
+                    "cmd-generate-encryption-identity-public-key",
                     pubkey = pubkey.to_string()
                 )
             );
@@ -134,7 +134,7 @@ fn write_identity_file(path: &Path, body: &[u8]) -> Result<(), Error> {
         if e.error.kind() == io::ErrorKind::AlreadyExists {
             ErrorKind::Init
                 .context(fl!(
-                    "cmd-generate-identity-exists",
+                    "cmd-generate-encryption-identity-exists",
                     path = path.display().to_string(),
                 ))
                 .into()
@@ -149,7 +149,7 @@ fn write_identity_file(path: &Path, body: &[u8]) -> Result<(), Error> {
 fn write_failed(path: &Path, error: impl ToString) -> Error {
     ErrorKind::Init
         .context(fl!(
-            "cmd-generate-identity-write-failed",
+            "cmd-generate-encryption-identity-write-failed",
             path = path.display().to_string(),
             error = error.to_string(),
         ))
@@ -220,24 +220,24 @@ fn read_passphrase() -> Result<SecretString, Error> {
     // both passphrase copies are zeroized on drop (including on the mismatch
     // path) rather than lingering in plain `String`s.
     let passphrase = SecretString::from(
-        rpassword::prompt_password(fl!("cmd-generate-identity-passphrase-prompt"))
+        rpassword::prompt_password(fl!("cmd-generate-encryption-identity-passphrase-prompt"))
             .map_err(|e| ErrorKind::Generic.context(e))?,
     );
     let confirm = SecretString::from(
-        rpassword::prompt_password(fl!("cmd-generate-identity-passphrase-confirm"))
+        rpassword::prompt_password(fl!("cmd-generate-encryption-identity-passphrase-confirm"))
             .map_err(|e| ErrorKind::Generic.context(e))?,
     );
 
     if passphrase.expose_secret() != confirm.expose_secret() {
         return Err(ErrorKind::Generic
-            .context(fl!("cmd-generate-identity-passphrase-mismatch"))
+            .context(fl!("cmd-generate-encryption-identity-passphrase-mismatch"))
             .into());
     }
 
     Ok(passphrase)
 }
 
-impl Runnable for GenerateIdentityCmd {
+impl Runnable for GenerateEncryptionIdentityCmd {
     fn run(&self) {
         self.run_on_runtime();
     }

@@ -29,7 +29,7 @@ mod start;
 #[cfg(zallet_build = "wallet")]
 mod export_mnemonic;
 #[cfg(zallet_build = "wallet")]
-mod generate_identity;
+mod generate_encryption_identity;
 #[cfg(zallet_build = "wallet")]
 mod generate_mnemonic;
 #[cfg(zallet_build = "wallet")]

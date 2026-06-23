@@ -59,17 +59,18 @@ $ zallet migrate-zcash-conf --datadir /path/to/zcashd/datadir -o /path/to/zallet
 
 Zallet uses [age encryption](https://age-encryption.org/) to encrypt all key
 material internally. Currently you can use two kinds of age identities, which you
-can generate with `zallet generate-identity` (no external tooling required):
+can generate with `zallet generate-encryption-identity` (no external tooling
+required):
 
 - A plain identity file directly on disk:
   ```
-  $ zallet -d /path/to/zallet/datadir generate-identity
+  $ zallet -d /path/to/zallet/datadir generate-encryption-identity
   Public key: age1...
   ```
 
 - A passphrase-encrypted identity file:
   ```
-  $ zallet -d /path/to/zallet/datadir generate-identity -p
+  $ zallet -d /path/to/zallet/datadir generate-encryption-identity -p
   Enter passphrase to encrypt the identity:
   Confirm passphrase:
   Public key: age1...
@@ -77,9 +78,10 @@ can generate with `zallet generate-identity` (no external tooling required):
   In non-interactive contexts, the passphrase is read from the
   `ZALLET_IDENTITY_PASSPHRASE` environment variable instead of prompting.
 
-> [Reference](../cli/generate-identity.md)
+> [Reference](../cli/generate-encryption-identity.md)
 
-(age plugins will also be supported but currently are tricky to set up.)
+(age plugins will also be supported but currently are tricky to set up, and
+require the external `age` or `rage` CLI to create the identity.)
 
 Once you have created your identity file, initialize your Zallet wallet:
 ```
