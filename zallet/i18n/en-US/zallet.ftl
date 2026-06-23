@@ -301,6 +301,23 @@ err-rpc-cli-invalid-param = Invalid parameter '{$parameter}'
 err-rpc-cli-no-server = No JSON-RPC port is available.
 err-rpc-cli-request-failed = JSON-RPC request failed: {$error}
 
+## Query CLI errors
+
+err-query-cli-conn-failed = Failed to connect to the Zallet wallet's JSON-RPC server.
+err-query-cli-invalid-param = Invalid parameter '{$parameter}'
+err-query-cli-recipients = Invalid recipients: {$reason}
+err-query-cli-request-failed = JSON-RPC request failed: {$error}
+err-query-cli-wallet-locked = The wallet is locked.
+err-query-cli-passphrase-read = Failed to read the wallet passphrase.
+err-query-cli-passphrase-incorrect = The wallet passphrase entered was incorrect.
+err-query-cli-operation-failed = Operation failed: {$error}
+err-query-cli-operation-cancelled = The operation was cancelled.
+err-query-cli-operation-missing = No status was returned for operation '{$operationid}'.
+
+## Query CLI prompts
+
+query-passphrase-prompt = Enter wallet passphrase:
+
 ## zallet manpage
 
 man-zallet-about = A {-zcash} wallet.

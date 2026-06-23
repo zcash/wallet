@@ -27,6 +27,19 @@ be considered breaking changes.
   start` instance via `--rpc-url`. It provides dashboard, accounts, balances,
   receive (with QR codes and a per-account selector), transactions, send, and
   logs views, with a persistent wallet-wide sync indicator.
+- `zallet query` subcommand, available when built with the `query` feature, which
+  constructs JSON-RPC requests from typed command-line arguments rather than
+  raw JSON. Like `zallet tui`, it either starts an in-process server itself (the
+  default, on the configured loopback `rpc.bind` address, authenticating via the
+  RPC cookie) or connects to a remote `zallet start` instance via `--rpc-url`,
+  sharing the same connection path. Methods that require an unlocked wallet (e.g.
+  `z_sendmany`) prompt for the passphrase as needed (or read it from the
+  `ZALLET_PASSPHRASE` environment variable or `--passphrase-stdin`), unlock the
+  wallet for the duration of the request, and re-lock it afterwards; asynchronous
+  operations are awaited to completion unless `--no-wait` is given. Structured
+  arguments are expressed as flat flags rather than raw JSON: `z_sendmany` takes
+  repeated `--to`/`--amount`/`--memo` flags, and each subcommand's `--help`
+  includes example usage.
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`

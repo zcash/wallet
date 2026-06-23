@@ -8,6 +8,9 @@ use crate::components::sync::SyncError;
 #[cfg(feature = "rpc-cli")]
 use crate::commands::rpc_cli::RpcCliError;
 
+#[cfg(feature = "query")]
+use crate::commands::query_cli::QueryError;
+
 macro_rules! wfl {
     ($f:ident, $message_id:literal) => {
         write!($f, "{}", $crate::fl!($message_id))
@@ -34,6 +37,8 @@ pub(crate) enum ErrorKind {
     Generic,
     Init,
     Chain,
+    #[cfg(feature = "query")]
+    Query(QueryError),
     #[cfg(feature = "rpc-cli")]
     RpcCli(RpcCliError),
     Sync,
@@ -45,6 +50,8 @@ impl fmt::Display for ErrorKind {
             ErrorKind::Generic => wfl!(f, "err-kind-generic"),
             ErrorKind::Init => wfl!(f, "err-kind-init"),
             ErrorKind::Chain => wfl!(f, "err-kind-chain"),
+            #[cfg(feature = "query")]
+            ErrorKind::Query(e) => e.fmt(f),
             #[cfg(feature = "rpc-cli")]
             ErrorKind::RpcCli(e) => e.fmt(f),
             ErrorKind::Sync => wfl!(f, "err-kind-sync"),
@@ -115,5 +122,12 @@ impl From<SyncError> for Error {
 impl From<RpcCliError> for Error {
     fn from(e: RpcCliError) -> Self {
         ErrorKind::RpcCli(e).into()
+    }
+}
+
+#[cfg(feature = "query")]
+impl From<QueryError> for Error {
+    fn from(e: QueryError) -> Self {
+        ErrorKind::Query(e).into()
     }
 }

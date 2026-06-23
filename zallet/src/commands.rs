@@ -41,6 +41,9 @@ mod migrate_zcash_conf;
 #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
 mod migrate_zcashd_wallet;
 
+#[cfg(feature = "query")]
+pub(crate) mod query_cli;
+
 #[cfg(feature = "rpc-cli")]
 pub(crate) mod rpc_cli;
 

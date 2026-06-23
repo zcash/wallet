@@ -216,6 +216,14 @@ tui = [
   "dep:ratatui",
 ]
 
+## `zallet query` CLI support
+##
+## Provides a `zallet query` subcommand that constructs JSON-RPC requests from
+## typed command-line arguments (rather than raw JSON), either against an
+## in-process RPC server it spawns itself, or a remote `zallet start` instance
+## (via `--rpc-url`).
+query = ["rpc-cli"]
+
 ## `tokio-console` support
 ##
 ## To activate this feature, run:
