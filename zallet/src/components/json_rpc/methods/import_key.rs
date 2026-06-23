@@ -2,12 +2,12 @@ use documented::Documented;
 use jsonrpsee::core::RpcResult;
 use schemars::JsonSchema;
 use serde::Serialize;
-use zaino_state::FetchServiceSubscriber;
 use zcash_client_backend::data_api::{AccountPurpose, WalletRead, WalletWrite};
 use zcash_keys::{encoding::decode_extended_spending_key, keys::UnifiedFullViewingKey};
 use zcash_protocol::consensus::{BlockHeight, NetworkConstants};
 
 use crate::components::{
+    chain::Chain,
     database::DbConnection,
     json_rpc::{server::LegacyCode, utils::fetch_account_birthday},
     keystore::KeyStore,
@@ -64,10 +64,10 @@ fn decode_key_and_address(
     Ok((extsk, address))
 }
 
-pub(crate) async fn call(
+pub(crate) async fn call<C: Chain>(
     wallet: &mut DbConnection,
     keystore: &KeyStore,
-    chain: FetchServiceSubscriber,
+    chain: C,
     key: &str,
     rescan: Option<&str>,
     start_height: Option<u64>,
@@ -140,7 +140,7 @@ pub(crate) async fn call(
             _ => unreachable!(),
         };
 
-        let birthday = fetch_account_birthday(wallet, &chain, effective_height).await?;
+        let birthday = fetch_account_birthday(&chain, effective_height).await?;
 
         wallet
             .import_account_ufvk(
