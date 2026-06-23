@@ -1,0 +1,174 @@
+# Reusable workflow: build the reproducible aarch64 (arm64) Zallet artifact with
+# Nix, on a native arm64 runner, and add it to the shared runtime artifact under
+# build/runtime/linux-arm64/ — the same layout the StageX container workflow
+# produces for amd64. The deb matrix + Release publish then consume both arches
+# unchanged.
+#
+# Why Nix (not StageX) for arm64: StageX's stage0 bootstrap seed is x86-only, so
+# it cannot target aarch64. Nix gives rebuild-reproducibility (pinned flake lock)
+# — a deliberate, documented asymmetry vs the amd64 StageX bootstrap build.
+#
+# Speed: the musl toolchain (LLVM/clang/openssl) is heavy to compile, so this
+# job reads our self-hosted S3 binary cache (zodl-nix-cache) as a substituter —
+# the prebake CronJob keeps it warm, turning a ~45-min LLVM build into a download.
+name: Build arm64 (Nix)
+
+on:
+  workflow_call:
+    inputs:
+      oci-artifact-name:
+        description: "Artifact name to append the arm64 runtime into (must match the amd64 container job)"
+        required: true
+        type: string
+      image-name:
+        description: "Image repo name (e.g. zallet)"
+        required: false
+        type: string
+        default: zallet
+      dockerhub-namespace:
+        description: "Docker Hub namespace to push the arm64 variant to"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      dockerhub_username:
+        required: false
+      dockerhub_password:
+        required: false
+    outputs:
+      artifact_name:
+        description: "The runtime artifact name (echoed back)"
+        value: ${{ jobs.build-arm64.outputs.artifact_name }}
+      image-digest:
+        description: "Digest of the pushed arm64 image variant (empty if not pushed)"
+        value: ${{ jobs.build-arm64.outputs.image_digest }}
+      image-ref:
+        description: "Repo ref of the pushed arm64 image variant"
+        value: ${{ jobs.build-arm64.outputs.image_ref }}
+
+permissions:
+  contents: read
+  id-token: write # SLSA provenance + (optional) AWS OIDC for cache reads
+
+jobs:
+  build-arm64:
+    name: Build aarch64-musl via Nix
+    runs-on: ubuntu-24.04-arm # native arm64; free for public repos
+    outputs:
+      artifact_name: ${{ inputs.oci-artifact-name }}
+      image_digest: ${{ steps.push.outputs.digest }}
+      image_ref: ${{ steps.push.outputs.image_ref }}
+    env:
+      # Public binary cache (anonymous read) + the key CI must trust. The bucket
+      # + signing key are provisioned in infra terraform/environments/nix-cache.
+      NIX_CACHE_URL: https://zodl-nix-cache.s3.us-east-1.amazonaws.com
+      NIX_CACHE_PUBKEY: zodl-nix-cache-1:EqTu1jc+XTV0DOXRhSlzLL981EjuTXnsuyNSwxjHPcU=
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
+        with:
+          extra-conf: |
+            extra-substituters = ${{ env.NIX_CACHE_URL }}
+            extra-trusted-public-keys = ${{ env.NIX_CACHE_PUBKEY }}
+            accept-flake-config = true
+
+      - name: Build static aarch64-musl zallet (reproducible)
+        run: |
+          nix build .#zallet --print-build-logs
+          test -x ./result/bin/zallet
+          file ./result/bin/zallet | tee /tmp/zallet-file.txt
+          grep -q "aarch64" /tmp/zallet-file.txt
+          grep -q "statically linked" /tmp/zallet-file.txt
+          echo "arm64 zallet sha256: $(sha256sum ./result/bin/zallet)"
+
+      - name: Stage the runtime artifact (export layout, linux-arm64)
+        run: |
+          # Mirror the Dockerfile `export` stage layout the deb matrix expects:
+          #   build/runtime/linux-arm64/zallet
+          #   build/runtime/linux-arm64/usr/local/share/zallet/{completions,manpages,debian-copyright}
+          SUFFIX="linux-arm64"
+          DEST="build/runtime/${SUFFIX}"
+          mkdir -p "${DEST}/usr/local/share/zallet"
+          install -m0755 ./result/bin/zallet "${DEST}/zallet"
+          # Regenerate completions + manpages from the binary (no glibc needed —
+          # static musl runs on the runner), matching the amd64 share-tree.
+          for sh in bash zsh fish; do
+            ./"${DEST}/zallet" completions --shell "$sh" \
+              > "${DEST}/usr/local/share/zallet/zallet.${sh}" 2>/dev/null || true
+          done
+          ./"${DEST}/zallet" manpages "${DEST}/usr/local/share/zallet/man" 2>/dev/null || true
+          cp -f ./zallet/contrib/debian-copyright "${DEST}/usr/local/share/zallet/debian-copyright" 2>/dev/null || true
+          echo "staged:"; find "${DEST}" -maxdepth 3 -type f | head -20
+
+      - name: Push arm64 closure to the binary cache (keep it warm)
+        # Best-effort: if cache write creds aren't present (e.g. on a fork PR), skip.
+        continue-on-error: true
+        env:
+          AWS_ROLE_ARN: ${{ secrets.NIX_CACHE_WRITER_ROLE_ARN }}
+        run: |
+          if [ -z "${AWS_ROLE_ARN}" ]; then echo "no cache-writer role; skipping push"; exit 0; fi
+          echo "(cache push handled by the EKS prebake CronJob; CI is read-only by default)"
+
+      - name: Build + push the arm64 image variant (by digest)
+        id: push
+        if: ${{ inputs.dockerhub-namespace != '' }}
+        env:
+          NS: ${{ inputs.dockerhub-namespace }}
+          IMG: ${{ inputs.image-name }}
+          DH_USER: ${{ secrets.dockerhub_username }}
+          DH_PASS: ${{ secrets.dockerhub_password }}
+        run: |
+          set -Eeuo pipefail
+          REPO="docker.io/${NS}/${IMG}"
+          # Minimal scratch image around the static musl binary, matching the
+          # amd64 StageX runtime stage (USER 1000, ENTRYPOINT zallet).
+          mkdir -p ctx && cp build/runtime/linux-arm64/zallet ctx/zallet
+          cat > ctx/Dockerfile <<'DF'
+          FROM scratch
+          COPY zallet /usr/local/bin/zallet
+          USER 1000:1000
+          ENTRYPOINT ["zallet"]
+          DF
+          echo "${DH_PASS}" | docker login docker.io -u "${DH_USER}" --password-stdin
+          docker buildx create --use --name armb >/dev/null 2>&1 || docker buildx use armb
+          # Push by digest only (no tag) — the manifest job stitches amd64+arm64
+          # into the real tags. rewrite-timestamp keeps it reproducible.
+          DIGEST=$(docker buildx build --platform linux/arm64 \
+            --provenance=false --sbom=false \
+            --output "type=image,name=${REPO},push-by-digest=true,name-canonical=true,push=true,rewrite-timestamp=true" \
+            --metadata-file /tmp/meta.json ctx >/dev/null 2>&1 && jq -r '."containerimage.digest"' /tmp/meta.json)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${REPO}" >> "$GITHUB_OUTPUT"
+          echo "pushed arm64 variant ${REPO}@${DIGEST}"
+
+      # Parity with the amd64 StageX job: cosign-sign the arm64 variant by digest
+      # and attach an SPDX SBOM. (SLSA provenance for the whole release is emitted
+      # by the `manifest` job on the final multi-arch index digest.)
+      - name: Install Cosign
+        if: ${{ steps.push.outputs.digest != '' }}
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+      - name: Install Syft
+        if: ${{ steps.push.outputs.digest != '' }}
+        uses: anchore/sbom-action/download-syft@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
+      - name: Cosign sign + attest SBOM (arm64 variant, by digest)
+        if: ${{ steps.push.outputs.digest != '' }}
+        env:
+          REF: ${{ steps.push.outputs.image_ref }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -Eeuo pipefail
+          cosign sign --yes "${REF}@${DIGEST}"
+          syft "${REF}@${DIGEST}" --platform linux/arm64 -o spdx-json > /tmp/arm64.sbom.spdx.json
+          cosign attest --yes --type spdxjson --predicate /tmp/arm64.sbom.spdx.json "${REF}@${DIGEST}"
+
+      - name: Upload arm64 runtime into the shared artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: ${{ inputs.oci-artifact-name }}
+          path: build/runtime
+          if-no-files-found: error
+          # merge with the amd64 upload of the same artifact name
+          overwrite: false

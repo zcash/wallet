@@ -420,55 +420,14 @@ jobs:
               dpkg -i /release/package.deb || apt-get -f install -y >/dev/null && \
               zallet -h >/dev/null"
 
-      - name: Mirror apt.z.cash
-        run: |
-          set -euo pipefail
-          mapfile -t dists < build/apt-dists.txt
-          for dist in "${dists[@]}"; do
-            mirror="zcash-${dist}"
-            aptly mirror drop -force "$mirror" >/dev/null 2>&1 || true
-            aptly mirror create "$mirror" https://apt.z.cash "$dist"
-            aptly mirror update "$mirror"
-          done
-
-      - name: Create local snapshot of apt.z.cash with zallet
-        run: |
-          set -euo pipefail
-          mapfile -t dists < build/apt-dists.txt
-          for dist in "${dists[@]}"; do
-            mirror="zcash-${dist}"
-            repo="zcash_local_${dist}"
-            snap_mirror="snapshot_zcash_${dist}"
-            snap_local="snapshot_local_${dist}"
-            snap_combined="snapshot_combined_${dist}"
-
-            aptly repo drop -force "$repo" >/dev/null 2>&1 || true
-            aptly repo create --distribution "$dist" --component main "$repo"
-            aptly repo add "$repo" zallet_*.deb
-
-            aptly snapshot drop -force "$snap_mirror" >/dev/null 2>&1 || true
-            aptly snapshot drop -force "$snap_local" >/dev/null 2>&1 || true
-            aptly snapshot drop -force "$snap_combined" >/dev/null 2>&1 || true
-
-            aptly snapshot create "$snap_mirror" from mirror "$mirror"
-            aptly snapshot create "$snap_local" from repo "$repo"
-            aptly snapshot merge "$snap_combined" "$snap_mirror" "$snap_local"
-          done
-
-      - name: Sign & publish snapshot of local apt repository
-        run: |
-          set -euo pipefail
-          export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@zodl.com | head -n 2 | grep -v sec)
-          mapfile -t dists < build/apt-dists.txt
-          for dist in "${dists[@]}"; do
-            snap_combined="snapshot_combined_${dist}"
-            aptly publish snapshot -architectures=${{ matrix.arch }} -gpg-key="$key" "$snap_combined"
-          done
-
-      - name: Upload snapshot to the apt.z.cash bucket for approval
-        run: |
-          aws s3 sync $HOME/.aptly/public/pool/main/z/zallet/ s3://${{ secrets.AWS_APT_BUCKET }}/pool/main/z/zallet/
-          aws s3 sync $HOME/.aptly/public/dists/ s3://${{ secrets.AWS_APT_BUCKET }}/dists/
+      # NOTE: APT index publishing (aptly mirror/snapshot/publish + S3 sync) was
+      # MOVED OUT of this per-arch matrix into the single `apt_publish` job below.
+      # Reason: when the matrix runs amd64 + arm64 in parallel, each job would
+      # regenerate dists/ (the signed APT index) seeing only its OWN arch and
+      # race to S3 sync it — leaving the published index listing just one
+      # architecture. A single downstream job that ingests BOTH .debs and
+      # publishes with `-architectures=amd64,arm64` produces a consistent index.
+      # Here the matrix only builds, smoke-tests, signs, and uploads its .deb.
 
       - name: GPG sign Debian package
         run: |
@@ -572,6 +531,80 @@ jobs:
         with:
           name: release-${{ matrix.platform_key }}
           path: release/${{ matrix.platform_key }}/*
+
+  # Single APT-index publish for ALL architectures. The per-arch matrix only
+  # builds + signs + uploads its .deb (as release-<platform_key> artifacts); this
+  # job ingests every arch's .deb, builds ONE merged snapshot per distribution,
+  # and publishes it with `-architectures=amd64,arm64` + a single S3 sync — so
+  # the signed dists/ index lists BOTH arches consistently (no parallel race).
+  apt_publish:
+    name: Publish multi-arch APT index
+    needs: binaries_deb_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      APT_DISTRIBUTIONS: ${{ inputs.apt-distributions }}
+    steps:
+      - name: Download all per-arch release artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          path: debs
+          merge-multiple: true
+          pattern: release-*
+      - name: Install aptly + tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends aptly gnupg awscli
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Import GPG signing key from Secrets Manager
+        run: |
+          set -euo pipefail
+          aws secretsmanager get-secret-value --secret-id /release/gpg-signing-key \
+            --query SecretString --output text > /tmp/k.pgp
+          gpg --batch --import /tmp/k.pgp
+          shred -u /tmp/k.pgp
+      - name: Build distribution list
+        run: |
+          set -euo pipefail
+          echo "${APT_DISTRIBUTIONS}" | tr ',' '\n' | sed '/^$/d' > /tmp/dists.txt
+          echo "dists:"; cat /tmp/dists.txt
+      - name: Publish merged multi-arch APT index
+        run: |
+          set -euo pipefail
+          key=$(gpg --list-secret-keys --keyid-format=long sysadmin@zodl.com | head -n 2 | grep -v sec | tr -d ' ')
+          # All arch .debs collected in one place — aptly puts each into the pool
+          # and the index records both amd64 + arm64 Packages entries.
+          mapfile -t dists < /tmp/dists.txt
+          for dist in "${dists[@]}"; do
+            mirror="zcash-${dist}"; repo="zcash_local_${dist}"
+            snap_m="snap_mirror_${dist}"; snap_l="snap_local_${dist}"; snap_c="snap_combined_${dist}"
+            aptly mirror drop -force "$mirror" >/dev/null 2>&1 || true
+            aptly mirror create "$mirror" https://apt.z.cash "$dist"
+            aptly mirror update "$mirror"
+            aptly repo drop -force "$repo" >/dev/null 2>&1 || true
+            aptly repo create --distribution "$dist" --component main "$repo"
+            # add EVERY arch's .deb (amd64 + arm64) into the one repo
+            find debs -name 'zallet_*.deb' -exec aptly repo add "$repo" {} +
+            for s in "$snap_m" "$snap_l" "$snap_c"; do aptly snapshot drop -force "$s" >/dev/null 2>&1 || true; done
+            aptly snapshot create "$snap_m" from mirror "$mirror"
+            aptly snapshot create "$snap_l" from repo "$repo"
+            aptly snapshot merge "$snap_c" "$snap_m" "$snap_l"
+            # ONE publish with BOTH architectures → consistent dists/ index.
+            aptly publish snapshot -architectures=amd64,arm64 -gpg-key="$key" "$snap_c"
+          done
+      - name: Sync merged index + pool to apt.z.cash (single writer)
+        run: |
+          set -euo pipefail
+          aws s3 sync "$HOME/.aptly/public/pool/main/z/zallet/" "s3://${{ secrets.AWS_APT_BUCKET }}/pool/main/z/zallet/"
+          aws s3 sync "$HOME/.aptly/public/dists/" "s3://${{ secrets.AWS_APT_BUCKET }}/dists/"
 
   publish:
     name: Create/Update GitHub Release (aggregate)

@@ -1,15 +1,24 @@
 # Supply Chain Security (SLSA)
 
-Zallet’s release automation is designed to satisfy the latest [SLSA v1.0](https://slsa.dev/spec/v1.0) “Build L3” expectations: every artifact is produced on GitHub Actions with an auditable workflow identity, emits a provenance statement, and is reproducible thanks to the [StageX](https://codeberg.org/stagex/stagex/) deterministic toolchain already integrated into this repository. This page documents how the workflows operate and provides the exact commands required to validate the resulting images, binaries, attestations, and repository metadata.
+Zallet’s release automation is designed to satisfy the latest [SLSA v1.0](https://slsa.dev/spec/v1.0) “Build L3” expectations: every artifact is produced on GitHub Actions with an auditable workflow identity, emits a provenance statement, and is reproducible. This page documents how the workflows operate and provides the exact commands required to validate the resulting images, binaries, attestations, and repository metadata.
+
+> **Per-architecture reproducibility model.** The release is multi-arch, and the two architectures are built by **different** reproducible toolchains — a deliberate, documented asymmetry:
+>
+> - **`linux/amd64`** is built with the [StageX](https://codeberg.org/stagex/stagex/) full-source-bootstrapped toolchain. StageX bootstraps the entire compiler chain from a tiny (~512-byte), hand-auditable `hex0` seed, so it additionally addresses the *trusting-trust* problem. This is the highest-assurance tier.
+> - **`linux/arm64`** is built with **Nix** (pinned flake: `nixpkgs` rev + `crane` + exact `rustc`), producing a static `aarch64-unknown-linux-musl` binary. StageX cannot target arm64 today — its `stage0` bootstrap seed is x86-only — so arm64 uses Nix instead. Nix gives **rebuild-reproducibility** (identical pinned inputs → byte-identical output, verifiable with `diffoscope`), but its toolchain traces back to a pre-built binary bootstrap seed, so it does **not** by itself close trusting-trust.
+>
+> Both arches are therefore reproducible in the build-twice sense; only amd64 is bootstrap-grade. This page notes where the two paths differ.
 
 ## Release architecture overview
 
 ### Workflows triggered on a `vX.Y.Z` tag
 
-- **`.github/workflows/release.yml`** orchestrates the full release. It computes metadata (`set_env`), builds the StageX-based image (`container` job), and then fan-outs to the binaries-and-Debian job (`binaries_release`) before publishing all deliverables on the tagged GitHub Release.
-- **`.github/workflows/build-and-push-docker-hub.yaml`** builds the OCI image deterministically, exports runtime artifacts per platform, pushes to Docker Hub, signs the digest with Cosign (keyless OIDC), uploads the SBOM, and generates provenance via `actions/attest-build-provenance`.
-- **`.github/workflows/binaries-and-deb-release.yml`** consumes the exported binaries, performs smoke tests inside Debian containers, emits standalone binaries plus `.deb` packages, GPG-signs everything with the Zcash release key (decrypted from Google Cloud KMS), generates SPDX SBOMs, and attaches `intoto.jsonl` attestations for both the standalone binary and the `.deb`.
-- **StageX deterministic build** is invoked before these workflows through `make build`/`utils/build.sh`. The Dockerfile’s `export` stage emits the exact binaries consumed later, guaranteeing that the images, standalone binaries, and Debian packages share the same reproducible artifacts.
+- **`.github/workflows/release.yml`** orchestrates the full release. It computes metadata (`set_env`), builds the StageX-based **amd64** image (`container` job), builds the Nix-based **arm64** runtime (`container_arm64` job), stitches both into a single multi-arch image (`manifest` job), and fans out to the binaries-and-Debian job (`binaries_release`) before publishing all deliverables on the tagged GitHub Release.
+- **`.github/workflows/build-and-push-docker-hub.yaml`** builds the **amd64** OCI image deterministically with StageX, exports the runtime artifact, **pushes by digest** (no tags) to Docker Hub, signs the digest with Cosign (keyless OIDC), uploads the SBOM, and generates provenance via `actions/attest-build-provenance`.
+- **`.github/workflows/build-arm64-nix.yml`** builds the **arm64** static-musl binary with Nix on a native `ubuntu-24.04-arm` runner (reading the `zodl-nix-cache` S3 binary cache so the musl toolchain is downloaded, not recompiled), lays it out in the same `export`-stage layout, pushes the arm64 image variant by digest, and appends the arm64 runtime to the shared artifact.
+- **`manifest` job (in `release.yml`)** assembles the amd64 + arm64 per-arch digests into one multi-arch OCI index per tag with `docker buildx imagetools create`, then re-attests SLSA provenance on the final index digest. Pushing each arch by digest keeps tags atomic (a tag never exists as single-arch).
+- **`.github/workflows/binaries-and-deb-release.yml`** consumes the exported binaries (both arches), performs smoke tests inside Debian containers, emits standalone binaries plus `.deb` packages, GPG-signs everything with the Zcash release key (decrypted from AWS Secrets Manager `/release/gpg-signing-key`), generates SPDX SBOMs, and attaches `intoto.jsonl` attestations. A single downstream **`apt_publish` job** ingests every arch's `.deb` and publishes ONE merged, signed APT index (`-architectures=amd64,arm64`) with a single S3 sync — avoiding the parallel-matrix race that would otherwise leave the published `dists/` index listing only one architecture.
+- **Reproducible builds** are invoked before/within these workflows: **amd64** via StageX (`make build`/`utils/build.sh`, Dockerfile `export` stage); **arm64** via the `flake.nix` `#zallet` output. Both emit the exact binaries consumed later, so images, standalone binaries, and Debian packages share the same reproducible artifacts per architecture.
 
 ### Deliverables and metadata per release
 
@@ -24,8 +33,10 @@ Zallet’s release automation is designed to satisfy the latest [SLSA v1.0](http
 ## Targeted SLSA guarantees
 
 - **Builder identity:** GitHub Actions workflows run with `permissions: id-token: write`, enabling keyless Sigstore certificates bound to the workflow path (`https://github.com/zcash/zallet/.github/workflows/<workflow>.yml@refs/tags/vX.Y.Z`).
-- **Provenance predicate:** `actions/attest-build-provenance@v3` emits [`https://slsa.dev/provenance/v1`](https://slsa.dev/provenance/v1) predicates for every OCI image, standalone binary, and `.deb`. Each predicate captures the git tag, commit SHA, Docker/StageX build arguments, and resolved platform list.
-- **Reproducibility:** StageX already enforces deterministic builds with source-bootstrapped toolchains. Re-running `make build` in a clean tree produces bit-identical images whose digests match the published release digest.
+- **Provenance predicate:** `actions/attest-build-provenance@v3` emits [`https://slsa.dev/provenance/v1`](https://slsa.dev/provenance/v1) predicates for every OCI image (including the final multi-arch index), standalone binary, and `.deb`. Each predicate captures the git tag, commit SHA, build arguments, and resolved platform.
+- **Reproducibility (amd64):** StageX enforces a full-source-bootstrapped deterministic build. Re-running `make build` in a clean tree produces a bit-identical image whose digest matches the published amd64 digest. This is bootstrap-grade — the toolchain itself is built from a hand-auditable seed.
+- **Reproducibility (arm64):** the Nix build is rebuild-reproducible: `nix build .#zallet` from the pinned `flake.lock` (same `nixpkgs` rev + `crane` + `rustc`) produces a byte-identical `aarch64-unknown-linux-musl` binary, verifiable by building twice and comparing with `diffoscope`. It is **not** bootstrap-grade — Nix's toolchain derives from a pre-built binary bootstrap seed — so arm64 closes "did the published binary come from this source" but not the deeper trusting-trust question that StageX's amd64 path does. Note also that Nix gives determinism *by sandbox enforcement*, not by proof: an impure `build.rs` can still break it (e.g. `zaino-state`'s `build.rs` shells out to `git`), which is why the arm64 result is **verified** by a build-twice diff rather than assumed.
+- **GPG signing key:** standalone binaries, `.deb` packages, and the APT `Release.gpg` are signed **only** with the ZODL release key (`sysadmin@zodl.com`, fetched from AWS Secrets Manager `/release/gpg-signing-key`). This is intentional: it does **not** dual-sign with the legacy ECC key (`sysadmin@z.cash`). The older `apt.z.cash` pipeline dual-signed (ECC + ZODL) during the key-transition window so users with either key in their keyring could verify; the ECC key's planned revocation is mid-2026, after which ZODL-only is the steady state. Users verify against the ZODL public key published at `https://apt.z.cash/zcash.asc`.
 
 ## Verification playbook
 
@@ -61,9 +72,9 @@ export IMAGE=docker.io/zodlinc/zallet
 export IMAGE_WORKFLOW="https://github.com/${REPO}/.github/workflows/build-and-push-docker-hub.yaml@refs/tags/${VERSION}"
 export BIN_WORKFLOW="https://github.com/${REPO}/.github/workflows/binaries-and-deb-release.yml@refs/tags/${VERSION}"
 export OIDC_ISSUER="https://token.actions.githubusercontent.com"
-export IMAGE_PLATFORMS="linux/amd64"                         # currently amd64 only; arm64 support is planned
-export BINARY_SUFFIXES="linux-amd64"                         # set to whichever suffixes the release produced (arm64 coming soon)
-export DEB_ARCHES="amd64"                                    # set to whichever architectures the release produced (arm64 coming soon)
+export IMAGE_PLATFORMS="linux/amd64,linux/arm64"             # multi-arch: amd64 via StageX, arm64 via Nix
+export BINARY_SUFFIXES="linux-amd64,linux-arm64"             # both suffixes ship per release
+export DEB_ARCHES="amd64,arm64"                              # both .deb architectures ship per release
 export BIN_SIGNER_WORKFLOW="github.com/${REPO}/.github/workflows/binaries-and-deb-release.yml@refs/tags/${VERSION}"
 mkdir -p verify/dist
 export PATH="$PATH:$HOME/go/bin"
@@ -305,9 +316,16 @@ Automated validation:
     --signer-workflow "${BIN_SIGNER_WORKFLOW}"
 ```
 
-### 7. Reproduce the deterministic StageX build locally
+### 7. Reproduce the deterministic build locally
 
-> **Note:** The CI release pipeline currently targets `linux/amd64` only. Support for `linux/arm64` is planned and the SLSA pipeline is already prepared for it (the platform matrix is driven by `release.yml`). The reproduction steps below apply to `linux/amd64`.
+The image is multi-arch and each architecture reproduces with its own toolchain. Extract the per-platform digest you want to check from the published manifest list:
+
+```bash
+crane manifest "${IMAGE}@${IMAGE_DIGEST}" \
+  | jq -r '.manifests[] | "\(.platform.architecture) \(.digest)"'
+```
+
+#### amd64 — StageX (full-source bootstrap)
 
 ```bash
 git clean -fdx
@@ -316,14 +334,23 @@ make build IMAGE_TAG="${VERSION}"
 skopeo inspect docker-archive:build/oci/zallet.tar | jq -r '.Digest'
 ```
 
-`make build` invokes `utils/build.sh`, which builds a single-platform (`linux/amd64`) OCI tarball at `build/oci/zallet.tar`. The CI workflow pushes a multi-architecture manifest list directly to the registry, so the digest of the local tarball will differ from `${IMAGE_DIGEST}` in Step 2 (which is the multi-arch manifest digest). To compare apples-to-apples, extract the `linux/amd64` platform digest from the manifest:
+`make build` invokes `utils/build.sh`, which builds a single-platform (`linux/amd64`) OCI tarball at `build/oci/zallet.tar`. Its digest should match the `amd64` per-platform digest extracted above.
+
+#### arm64 — Nix (rebuild-reproducible, static musl)
+
+Run on an aarch64 host (or any host with the arm64 Nix substituters available). Build twice and confirm the binary is byte-identical:
 
 ```bash
-crane manifest "${IMAGE}@${IMAGE_DIGEST}" \
-  | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest'
+git checkout "${VERSION}"
+nix build .#zallet                      # uses the pinned flake.lock
+sha256sum ./result/bin/zallet
+nix store delete "$(readlink -f ./result)" && nix build .#zallet --rebuild
+sha256sum ./result/bin/zallet           # must match the first hash
 ```
 
-That per-platform digest should match the one produced by the local StageX build. After importing:
+A matching hash across the two clean builds is the arm64 reproducibility guarantee. (The arm64 image variant wraps this exact binary in a `scratch` image, so its per-platform digest follows from the binary plus the reproducible image settings.) Because Nix enforces determinism by sandboxing rather than proving it, this build-twice check — not trust in Nix — is what establishes the result; `diffoscope ./result-a/bin/zallet ./result-b/bin/zallet` pinpoints any divergence if the hashes ever differ.
+
+After importing:
 
 ```bash
 make import IMAGE_TAG="${VERSION}"

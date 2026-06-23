@@ -106,26 +106,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Compute Docker image tags
-        id: set-tags
-        env:
-          INPUT_IMAGE_TAGS: ${{ inputs.image-tags }}
-        run: |
-          set -euo pipefail
-          TAGS="$INPUT_IMAGE_TAGS"
-          IFS=',' read -ra ELEMENTS <<< "$TAGS"
-          TAGS_FIXED=""
-          for ELEMENT in "${ELEMENTS[@]}"; do
-            ELEMENT_TRIMMED="$(echo "$ELEMENT" | xargs)"
-            [[ -z "$ELEMENT_TRIMMED" ]] && continue
-            TAGS_FIXED+="${IMAGE_FULL_NAME}:$ELEMENT_TRIMMED,"
-          done
-          TAGS_FIXED=${TAGS_FIXED%,}
-          if [[ -z "$TAGS_FIXED" ]]; then
-            echo "No valid tags were computed" >&2
-            exit 1
-          fi
-          echo "tags_fixed=$TAGS_FIXED" >> "$GITHUB_ENV"
+      # NOTE: tags are no longer computed here. The amd64 image is pushed BY
+      # DIGEST (no tags); the `manifest` job in release.yml assigns the real tags
+      # when it stitches the multi-arch index. IMAGE_FULL_NAME (set above) is the
+      # tagless repo ref used by push-by-digest, cosign, and SBOM steps.
 
       - name: Determine target platforms
         id: platforms
@@ -172,19 +156,23 @@ jobs:
           username: ${{ secrets.dockerhub_username }}
           password: ${{ secrets.dockerhub_password }}
 
-      - name: Build & Push (SBOM + provenance)
+      # Push the amd64 image BY DIGEST (no tags). The final multi-arch tags are
+      # assembled by the `manifest` job in release.yml, which stitches this
+      # amd64 digest together with the Nix-built arm64 digest into one OCI index
+      # per tag. Pushing by digest keeps tags atomic (they only ever appear
+      # already-multi-arch) and lets the two arches build on different systems
+      # (StageX amd64 here, Nix arm64 in build-arm64-nix.yml).
+      - name: Build & Push by digest (SBOM + provenance)
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           file: Dockerfile
           context: .
-          push: true
           platforms: ${{ steps.platforms.outputs.platforms }}
-          tags: ${{ env.tags_fixed }}
           sbom: true
           provenance: mode=max
           outputs: |
-            type=registry,rewrite-timestamp=true,force-compression=true
+            type=image,name=${{ env.IMAGE_FULL_NAME }},push-by-digest=true,name-canonical=true,push=true,rewrite-timestamp=true,force-compression=true
 
       - name: Extract artifacts from export stage
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
@@ -193,7 +181,6 @@ jobs:
           context: .
           push: false
           platforms: ${{ steps.platforms.outputs.platforms }}
-          tags: ${{ env.tags_fixed }}
           target: export
           outputs: |
             type=local,dest=./out,rewrite-timestamp=true,force-compression=true
