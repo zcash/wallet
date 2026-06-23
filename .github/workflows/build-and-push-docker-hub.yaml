@@ -149,12 +149,13 @@ jobs:
       - name: Enable containerd image store
         uses: depot/use-containerd-snapshotter-action@2e6f905d28e7ca519b216e2219d00545537e9f46 # v1.0.0
 
-      # IMPORTANT: do NOT `docker login` before building. The Dockerfile pulls
+      # IMPORTANT: do NOT `docker login` before THIS build. The Dockerfile pulls
       # public images anonymously (the `docker/dockerfile` syntax frontend and
-      # the `stagex/*` bases). The zodlinc Docker Hub token is PUSH-ONLY; a global
-      # login makes BuildKit attach it to those pulls and Docker Hub rejects them
-      # ("insufficient scopes"). So BUILD to a local OCI archive with no login
-      # (anonymous pulls succeed), then authenticate ONLY for the push (skopeo).
+      # the `stagex/*` bases). A global login here would make BuildKit attach the
+      # registry token to those anonymous public pulls, and Docker Hub rejects
+      # token-bearing requests it considers out-of-scope ("insufficient scopes").
+      # So BUILD to a local OCI archive with no login (anonymous pulls succeed);
+      # the push (skopeo) and cosign/SBOM steps authenticate later, after this.
       - name: Build amd64 image to a local OCI archive (anonymous pulls)
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
@@ -203,6 +204,19 @@ jobs:
           target: export
           outputs: |
             type=local,dest=./out,rewrite-timestamp=true,force-compression=true
+
+      # Log in to Docker Hub NOW — AFTER the anonymous-pull build, BEFORE cosign.
+      # cosign/syft read credentials from the Docker config store; the build
+      # above deliberately ran without login (so its public pulls stayed
+      # anonymous), so cosign would otherwise have no creds and 401. The zodlinc
+      # token grants pull+push on zodlinc/zallet, which is what cosign needs to
+      # write signature/attestation artifacts back to the repo.
+      - name: Log in to Docker registry (for cosign/SBOM/attest)
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ${{ env.REGISTRY_HOST }}
+          username: ${{ secrets.dockerhub_username }}
+          password: ${{ secrets.dockerhub_password }}
 
       - name: Collect runtime artifacts per platform
         env:
@@ -269,13 +283,11 @@ jobs:
         uses: anchore/sbom-action/download-syft@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
 
       # cosign/syft below WRITE signatures + SBOM attestations back to the
-      # registry as OCI artifacts, which needs PULL+PUSH. The push-only zodlinc
-      # token can't pull, so these 401 ("insufficient scopes"). They are
-      # best-effort here so the multi-arch + deb + apt pipeline still validates;
-      # in production these need a pull-capable registry token (or the image
-      # pushed to a registry where the release identity has read+write).
+      # registry as OCI artifacts (pull+push). They read creds from the Docker
+      # config store, which is why the "Log in to Docker registry" step runs
+      # right before them (after the anonymous-pull build). The zodlinc token
+      # grants pull+push on zodlinc/zallet, so these succeed.
       - name: Cosign sign image by digest (keyless OIDC)
-        continue-on-error: true
         env:
           IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -286,7 +298,6 @@ jobs:
 
       - name: Generate per-platform SPDX SBOMs
         id: sbom
-        continue-on-error: true
         env:
           IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -306,7 +317,6 @@ jobs:
           done
 
       - name: Attach SBOM attestations
-        continue-on-error: true
         env:
           IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -331,7 +341,6 @@ jobs:
           done
 
       - name: Generate SLSA provenance attestation (GitHub)
-        continue-on-error: true # push-to-registry needs pull+push; push-only token 401s
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-name: ${{ env.IMAGE_FULL_NAME }}
