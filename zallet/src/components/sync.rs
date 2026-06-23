@@ -54,7 +54,7 @@ use zip32::Scope;
 
 use super::{
     TaskHandle,
-    chain::{Chain, ChainBlock, ChainError, ChainView},
+    chain::{BlockLocator, Chain, ChainBlock, ChainError, ChainView},
     database::{Database, DbConnection},
 };
 use crate::{config::ZalletConfig, error::Error, network::Network};
@@ -288,6 +288,31 @@ fn is_retryable(error: &SyncError) -> bool {
     matches!(error, SyncError::Chain(ChainError::Unavailable(_)))
 }
 
+/// Resolves the fork point between the wallet and the backend's best chain from a
+/// [`ChainView::find_fork_point`] result and the `locator` that was queried.
+///
+/// An **empty** locator means the wallet has no recorded chain history yet — a fresh
+/// wallet whose first observed tip is genesis, which `initialize` does not record. There
+/// is then no reorg to detect, so the wallet simply syncs forward from its current
+/// `prev_tip`. A **non-empty** locator that matches nothing on the best chain is instead a
+/// genuine inconsistency (a reorg deeper than the locator spans, or an unknown tip), which
+/// is fatal.
+fn resolve_fork_point(
+    found: Option<ChainBlock>,
+    locator: &BlockLocator,
+    prev_tip: ChainBlock,
+) -> Result<ChainBlock, SyncError> {
+    match found {
+        Some(fork_point) => Ok(fork_point),
+        None if locator.hashes().is_empty() => Ok(prev_tip),
+        None => Err(SyncError::Chain(ChainError::backend(format!(
+            "Could not determine the reorg point: the wallet's previous chain tip {} \
+             (height {}) is not known to the chain indexer",
+            prev_tip.hash, prev_tip.height,
+        )))),
+    }
+}
+
 /// Keeps the wallet state up-to-date with the chain tip, and handles the mempool.
 #[tracing::instrument(skip_all)]
 async fn steady_state<C: Chain>(
@@ -361,17 +386,11 @@ async fn steady_state_iteration<C: Chain>(
 
         // Figure out the diff between the previous and current chain tips.
         let locator = locator::build_block_locator(db_data, prev_tip.height)?;
-        let fork_point = chain_view
+        let found = chain_view
             .find_fork_point(&locator)
             .await
-            .map_err(SyncError::Chain)?
-            .ok_or_else(|| {
-                SyncError::Chain(ChainError::backend(format!(
-                    "Could not determine the reorg point: the wallet's previous \
-                     chain tip {} (height {}) is not known to the chain indexer",
-                    prev_tip.hash, prev_tip.height,
-                )))
-            })?;
+            .map_err(SyncError::Chain)?;
+        let fork_point = resolve_fork_point(found, &locator, *prev_tip)?;
         assert!(fork_point.height <= current_tip.height);
 
         // Fetch blocks that need to be applied to the wallet.
@@ -597,7 +616,50 @@ async fn batch_decryptor(
 
 #[cfg(test)]
 mod tests {
-    use super::{ChainError, SyncError, is_retryable};
+    use super::{ChainBlock, ChainError, SyncError, is_retryable, resolve_fork_point};
+    use crate::components::chain::BlockLocator;
+    use zcash_primitives::block::BlockHash;
+    use zcash_protocol::consensus::BlockHeight;
+
+    fn block(height: u32, hash: u8) -> ChainBlock {
+        ChainBlock {
+            height: BlockHeight::from_u32(height),
+            hash: BlockHash([hash; 32]),
+        }
+    }
+
+    #[test]
+    fn empty_locator_syncs_forward_from_prev_tip() {
+        // A fresh wallet has no recorded history, so the locator is empty. A missing fork
+        // point is then not fatal — there is nothing to fork from, so the wallet syncs
+        // forward from its own tip. This is the genesis-start case the integration tests hit.
+        let empty = BlockLocator::from_blocks([]);
+        let genesis = block(0, 1);
+        assert_eq!(resolve_fork_point(None, &empty, genesis).unwrap(), genesis);
+        // The same holds for a fresh wallet whose first observed tip is above genesis.
+        let birthday = block(500, 2);
+        assert_eq!(
+            resolve_fork_point(None, &empty, birthday).unwrap(),
+            birthday
+        );
+    }
+
+    #[test]
+    fn nonempty_locator_with_no_match_is_fatal() {
+        // A wallet that has recorded history but finds none of it on the best chain is a
+        // genuine inconsistency (a reorg deeper than the locator), which must surface.
+        let tip = block(100, 3);
+        let locator = BlockLocator::from_blocks([tip]);
+        assert!(resolve_fork_point(None, &locator, tip).is_err());
+    }
+
+    #[test]
+    fn found_fork_point_is_returned() {
+        let tip = block(100, 3);
+        let locator = BlockLocator::from_blocks([tip]);
+        let fork = block(90, 4);
+        assert_eq!(resolve_fork_point(Some(fork), &locator, tip).unwrap(), fork);
+    }
 
     #[test]
     fn stale_view_errors_are_retryable() {
