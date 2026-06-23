@@ -2,7 +2,7 @@ use std::fmt;
 
 use jsonrpsee::{
     core::{JsonValue, RpcResult},
-    types::{ErrorCode as RpcErrorCode, ErrorObjectOwned},
+    types::ErrorCode as RpcErrorCode,
 };
 use rust_decimal::Decimal;
 use schemars::{JsonSchema, json_schema};
@@ -20,18 +20,15 @@ use super::server::LegacyCode;
 
 #[cfg(zallet_build = "wallet")]
 use {
-    crate::components::{database::DbConnection, keystore::KeyStore},
+    crate::components::{
+        chain::{Chain, ChainView},
+        database::DbConnection,
+        keystore::KeyStore,
+    },
     std::collections::HashSet,
-    zaino_state::{FetchServiceSubscriber, ZcashIndexer},
-    zcash_client_backend::{
-        data_api::{Account, AccountBirthday, WalletRead, chain::ChainState},
-        proto::service::TreeState,
-    },
+    zcash_client_backend::data_api::{Account, AccountBirthday, WalletRead, chain::ChainState},
     zcash_primitives::block::BlockHash,
-    zcash_protocol::{
-        consensus::{NetworkType, Parameters},
-        value::BalanceError,
-    },
+    zcash_protocol::value::BalanceError,
     zip32::fingerprint::SeedFingerprint,
 };
 
@@ -129,9 +126,8 @@ pub(super) async fn collect_standalone_transparent_keys<NoteRef>(
 /// commitment trees are empty. For non-zero heights, fetches the real treestate from
 /// the chain indexer so the sync engine can validate note commitment tree continuity.
 #[cfg(zallet_build = "wallet")]
-pub(super) async fn fetch_account_birthday(
-    wallet: &DbConnection,
-    chain: &FetchServiceSubscriber,
+pub(super) async fn fetch_account_birthday<C: Chain>(
+    chain: &C,
     height: BlockHeight,
 ) -> RpcResult<AccountBirthday> {
     if height == BlockHeight::from_u32(0) {
@@ -147,50 +143,27 @@ pub(super) async fn fetch_account_birthday(
     }
 
     let treestate_height = height.saturating_sub(1);
-    let treestate = chain
-        .z_get_treestate(treestate_height.to_string())
+    let chain_view = chain
+        .snapshot()
         .await
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?;
+    let chain_state = chain_view
+        .tree_state_as_of(treestate_height)
+        .await
+        // A failure to fetch the treestate from the chain is an internal error, not a
+        // problem with the caller's parameters.
         .map_err(|e| {
-            // A failure to fetch the treestate from the chain indexer is an internal
-            // error, not a problem with the caller's parameters.
-            ErrorObjectOwned::owned(
-                RpcErrorCode::InternalError.code(),
-                format!("Failed to get treestate at height {treestate_height}: {e}"),
-                None::<()>,
-            )
+            LegacyCode::Database.with_message(format!(
+                "Failed to get treestate at height {treestate_height}: {e}"
+            ))
+        })?
+        .ok_or_else(|| {
+            LegacyCode::Database.with_message(format!(
+                "Failed to get treestate at height {treestate_height}: above chain tip"
+            ))
         })?;
 
-    let (hash, height, time, sapling, orchard) = (
-        treestate.hash(),
-        treestate.height(),
-        treestate.time(),
-        treestate.sapling(),
-        treestate.orchard(),
-    );
-    let treestate = TreeState {
-        network: match wallet.params().network_type() {
-            NetworkType::Main => "main".into(),
-            NetworkType::Test => "test".into(),
-            NetworkType::Regtest => "regtest".into(),
-        },
-        height: height.0.into(),
-        hash: hash.to_string(),
-        time,
-        sapling_tree: sapling
-            .commitments()
-            .final_state()
-            .as_ref()
-            .map(hex::encode)
-            .unwrap_or_default(),
-        orchard_tree: orchard
-            .commitments()
-            .final_state()
-            .as_ref()
-            .map(hex::encode)
-            .unwrap_or_default(),
-    };
-
-    AccountBirthday::from_treestate(treestate, None).map_err(|_| RpcErrorCode::InternalError.into())
+    Ok(AccountBirthday::from_parts(chain_state, None))
 }
 
 pub(crate) fn parse_txid(txid_str: &str) -> RpcResult<TxId> {
