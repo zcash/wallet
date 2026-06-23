@@ -10,6 +10,12 @@ be considered breaking changes.
 
 ### Added
 
+- `zallet generate-encryption-identity` command, which generates the wallet's age
+  encryption identity using the `age` library that Zallet already embeds. This
+  removes the need for the external `rage` / `rage-keygen` tool when setting up a
+  wallet. It supports both plain and passphrase-encrypted identities; in
+  non-interactive contexts the passphrase is read from the
+  `ZALLET_IDENTITY_PASSPHRASE` environment variable.
 - RPC methods:
   - `decoderawtransaction`
   - `decodescript`

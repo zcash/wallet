@@ -9,7 +9,8 @@ initialize the wallet's encryption keys. The encryption identity file name (or p
 be set with the `keystore.encryption_identity` [config option].
 
 > WARNING: As of the latest Zallet alpha release (0.1.0-alpha.4), `zallet` requires the
-> encryption identity file to already exist. You can generate one with [`rage`].
+> encryption identity file to already exist. You can generate a plain or
+> passphrase-encrypted identity with [`zallet generate-encryption-identity`].
 
 ## Identity kinds
 
@@ -40,7 +41,10 @@ JSON-RPC method `walletpassphrase`, and locked with `walletlock`.
 ### Plugin identity file
 
 > age plugins will eventually be supported by `zallet init-wallet-encryption`, but
-> currently are tricky to set up and require manual database editing.
+> currently are tricky to set up. [`zallet generate-encryption-identity`] does not
+> generate plugin identities, so setting one up requires the external `age` or `rage` CLI
+> (plus the relevant age plugin binary) to create the identity, followed by manual database
+> editing.
 
 Starting Zallet requires the capability to read the plugin identity file on disk. Then,
 each time a JSON-RPC method is called that requires access to specific key material, the
@@ -50,6 +54,6 @@ with an external device like a YubiKey (with [`age-plugin-yubikey`]) or a KMS.
 
 [age encryption]: https://age-encryption.org/
 [config option]: example-config.md
-[`rage`]: https://github.com/str4d/rage
+[`zallet generate-encryption-identity`]: generate-encryption-identity.md
 [`zallet rpc`]: rpc.md
 [`age-plugin-yubikey`]: https://github.com/str4d/age-plugin-yubikey
