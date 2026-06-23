@@ -109,19 +109,31 @@ impl MigrateZcashdWalletCmd {
         // Resolve the `db_dump` utility. An explicit `--zcashd-install-dir` uses that
         // installation's binary; otherwise prefer the BDB 6.2 `db_dump` vendored by
         // `zewif-zcashd` (via `BDBDump::from_file`), which falls back to one on the `PATH`.
+        let db_dump_unavailable = || {
+            MigrateError::Wrapped(
+                ErrorKind::Generic
+                    .context(fl!("err-migrate-wallet-db-dump-not-found"))
+                    .into(),
+            )
+        };
         let db_dump = match &self.zcashd_install_dir {
             Some(path) => {
                 let db_dump_path = path.join("zcutil").join("bin").join("db_dump");
                 if !db_dump_path.is_file() {
-                    return Err(MigrateError::Wrapped(
-                        ErrorKind::Generic
-                            .context(fl!("err-migrate-wallet-db-dump-not-found"))
-                            .into(),
-                    ));
+                    return Err(db_dump_unavailable());
                 }
                 BDBDump::from_file_with_path(db_dump_path.as_path(), wallet_path.as_path())
             }
-            None => BDBDump::from_file(wallet_path.as_path()),
+            None => {
+                // `from_file` tries the vendored `db_dump` and then one on the `PATH`. If
+                // it fails and there is no `db_dump` on the `PATH` either, report it as
+                // unavailable rather than surfacing a raw execution error.
+                let dumped = BDBDump::from_file(wallet_path.as_path());
+                if dumped.is_err() && which::which("db_dump").is_err() {
+                    return Err(db_dump_unavailable());
+                }
+                dumped
+            }
         }
         .map_err(|e| MigrateError::Zewif {
             error_type: ZewifError::BdbDump,
