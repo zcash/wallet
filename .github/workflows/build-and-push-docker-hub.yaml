@@ -347,10 +347,15 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
+      # Per-arch artifact name. upload-artifact v4+ makes each name IMMUTABLE —
+      # two uploads of the SAME name do NOT merge (unlike v3); they'd coexist as
+      # duplicates and download-by-name would grab only one, so the deb job would
+      # find linux-arm64/ but not linux-amd64/ (or vice-versa). The deb job
+      # downloads both with a `<name>-*` pattern + merge instead.
       - name: Upload exported binaries artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: ${{ env.OCI_ARTIFACT_NAME }}
+          name: ${{ env.OCI_ARTIFACT_NAME }}-amd64
           path: build/runtime
           if-no-files-found: error
 

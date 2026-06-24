@@ -221,10 +221,16 @@ jobs:
         # --locked builds against cargo-deb's own lockfile (reproducible deps).
         run: cargo install cargo-deb --version "^2.10" --locked
 
+      # The amd64 and arm64 build jobs each upload a distinct per-arch artifact
+      # (`<name>-amd64`, `<name>-arm64`) because v4+ artifacts are immutable and
+      # same-name uploads don't merge. Pull BOTH with a pattern + merge-multiple
+      # so build/runtime-artifact/ contains linux-amd64/ AND linux-arm64/, and
+      # this matrix leg can find its own ${platform_key}/zallet.
       - name: Download exported binaries artifact
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
-          name: ${{ env.OCI_ARTIFACT_NAME }}
+          pattern: ${{ env.OCI_ARTIFACT_NAME }}-*
+          merge-multiple: true
           path: build/runtime-artifact
 
       - name: Prepare Debian distribution list
