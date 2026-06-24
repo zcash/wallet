@@ -628,6 +628,14 @@ jobs:
         run: |
           set -euo pipefail
           key=$(gpg --list-secret-keys --keyid-format=long sysadmin@zodl.com | head -n 2 | grep -v sec | tr -d ' ')
+          # aptly mirror update VERIFIES the existing apt.z.cash Release.gpg, which
+          # is signed by the ZODL release key. aptly checks against its own
+          # `trustedkeys.gpg`, NOT our gpg keyring — without importing the ZODL
+          # PUBLIC key there, the mirror fails with "Can't check signature: No
+          # public key". Pull the published keyring (contains the ZODL pubkey,
+          # and historically the ECC one too) and import it into trustedkeys.
+          curl -fsSL https://apt.z.cash/zcash.asc -o /tmp/zcash.asc
+          gpg --no-default-keyring --keyring trustedkeys.gpg --import /tmp/zcash.asc
           # All arch .debs collected in one place — aptly puts each into the pool
           # and the index records both amd64 + arm64 Packages entries.
           mapfile -t dists < /tmp/dists.txt
