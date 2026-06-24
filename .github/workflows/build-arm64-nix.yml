@@ -123,14 +123,30 @@ jobs:
         if: ${{ inputs.dockerhub-namespace != '' }}
         uses: depot/use-containerd-snapshotter-action@2e6f905d28e7ca519b216e2219d00545537e9f46 # v1.0.0
 
+      # Bootstrap the buildx builder BEFORE `docker login`. The builder lazily
+      # pulls `moby/buildkit:buildx-stable-1` from Docker Hub on first use; if a
+      # push-only-token login ran first, BuildKit attaches that token to this
+      # ANONYMOUS public pull and Docker Hub 401s ("failed to authorize" on
+      # moby/buildkit). Bootstrapping here pulls it anonymously, so the later
+      # login only scopes the actual push.
+      - name: Bootstrap buildx builder (anonymous pull, before login)
+        if: ${{ inputs.dockerhub-namespace != '' }}
+        run: docker buildx inspect --bootstrap
+
+      - name: Log in to Docker Hub (after buildkit bootstrap)
+        if: ${{ inputs.dockerhub-namespace != '' }}
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.dockerhub_username }}
+          password: ${{ secrets.dockerhub_password }}
+
       - name: Build + push the arm64 image variant (by digest)
         id: push
         if: ${{ inputs.dockerhub-namespace != '' }}
         env:
           NS: ${{ inputs.dockerhub-namespace }}
           IMG: ${{ inputs.image-name }}
-          DH_USER: ${{ secrets.dockerhub_username }}
-          DH_PASS: ${{ secrets.dockerhub_password }}
         run: |
           set -Eeuo pipefail
           REPO="docker.io/${NS}/${IMG}"
@@ -143,7 +159,6 @@ jobs:
           USER 1000:1000
           ENTRYPOINT ["zallet"]
           DF
-          echo "${DH_PASS}" | docker login docker.io -u "${DH_USER}" --password-stdin
           # Push by digest only (no tag) — the manifest job stitches amd64+arm64
           # into the real tags. rewrite-timestamp keeps it reproducible. Do NOT
           # swallow stderr: a failing buildx push must surface, not vanish into
