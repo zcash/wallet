@@ -63,10 +63,19 @@ impl AsyncRunnable for MigrateZcashdWalletCmd {
             return Err(ErrorKind::Generic.context(fl!("migrate-alpha-code")).into());
         }
 
+        // When no `[indexer.read_state_service]` section is configured, bootstrap the
+        // read-state configuration from the co-located node so the whole command (database
+        // open, chain scan) uses one consistent, possibly-augmented config.
+        #[cfg(feature = "zebra-state")]
+        let (config, bootstrap) = crate::components::chain::resolve_bootstrap(&config).await?;
+
         // Start monitoring the chain (skip if --no-scan).
         let (chain, _chain_indexer_task_handle) = if self.no_scan {
             (None, None)
         } else {
+            #[cfg(feature = "zebra-state")]
+            let (c, h) = ChainBackend::new(&config, bootstrap).await?;
+            #[cfg(feature = "zaino")]
             let (c, h) = ChainBackend::new(&config).await?;
             (Some(c), Some(h))
         };

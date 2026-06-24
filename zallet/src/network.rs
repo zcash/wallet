@@ -155,6 +155,53 @@ pub struct RegTestNuParam {
     activation_height: BlockHeight,
 }
 
+#[cfg(feature = "zebra-state")]
+impl RegTestNuParam {
+    /// Constructs a Regtest network-upgrade parameter activating `consensus_branch_id` at
+    /// `activation_height`.
+    pub(crate) fn new(
+        consensus_branch_id: consensus::BranchId,
+        activation_height: BlockHeight,
+    ) -> Self {
+        Self {
+            consensus_branch_id,
+            activation_height,
+        }
+    }
+}
+
+/// Converts a node's reported Regtest activation heights into Zallet's `regtest_nuparams`.
+///
+/// Each configured network-upgrade height becomes one [`RegTestNuParam`], so feeding the
+/// result through [`Network::from_type`] reconstructs the same Regtest network the node is
+/// running. Used to bootstrap a Zallet that follows an ephemeral / Regtest node whose
+/// activation heights were not otherwise configured.
+#[cfg(feature = "zebra-state")]
+pub(crate) fn regtest_nuparams_from_configured_heights(
+    heights: &zebra_chain::parameters::testnet::ConfiguredActivationHeights,
+) -> Vec<RegTestNuParam> {
+    use consensus::BranchId;
+
+    let mut out = Vec::new();
+    let mut push = |branch: BranchId, h: Option<u32>| {
+        if let Some(h) = h {
+            out.push(RegTestNuParam::new(branch, BlockHeight::from_u32(h)));
+        }
+    };
+    push(BranchId::Overwinter, heights.overwinter);
+    push(BranchId::Sapling, heights.sapling);
+    push(BranchId::Blossom, heights.blossom);
+    push(BranchId::Heartwood, heights.heartwood);
+    push(BranchId::Canopy, heights.canopy);
+    push(BranchId::Nu5, heights.nu5);
+    push(BranchId::Nu6, heights.nu6);
+    push(BranchId::Nu6_1, heights.nu6_1);
+    push(BranchId::Nu6_2, heights.nu6_2);
+    #[cfg(zcash_unstable = "nu7")]
+    push(BranchId::Nu7, heights.nu7);
+    out
+}
+
 impl TryFrom<String> for RegTestNuParam {
     type Error = &'static str;
 
@@ -201,6 +248,26 @@ mod tests {
 
         let test = Network::from_type(NetworkType::Test, &[]);
         assert!(matches!(test.to_zebra(), Ok(ZebraNetwork::Testnet(_))));
+    }
+
+    #[test]
+    fn configured_heights_round_trip_to_local_network() {
+        use zebra_chain::parameters::testnet::ConfiguredActivationHeights;
+
+        let heights = ConfiguredActivationHeights {
+            canopy: Some(1),
+            nu5: Some(2),
+            ..Default::default()
+        };
+
+        let nuparams = regtest_nuparams_from_configured_heights(&heights);
+
+        let Network::RegTest(local) = Network::from_type(NetworkType::Regtest, &nuparams) else {
+            panic!("Regtest network_type must produce a RegTest network");
+        };
+
+        assert_eq!(local.canopy, Some(BlockHeight::from_u32(1)));
+        assert_eq!(local.nu5, Some(BlockHeight::from_u32(2)));
     }
 
     #[test]

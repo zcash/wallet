@@ -49,6 +49,116 @@ use rpc::ValidatorRpcClient;
 /// this below the captured tip are treated as finalized and served by height.
 const MAX_REORG_DEPTH: u32 = 1000;
 
+/// Connection details discovered from a co-located node's `getreadstateinfo`, used to open
+/// its state database read-only and follow its non-finalized chain tip.
+///
+/// Present only when no `[indexer.read_state_service]` config section was provided and
+/// Zallet bootstrapped its read-state configuration from the node (see
+/// [`resolve_bootstrap`]).
+pub(crate) struct BootstrapInfo {
+    /// The node's indexer gRPC listen address (its `indexer_listen_addr`).
+    grpc_address: String,
+    /// The node's live finalized-state database path, opened read-only as a secondary.
+    state_db_path: std::path::PathBuf,
+}
+
+/// Resolves Zallet's effective read-state configuration, bootstrapping from the co-located
+/// node when no `[indexer.read_state_service]` section is configured.
+///
+/// Returns the (possibly augmented) config to use for the rest of startup, together with
+/// the discovered [`BootstrapInfo`] when bootstrapping occurred. When the section is
+/// present, the config is returned unchanged and the bootstrap info is `None`.
+///
+/// When bootstrapping, this queries the node's `getreadstateinfo` JSON-RPC method for its
+/// state database path and indexer endpoint, cross-checks that the node's network kind
+/// matches Zallet's configured network, and — for an otherwise-unconfigured Regtest — fills
+/// in `consensus.regtest_nuparams` from the node's reported activation heights so the rebuilt
+/// network matches the node's.
+pub(crate) async fn resolve_bootstrap(
+    config: &ZalletConfig,
+) -> Result<(ZalletConfig, Option<BootstrapInfo>), Error> {
+    use zcash_protocol::consensus::NetworkType;
+
+    // An explicitly-configured read-state service needs no bootstrap.
+    if config.indexer.read_state_service.is_some() {
+        return Ok((config.clone(), None));
+    }
+
+    // Query the co-located node for everything we need to follow it.
+    let validator_rpc = validator_rpc_client(config)?;
+    let info = validator_rpc.get_read_state_info().await?;
+
+    let grpc_address = info.indexer_grpc_addr().clone().ok_or_else(|| {
+        ErrorKind::Init.context(
+            "the validator has no indexer endpoint configured (set indexer_listen_addr in zebrad)",
+        )
+    })?;
+
+    // Cross-check the node's network kind against Zallet's configuration: following a node
+    // on a different network would silently corrupt the wallet's view of the chain.
+    let node_kind = info.network().kind().as_str();
+    let node_network = match node_kind {
+        "Mainnet" => NetworkType::Main,
+        "Testnet" => NetworkType::Test,
+        "Regtest" => NetworkType::Regtest,
+        other => {
+            return Err(ErrorKind::Init
+                .context(format!(
+                    "the validator reported an unknown network kind '{other}'"
+                ))
+                .into());
+        }
+    };
+    if node_network != config.consensus.network {
+        return Err(ErrorKind::Init
+            .context(format!(
+                "network mismatch: the validator is on {node_kind}, but Zallet is configured \
+                 for {}; set consensus.network to match the node",
+                crate::network::kind::type_to_str(&config.consensus.network),
+            ))
+            .into());
+    }
+
+    // For an unconfigured Regtest, reconstruct the node's activation heights so the rebuilt
+    // network matches the node's. When heights are already configured, leave them as-is.
+    let mut owned = config.clone();
+    if config.consensus.network == NetworkType::Regtest
+        && config.consensus.regtest_nuparams.is_empty()
+    {
+        if let Some(heights) = info.network().regtest_activation_heights() {
+            owned.consensus.regtest_nuparams =
+                crate::network::regtest_nuparams_from_configured_heights(heights);
+        }
+    }
+
+    Ok((
+        owned,
+        Some(BootstrapInfo {
+            grpc_address,
+            state_db_path: info.state_db_path().into(),
+        }),
+    ))
+}
+
+/// Builds the validator JSON-RPC client from the `[indexer]` connection settings.
+fn validator_rpc_client(config: &ZalletConfig) -> Result<ValidatorRpcClient, Error> {
+    let validator_address = config
+        .indexer
+        .validator_address
+        .as_deref()
+        .ok_or_else(|| ErrorKind::Init.context("indexer.validator_address is required"))?;
+    ValidatorRpcClient::new(
+        validator_address,
+        config.indexer.validator_user.as_deref().unwrap_or_default(),
+        config
+            .indexer
+            .validator_password
+            .as_deref()
+            .unwrap_or_default(),
+        config.indexer.validator_cookie_path.as_deref(),
+    )
+}
+
 /// Aborts the wrapped syncer task when the last clone of the owning [`Arc`] is dropped.
 struct AbortOnDrop(tokio::task::JoinHandle<()>);
 
@@ -74,87 +184,118 @@ impl std::fmt::Debug for ZebraChain {
 }
 
 impl ZebraChain {
-    pub(crate) async fn new(config: &ZalletConfig) -> Result<(Self, TaskHandle), Error> {
+    pub(crate) async fn new(
+        config: &ZalletConfig,
+        bootstrap: Option<BootstrapInfo>,
+    ) -> Result<(Self, TaskHandle), Error> {
         let params = config.consensus.network();
-
-        let rss = config.indexer.read_state_service.as_ref().ok_or_else(|| {
-            ErrorKind::Init.context(
-                "the zebra-state backend requires an [indexer.read_state_service] config section",
-            )
-        })?;
 
         // Validator JSON-RPC client (mempool reads + transaction submission), using the
         // existing [indexer] validator connection settings.
-        let validator_address = config
-            .indexer
-            .validator_address
-            .as_deref()
-            .ok_or_else(|| ErrorKind::Init.context("indexer.validator_address is required"))?;
-        let validator_rpc = ValidatorRpcClient::new(
-            validator_address,
-            config.indexer.validator_user.as_deref().unwrap_or_default(),
-            config
-                .indexer
-                .validator_password
-                .as_deref()
-                .unwrap_or_default(),
-            config.indexer.validator_cookie_path.as_deref(),
-        )?;
+        let validator_rpc = validator_rpc_client(config)?;
+
+        let zebra_network = params.to_zebra().map_err(|e| ErrorKind::Init.context(e))?;
+
+        // The gRPC indexer address used by the non-finalized syncer, and the zebra-state
+        // config used to open the node's finalized-state database read-only.
+        //
+        // Two paths produce these:
+        // - bootstrap: discovered from the node's `getreadstateinfo`; the explicit
+        //   `read_only_db_path` points at the node's live database (which may be at a path
+        //   that cannot be derived from any `cache_dir`, e.g. an ephemeral node).
+        // - configured `[indexer.read_state_service]`: the operator supplied both the gRPC
+        //   address and the on-disk state cache directory.
+        let (grpc_address, zebra_config) = match &bootstrap {
+            Some(b) => {
+                let zebra_config = zebra_state::Config {
+                    // `cache_dir` is unused for read-only opens with an explicit
+                    // `read_only_db_path`; keep it pointed at Zallet's datadir as a
+                    // harmless placeholder rather than at the node's directory.
+                    cache_dir: config.datadir().to_path_buf(),
+                    ephemeral: false,
+                    delete_old_database: false,
+                    should_backup_non_finalized_state: false,
+                    // Open the node's live database directly. `state_db_path` is the full
+                    // `.../state/v<N>/<net>` path reported by the node, which is not
+                    // derivable from a `cache_dir`.
+                    read_only_db_path: Some(b.state_db_path.clone()),
+                    ..Default::default()
+                };
+                // The bootstrap path cannot use `state_database_format_version_on_disk` as a
+                // pre-check: that helper derives the database path from `cache_dir` and
+                // ignores `read_only_db_path`, so it would inspect the wrong location.
+                // Instead, rely on `init_read_state_with_syncer` below, whose read-only open
+                // honors `read_only_db_path` and surfaces a typed "database not found" error
+                // for the explicit path.
+                (b.grpc_address.clone(), zebra_config)
+            }
+            None => {
+                let rss = config.indexer.read_state_service.as_ref().ok_or_else(|| {
+                    ErrorKind::Init.context(
+                        "the zebra-state backend requires an [indexer.read_state_service] \
+                         config section (or a co-located node exposing getreadstateinfo)",
+                    )
+                })?;
+
+                let zebra_state_path =
+                    resolve_datadir_path(config.datadir(), &rss.zebra_state_path);
+                let zebra_config = zebra_state::Config {
+                    cache_dir: zebra_state_path,
+                    // The standalone read state service cannot use ephemeral state; it reads
+                    // zebrad's on-disk database in place.
+                    ephemeral: false,
+                    // We are a read-only secondary; never delete or back up zebrad's database.
+                    delete_old_database: false,
+                    should_backup_non_finalized_state: false,
+                    ..Default::default()
+                };
+
+                // Fail fast with an actionable error if there is no compatible zebra-state
+                // database at the configured path, rather than letting zebra-state silently
+                // create a new (empty) database there.
+                match zebra_state::state_database_format_version_on_disk(
+                    &zebra_config,
+                    &zebra_network,
+                )
+                .map_err(|e| {
+                    ErrorKind::Init.context(format!(
+                        "failed to read the zebra-state database version at '{}': {e}",
+                        zebra_config.cache_dir.display(),
+                    ))
+                })? {
+                    Some(_) => {}
+                    None => {
+                        return Err(ErrorKind::Init
+                            .context(format!(
+                                "no zebra-state v{} database found under '{}'; check that \
+                                 indexer.read_state_service.zebra_state_path points at \
+                                 zebrad's state cache directory, and that zebrad's on-disk \
+                                 state format matches Zallet's zebra-state version",
+                                zebra_state::state_database_format_version_in_code().major,
+                                zebra_config.cache_dir.display(),
+                            ))
+                            .into());
+                    }
+                }
+
+                (rss.grpc_address.clone(), zebra_config)
+            }
+        };
 
         // Resolve the gRPC indexer address used by the non-finalized syncer.
-        let grpc_addr = lookup_host(&rss.grpc_address)
+        let grpc_addr = lookup_host(&grpc_address)
             .await
             .map_err(|e| {
                 ErrorKind::Init.context(format!(
-                    "failed to resolve indexer.read_state_service.grpc_address '{}': {e}",
-                    rss.grpc_address,
+                    "failed to resolve indexer gRPC address '{grpc_address}': {e}",
                 ))
             })?
             .next()
             .ok_or_else(|| {
                 ErrorKind::Init.context(format!(
-                    "indexer.read_state_service.grpc_address '{}' resolved to no IP addresses",
-                    rss.grpc_address,
+                    "indexer gRPC address '{grpc_address}' resolved to no IP addresses",
                 ))
             })?;
-
-        let zebra_network = params.to_zebra().map_err(|e| ErrorKind::Init.context(e))?;
-        let zebra_state_path = resolve_datadir_path(config.datadir(), &rss.zebra_state_path);
-        let zebra_config = zebra_state::Config {
-            cache_dir: zebra_state_path,
-            // The standalone read state service cannot use ephemeral state; it reads
-            // zebrad's on-disk database in place.
-            ephemeral: false,
-            // We are a read-only secondary; never delete or back up zebrad's database.
-            delete_old_database: false,
-            should_backup_non_finalized_state: false,
-            ..Default::default()
-        };
-
-        // Fail fast with an actionable error if there is no compatible zebra-state
-        // database at the configured path, rather than letting zebra-state silently
-        // create a new (empty) database there.
-        match zebra_state::state_database_format_version_on_disk(&zebra_config, &zebra_network)
-            .map_err(|e| {
-                ErrorKind::Init.context(format!(
-                    "failed to read the zebra-state database version at '{}': {e}",
-                    zebra_config.cache_dir.display(),
-                ))
-            })? {
-            Some(_) => {}
-            None => {
-                return Err(ErrorKind::Init
-                    .context(format!(
-                        "no zebra-state v{} database found under '{}'; check that \
-                         indexer.read_state_service.zebra_state_path points at zebrad's \
-                         state cache directory, and that zebrad's on-disk state format \
-                         matches Zallet's zebra-state version",
-                        zebra_state::state_database_format_version_in_code().major,
-                        zebra_config.cache_dir.display(),
-                    ))
-                    .into());
-            }
-        }
 
         info!("Initializing read-only Zebra state service");
         let (read_state_service, _latest_tip, _tip_change, sync_task) =

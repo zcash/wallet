@@ -95,7 +95,6 @@ impl ValidatorRpcClient {
     /// `getreadstateinfo()` — bootstrap info for a co-located read-state follower:
     /// the node's live state DB path, indexer gRPC address, DB format version, and
     /// network identity (including Regtest activation heights).
-    #[allow(dead_code)]
     pub(crate) async fn get_read_state_info(&self) -> Result<GetReadStateInfo, Error> {
         self.client
             .request("getreadstateinfo", ArrayParams::new())

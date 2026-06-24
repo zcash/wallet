@@ -43,11 +43,21 @@ impl AsyncRunnable for StartCmd {
             warn_unused("keystore.require_backup");
         }
 
+        // When no `[indexer.read_state_service]` section is configured, bootstrap the
+        // read-state configuration from the co-located node. This may augment the config
+        // (e.g. filling in Regtest activation heights), so resolve it before opening the
+        // database and other components.
+        #[cfg(feature = "zebra-state")]
+        let (config, bootstrap) = crate::components::chain::resolve_bootstrap(&config).await?;
+
         let db = Database::open(&config).await?;
         #[cfg(zallet_build = "wallet")]
         let keystore = KeyStore::new(&config, db.clone())?;
 
         // Start monitoring the chain.
+        #[cfg(feature = "zebra-state")]
+        let (chain, chain_indexer_task_handle) = ChainBackend::new(&config, bootstrap).await?;
+        #[cfg(feature = "zaino")]
         let (chain, chain_indexer_task_handle) = ChainBackend::new(&config).await?;
 
         // Launch RPC server.
