@@ -438,10 +438,15 @@ jobs:
         run: |
           set -euo pipefail
           # cargo-deb writes under target/<triple>/debian/ when --target is used
-          # (not the bare target/debian/). Search both so this works whether or
-          # not a --target was passed.
-          DEB="$(find "target/${{ matrix.target }}/debian" target/debian -maxdepth 1 -name 'zallet_*.deb' 2>/dev/null | head -1)"
-          if [ -z "$DEB" ]; then echo "no .deb produced by cargo-deb" >&2; find target -name '*.deb' 2>/dev/null; exit 1; fi
+          # (not the bare target/debian/). Search the whole target tree for the
+          # .deb. NOTE: `find` over a path that doesn't exist (e.g. target/debian
+          # when --target was used) exits non-zero, and `set -euo pipefail` would
+          # then abort on the command substitution BEFORE we inspect $DEB — so
+          # search only `target` (always exists) and prune for the .deb. `|| true`
+          # guards the pipeline regardless.
+          DEB="$(find target -type f -name 'zallet_*.deb' 2>/dev/null | head -1 || true)"
+          if [ -z "$DEB" ]; then echo "no .deb produced by cargo-deb" >&2; find target -name '*.deb' 2>/dev/null || true; exit 1; fi
+          echo "found deb: $DEB"
           mv "$DEB" "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
 
       - name: Smoke test Debian package
