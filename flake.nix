@@ -59,12 +59,20 @@
           # those generated assets into $out/share/zallet — the deb matrix +
           # the StageX export layout expect them there.
           postInstall = ''
-            rel="target/${muslTarget}/release"
+            # build.rs writes completions/ + manpages/ into the cargo target dir
+            # (derived from OUT_DIR's 4th ancestor → <target>/<triple>/release).
+            # crane's CARGO_TARGET_DIR isn't necessarily ./target, so SEARCH for
+            # the generated dirs rather than assuming a fixed path — a fixed
+            # `target/<triple>/release` silently missed them under crane, which
+            # left the .deb step globbing for completions/zallet.bash and failing.
             mkdir -p "$out/share/zallet"
-            for d in completions manpages; do
-              if [ -d "$rel/$d" ]; then cp -r "$rel/$d" "$out/share/zallet/"; fi
-            done
-            [ -f "$rel/debian-copyright" ] && cp "$rel/debian-copyright" "$out/share/zallet/" || true
+            comp="$(find . -type d -name completions -path '*release*' 2>/dev/null | head -1)"
+            mans="$(find . -type d -name manpages    -path '*release*' 2>/dev/null | head -1)"
+            if [ -n "$comp" ]; then cp -r "$comp" "$out/share/zallet/completions"; else
+              echo "postInstall: completions/ not found under target tree" >&2; exit 1; fi
+            if [ -n "$mans" ]; then cp -r "$mans" "$out/share/zallet/manpages"; fi
+            cp="$(find . -type f -name debian-copyright -path '*release*' 2>/dev/null | head -1)"
+            [ -n "$cp" ] && cp "$cp" "$out/share/zallet/debian-copyright" || true
           '';
         }
         # Per-target CC/CXX for the *-sys crates' cc-rs, keyed by the active

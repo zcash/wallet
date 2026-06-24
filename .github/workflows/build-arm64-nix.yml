@@ -86,22 +86,30 @@ jobs:
 
       - name: Stage the runtime artifact (export layout, linux-arm64)
         run: |
-          # Mirror the Dockerfile `export` stage layout the deb matrix expects:
-          #   build/runtime/linux-arm64/zallet
-          #   build/runtime/linux-arm64/usr/local/share/zallet/{completions,manpages,debian-copyright}
+          # Mirror the Dockerfile.stagex `export` stage layout EXACTLY, because
+          # the deb job's "Seed cargo target tree" step copies
+          #   usr/local/share/zallet/{completions,manpages}/  ->
+          #   target/<triple>/release/{completions,manpages}/
+          # and `cargo deb` then globs completions/zallet.bash etc. The flake's
+          # postInstall already copied the build.rs-generated completions/ and
+          # manpages/ DIRECTORIES into result/share/zallet — copy those verbatim
+          # (do NOT regenerate via a runtime subcommand; completions come from
+          # build.rs at compile time, not a `zallet completions` CLI call).
           SUFFIX="linux-arm64"
           DEST="build/runtime/${SUFFIX}"
-          mkdir -p "${DEST}/usr/local/share/zallet"
+          SHARE="${DEST}/usr/local/share/zallet"
+          mkdir -p "${SHARE}"
           install -m0755 ./result/bin/zallet "${DEST}/zallet"
-          # Regenerate completions + manpages from the binary (no glibc needed —
-          # static musl runs on the runner), matching the amd64 share-tree.
-          for sh in bash zsh fish; do
-            ./"${DEST}/zallet" completions --shell "$sh" \
-              > "${DEST}/usr/local/share/zallet/zallet.${sh}" 2>/dev/null || true
-          done
-          ./"${DEST}/zallet" manpages "${DEST}/usr/local/share/zallet/man" 2>/dev/null || true
-          cp -f ./zallet/contrib/debian-copyright "${DEST}/usr/local/share/zallet/debian-copyright" 2>/dev/null || true
-          echo "staged:"; find "${DEST}" -maxdepth 3 -type f | head -20
+          # result/share/zallet holds {completions,manpages,debian-copyright}
+          if [ -d ./result/share/zallet ]; then
+            cp -aL ./result/share/zallet/. "${SHARE}/"
+          fi
+          # Fallback for debian-copyright if the build didn't emit it into share.
+          [ -f "${SHARE}/debian-copyright" ] || cp -f ./zallet/contrib/debian-copyright "${SHARE}/debian-copyright" 2>/dev/null || true
+          echo "staged tree:"; find "${DEST}" -maxdepth 4 -type f | head -30
+          # Hard fail early if the deb-critical completions dir is missing, rather
+          # than letting `cargo deb` fail much later with a glob-no-match.
+          test -d "${SHARE}/completions" || { echo "ERROR: completions/ dir missing from Nix output" >&2; ls -R ./result/share 2>&1 | head; exit 1; }
 
       - name: Push arm64 closure to the binary cache (keep it warm)
         # Best-effort: if cache write creds aren't present (e.g. on a fork PR), skip.
