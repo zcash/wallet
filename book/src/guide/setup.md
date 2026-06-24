@@ -32,6 +32,11 @@ as_of_version = "0.0.0"
 validator_user = ".."
 validator_password = ".."
 
+# Required by the default backend; see "Reading chain state from a local zebrad".
+[indexer.read_state_service]
+grpc_address = "127.0.0.1:8230"
+zebra_state_path = "/path/to/zebrad/state/cache"
+
 [keystore]
 
 [note_management]
@@ -47,6 +52,57 @@ section are:
 - `validator_cookie_auth = true` and `validator_cookie_path` (if using cookie
   auth)
 - `validator_user` and `validator_password` (if using basic auth)
+
+### Reading chain state from a local zebrad
+
+Zallet can read finalized chain state directly from a co-located `zebrad`'s state
+database (opened read-only), rather than fetching every block over JSON-RPC. This is
+enabled by the `[indexer.read_state_service]` section.
+
+The default `zebra-state` backend **requires** this section; without one, `zallet
+start` fails with:
+
+```
+the zebra-state backend requires an [indexer.read_state_service] config section
+```
+
+The `zaino` backend uses the section when it is present, and otherwise fetches all
+chain data over JSON-RPC.
+
+This relies on zebrad's indexer gRPC interface, which is **not** available
+in a default `zebrad` build. You must compile `zebrad` with the `indexer` feature
+flag and set an `indexer_listen_addr` in its `[rpc]` config section:
+
+```toml
+# zebrad config (e.g. ~/.config/zebra/zebrad.toml)
+[rpc]
+# Any free address/port; must match Zallet's grpc_address below.
+indexer_listen_addr = '127.0.0.1:8230'
+```
+
+Then configure the matching `[indexer.read_state_service]` section in Zallet's
+config:
+
+```toml
+[indexer.read_state_service]
+# Must match zebrad's [rpc] indexer_listen_addr.
+grpc_address = "127.0.0.1:8230"
+# zebrad's existing state cache directory (the directory containing its on-disk
+# state database). Relative paths are resolved against Zallet's datadir.
+zebra_state_path = "/home/<username>/.cache/zebra"
+```
+
+Notes:
+- The JSON-RPC `[indexer]` settings above are still required: they are used for the
+  mempool, transaction submission, and non-best-chain block reads.
+- `zebrad` must be running on the **same machine** (Zallet reads its state files
+  directly), built with the `indexer` feature, and configured with an
+  `indexer_listen_addr`.
+- zebrad's on-disk state format must match Zallet's `zebra-state` version; a
+  mismatch fails fast with a "no zebra-state v… database found" error rather than
+  silently creating an empty database.
+- Reading state this way does not support regtest; use the JSON-RPC `zaino` backend
+  (without this section) for regtest.
 
 If you have an existing `zcash.conf`, you can use it as a starting point:
 ```
