@@ -436,8 +436,13 @@ jobs:
 
       - name: Rename package to not collide across the matrix
         run: |
-          mv target/debian/zallet_*.deb ./
-          mv zallet_*.deb "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
+          set -euo pipefail
+          # cargo-deb writes under target/<triple>/debian/ when --target is used
+          # (not the bare target/debian/). Search both so this works whether or
+          # not a --target was passed.
+          DEB="$(find "target/${{ matrix.target }}/debian" target/debian -maxdepth 1 -name 'zallet_*.deb' 2>/dev/null | head -1)"
+          if [ -z "$DEB" ]; then echo "no .deb produced by cargo-deb" >&2; find target -name '*.deb' 2>/dev/null; exit 1; fi
+          mv "$DEB" "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
 
       - name: Smoke test Debian package
         run: |
