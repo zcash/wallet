@@ -274,6 +274,16 @@ jobs:
           # If there is no usr/local in the artifact, this won't fail because of '|| true'
           rsync -a "${ARTIFACT_ROOT}/usr/local/" "build/${PLATFORM_KEY}/usr/local/" 2>/dev/null || true
 
+      # The deb matrix runs on amd64 runners, but the smoke test execs the
+      # per-arch binary inside a `--platform ${{ matrix.platform }}` container.
+      # For the arm64 leg that needs QEMU binfmt registered, or the exec fails
+      # with "exec /usr/local/bin/zallet: exec format error". Registering QEMU
+      # is a no-op for the native amd64 leg.
+      - name: Set up QEMU (emulate the non-native arch for the smoke test)
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          platforms: ${{ matrix.platform }}
+
       - name: Smoke test exported binary
         run: |
           set -euo pipefail
