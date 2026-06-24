@@ -93,8 +93,7 @@ impl Network {
 
     /// Converts this network into the corresponding `zebra-chain` network.
     ///
-    /// Returns an error for regtest, which the read-state-service backend does not
-    /// support.
+    /// Converts this network into the corresponding `zebra-chain` network.
     #[cfg(feature = "zebra-state")]
     pub(crate) fn to_zebra(self) -> Result<zebra_chain::parameters::Network, &'static str> {
         use zebra_chain::parameters::Network as ZebraNetwork;
@@ -103,8 +102,29 @@ impl Network {
             Network::Consensus(consensus::Network::TestNetwork) => {
                 Ok(ZebraNetwork::new_default_testnet())
             }
-            Network::RegTest(_) => {
-                Err("the read-state-service indexer backend does not support regtest")
+            Network::RegTest(local) => {
+                use zebra_chain::parameters::testnet::{
+                    ConfiguredActivationHeights, RegtestParameters,
+                };
+
+                let h = |height: Option<BlockHeight>| height.map(u32::from);
+
+                let heights = ConfiguredActivationHeights {
+                    overwinter: h(local.overwinter),
+                    sapling: h(local.sapling),
+                    blossom: h(local.blossom),
+                    heartwood: h(local.heartwood),
+                    canopy: h(local.canopy),
+                    nu5: h(local.nu5),
+                    nu6: h(local.nu6),
+                    nu6_1: h(local.nu6_1),
+                    nu6_2: h(local.nu6_2),
+                    #[cfg(zcash_unstable = "nu7")]
+                    nu7: h(local.nu7),
+                    ..Default::default()
+                };
+
+                Ok(ZebraNetwork::new_regtest(RegtestParameters::from(heights)))
             }
         }
     }
@@ -184,9 +204,20 @@ mod tests {
     }
 
     #[test]
-    fn to_zebra_rejects_regtest() {
-        let regtest = Network::from_type(NetworkType::Regtest, &[]);
-        assert!(regtest.to_zebra().is_err());
+    fn regtest_to_zebra_builds_a_regtest_network() {
+        // Default (no nuparams) Regtest.
+        let net = Network::from_type(NetworkType::Regtest, &[])
+            .to_zebra()
+            .unwrap();
+        assert!(net.is_regtest());
+
+        // With a configured NU5 height, the rebuilt zebra network reports it.
+        let nuparams: Vec<RegTestNuParam> =
+            vec![RegTestNuParam::try_from("c2d6d0b4:100".to_string()).unwrap()]; // NU5 @ 100
+        let net = Network::from_type(NetworkType::Regtest, &nuparams)
+            .to_zebra()
+            .unwrap();
+        assert!(net.is_regtest());
     }
 }
 
