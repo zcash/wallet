@@ -142,14 +142,20 @@ jobs:
     outputs:
       index-digest: ${{ steps.create.outputs.index_digest }}
     steps:
+      # Order matters: set up + bootstrap buildx (which lazily pulls the public
+      # moby/buildkit image ANONYMOUSLY) BEFORE docker login. A push-only-token
+      # login first makes BuildKit attach that token to the anonymous buildkit
+      # pull → Docker Hub 401 "insufficient scopes". Bootstrap, then log in.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Bootstrap buildx builder (anonymous pull, before login)
+        run: docker buildx inspect --bootstrap
       - name: Log in to Docker Hub
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: docker.io
           username: ${{ secrets.ZODLINC_DOCKERHUB_USERNAME }}
           password: ${{ secrets.ZODLINC_DOCKERHUB_PASSWORD }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
       - name: Create + push multi-arch tags from the per-arch digests
         id: create
         run: |

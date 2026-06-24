@@ -214,7 +214,12 @@ jobs:
           wget -qO - https://apt.z.cash/zcash.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import
 
       - name: Install cargo-deb
-        run: cargo install cargo-deb
+        # Pin cargo-deb: the floating latest (3.7.0) bumped its MSRV past the
+        # runner's stable toolchain and fails to compile with
+        # "error[E0658]: `let` expressions in this position are unstable".
+        # 2.x has a stable MSRV and the same `--no-build` interface we use.
+        # --locked builds against cargo-deb's own lockfile (reproducible deps).
+        run: cargo install cargo-deb --version "^2.10" --locked
 
       - name: Download exported binaries artifact
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
