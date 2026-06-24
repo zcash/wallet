@@ -209,7 +209,7 @@ default = ["zebra-state"]
 zaino = ["dep:zaino-common", "dep:zaino-fetch", "dep:zaino-state"]
 
 ## zebra-state + Zebra-RPC chain-data backend (default). Mutually exclusive with `zaino`.
-## Requires a co-located zebrad built with the `indexer` feature; no regtest support.
+## Requires a co-located zebrad built with the `indexer` feature. Supports Regtest.
 zebra-state = [
   "dep:zebra-chain",
   "dep:zebra-rpc",

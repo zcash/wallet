@@ -254,6 +254,10 @@ pub struct ConsensusSection {
     /// The parameters for regtest mode.
     ///
     /// Ignored if `network` is not `NetworkType::Regtest`.
+    ///
+    /// When using the `zebra-state` backend, this may be left empty: if unset on
+    /// Regtest, Zallet obtains the activation heights from the co-located node via
+    /// its `getreadstateinfo` JSON-RPC method.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub regtest_nuparams: Vec<RegTestNuParam>,
 }
@@ -493,6 +497,10 @@ pub struct IndexerSection {
     /// tip via zebrad's gRPC indexer interface. The JSON-RPC settings above are still
     /// required: they are used for mempool access, transaction submission, and any
     /// non-best-chain block reads.
+    ///
+    /// This section is **optional**. When omitted, Zallet bootstraps the gRPC address
+    /// and state database path by calling the co-located node's `getreadstateinfo`
+    /// JSON-RPC method at startup.
     pub read_state_service: Option<ReadStateServiceSection>,
 }
 
@@ -510,6 +518,10 @@ impl IndexerSection {
 }
 
 /// Settings for the read-state-service indexer backend.
+///
+/// This section is **optional**. When omitted, Zallet bootstraps the gRPC address
+/// and state database path automatically by calling the co-located node's
+/// `getreadstateinfo` JSON-RPC method at startup.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
 #[serde(deny_unknown_fields)]
 pub struct ReadStateServiceSection {

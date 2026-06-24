@@ -10,6 +10,14 @@ be considered breaking changes.
 
 ### Added
 
+- The `zebra-state` chain backend can now bootstrap from a co-located node: when
+  `[indexer.read_state_service]` is omitted, Zallet discovers the node's indexer
+  gRPC address and state database path via the node's `getreadstateinfo` JSON-RPC
+  method and follows it read-only — including against an ephemeral or Regtest node.
+- The `zebra-state` backend now supports Regtest. `[indexer.read_state_service]`
+  and `consensus.regtest_nuparams` are now optional when using this backend; on
+  Regtest, activation heights are obtained from the node via `getreadstateinfo`
+  when not explicitly configured.
 - `zallet generate-encryption-identity` command, which generates the wallet's age
   encryption identity using the `age` library that Zallet already embeds. This
   removes the need for the external `rage` / `rage-keygen` tool when setting up a
