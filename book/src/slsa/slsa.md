@@ -38,6 +38,51 @@ Zallet’s release automation is designed to satisfy the latest [SLSA v1.0](http
 - **Reproducibility (arm64):** the Nix build is rebuild-reproducible: `nix build .#zallet` from the pinned `flake.lock` (same `nixpkgs` rev + `crane` + `rustc`) produces a byte-identical `aarch64-unknown-linux-musl` binary, verifiable by building twice and comparing with `diffoscope`. It is **not** bootstrap-grade — Nix's toolchain derives from a pre-built binary bootstrap seed — so arm64 closes "did the published binary come from this source" but not the deeper trusting-trust question that StageX's amd64 path does. Note also that Nix gives determinism *by sandbox enforcement*, not by proof: an impure `build.rs` can still break it (e.g. `zaino-state`'s `build.rs` shells out to `git`), which is why the arm64 result is **verified** by a build-twice diff rather than assumed.
 - **GPG signing key:** standalone binaries, `.deb` packages, and the APT `Release.gpg` are signed **only** with the ZODL release key (`sysadmin@zodl.com`, fetched from AWS Secrets Manager `/release/gpg-signing-key`). This is intentional: it does **not** dual-sign with the legacy ECC key (`sysadmin@z.cash`). The older `apt.z.cash` pipeline dual-signed (ECC + ZODL) during the key-transition window so users with either key in their keyring could verify; the ECC key's planned revocation is mid-2026, after which ZODL-only is the steady state. Users verify against the ZODL public key published at `https://apt.z.cash/zcash.asc`.
 
+## Building Zallet yourself
+
+The supply-chain machinery above governs **the artifacts we publish** — it does not constrain how *you* build Zallet. There are three tiers, ordered by assurance vs. convenience; pick whichever fits your needs. None of them is a prerequisite for the others.
+
+| Tier | Command | Arch | Output | Guarantee |
+| --- | --- | --- | --- | --- |
+| **1. Cargo** (developer) | `cargo build --release --bin zallet --features rpc-cli,zcashd-import` | host arch | local binary | none beyond Cargo's lockfile |
+| **2. Docker** (convenience) | `docker buildx build --platform linux/amd64,linux/arm64 -t zallet .` | amd64 + arm64 | container image | standard multi-arch image |
+| **3a. Nix** (reproducible) | `nix build .#zallet` | amd64 **or** arm64 (native) | static-musl binary | bit-for-bit reproducible |
+| **3b. StageX** (bootstrap-grade) | the `Dockerfile.stagex` build the CI runs | amd64 | static-musl image | full-source-bootstrapped + reproducible |
+
+### Tier 1 — plain Cargo
+
+Nothing special: `cargo build`/`cargo install` work as in any Rust project. This is the right path for local development and is unaffected by any of the release tooling.
+
+### Tier 2 — the standard `Dockerfile` (multi-arch, "build it yourself")
+
+The repository's default `Dockerfile` is a plain, multi-stage build on official `rust` + `debian-slim` images. It honours Docker's `$TARGETARCH`, so a single command builds **both** architectures (including on Apple Silicon):
+
+```bash
+docker build -t zallet .                                   # host arch
+docker buildx build --platform linux/amd64,linux/arm64 .   # both
+```
+
+This image is for convenience and accessibility. It is **not** intended to reproduce the published digest bit-for-bit (it uses the standard `debian`/glibc toolchain, not the static-musl bootstrap). Use tier 3 if you want to reproduce a published release artifact.
+
+### Tier 3a — Nix (reproducible, both arches)
+
+The `flake.nix` exposes a `zallet` package for both `x86_64-linux` and `aarch64-linux`, each producing a **static-musl, bit-for-bit reproducible** binary on a native host of that architecture:
+
+```bash
+# Install Nix (Determinate installer), then:
+nix build github:zcash/wallet#zallet      # builds for the host arch
+./result/bin/zallet --version
+
+# Verify reproducibility (rebuilds and compares):
+nix build github:zcash/wallet#zallet --rebuild
+```
+
+For **arm64**, this is the easiest reproducible path by far — on an arm64 machine it is just "install Nix + `nix build`", with no Docker, no containerd image store, and no pinned base images. (Producing an arm64 binary *from* an x86 host requires cross-compilation or emulation, which is no longer a two-command flow; the simple path assumes you are on the target architecture.)
+
+### Tier 3b — StageX (`Dockerfile.stagex`, bootstrap-grade, amd64)
+
+`Dockerfile.stagex` is the full-source-bootstrapped amd64 build the release pipeline uses to publish the amd64 image. It is the highest-assurance tier (it additionally addresses trusting-trust) and requires Docker 26+ with the containerd image store enabled. See the architecture overview above for why amd64 uses StageX and arm64 uses Nix.
+
 ## Verification playbook
 
 The following sections cover every command required to validate a tagged release end-to-end (similar to [Argo CD’s signed release process](https://argo-cd.readthedocs.io/en/stable/operator-manual/signed-release-assets/), but tailored to the Zallet workflows and the SLSA v1.0 predicate).

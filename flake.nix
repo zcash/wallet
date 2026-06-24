@@ -1,5 +1,5 @@
 {
-  description = "Zallet — reproducible static aarch64-musl build (arm64 release path)";
+  description = "Zallet — reproducible static-musl builds (amd64 + arm64)";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     crane.url = "github:ipetkov/crane/v0.20.3";
@@ -13,6 +13,13 @@
         muslTarget =
           if system == "aarch64-linux" then "aarch64-unknown-linux-musl"
           else "x86_64-unknown-linux-musl";
+        # cargo reads the per-target env var named after the UPPERCASED triple
+        # with -/. → _ (e.g. CC_x86_64_unknown_linux_musl). Derive it from the
+        # active target so BOTH arches get the musl-clang toolchain — hardcoding
+        # the aarch64 name left x86_64-on-x86 builds without a CC for the *-sys
+        # crates.
+        targetEnvSuffix =
+          builtins.replaceStrings [ "-" "." ] [ "_" "_" ] muslTarget;
         rustToolchain = pkgs.rust-bin.stable."1.85.1".default.override {
           targets = [ muslTarget ];
         };
@@ -34,7 +41,7 @@
         #     static-musl link.
         # This mirrors how StageX's pre-integrated clang+libc++ pallet works on amd64.
         clangCC = pkgs.pkgsMusl.clangStdenv.cc;
-        zallet = craneLib.buildPackage {
+        zallet = craneLib.buildPackage ({
           inherit src;
           strictDeps = true;
           cargoExtraArgs = "--locked --bin zallet --features rpc-cli,zcashd-import";
@@ -42,8 +49,6 @@
           # Static musl; use the musl clang as the linker so libc++ + crt resolve
           # coherently (a generic cc-wrapper mis-targets gnu vs musl here).
           CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static -C codegen-units=1 -C linker=${clangCC}/bin/cc -C link-arg=-static";
-          CC_aarch64_unknown_linux_musl = "${clangCC}/bin/cc";
-          CXX_aarch64_unknown_linux_musl = "${clangCC}/bin/c++";
           nativeBuildInputs = with pkgs; [ protobuf llvmPackages.clang pkg-config git ];
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
           PROTOC = "${pkgs.protobuf}/bin/protoc";
@@ -61,6 +66,12 @@
             done
             [ -f "$rel/debian-copyright" ] && cp "$rel/debian-copyright" "$out/share/zallet/" || true
           '';
-        };
+        }
+        # Per-target CC/CXX for the *-sys crates' cc-rs, keyed by the active
+        # triple (CC_x86_64_unknown_linux_musl on amd64, CC_aarch64_... on arm64).
+        // {
+          "CC_${targetEnvSuffix}" = "${clangCC}/bin/cc";
+          "CXX_${targetEnvSuffix}" = "${clangCC}/bin/c++";
+        });
       in { packages.default = zallet; packages.zallet = zallet; });
 }
