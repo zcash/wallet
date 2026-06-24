@@ -625,42 +625,60 @@ jobs:
           echo "${APT_DISTRIBUTIONS}" | tr ',' '\n' | sed '/^$/d' > /tmp/dists.txt
           echo "dists:"; cat /tmp/dists.txt
       - name: Publish merged multi-arch APT index
+        env:
+          APT_BUCKET: ${{ secrets.AWS_APT_BUCKET }}
         run: |
           set -euo pipefail
           key=$(gpg --list-secret-keys --keyid-format=long sysadmin@zodl.com | head -n 2 | grep -v sec | tr -d ' ')
-          # aptly mirror update VERIFIES the existing apt.z.cash Release.gpg, which
-          # is signed by the ZODL release key. aptly checks against its own
-          # `trustedkeys.gpg`, NOT our gpg keyring — without importing the ZODL
-          # PUBLIC key there, the mirror fails with "Can't check signature: No
-          # public key". Pull the published keyring (contains the ZODL pubkey,
-          # and historically the ECC one too) and import it into trustedkeys.
-          curl -fsSL https://apt.z.cash/zcash.asc -o /tmp/zcash.asc
-          gpg --no-default-keyring --keyring trustedkeys.gpg --import /tmp/zcash.asc
-          # All arch .debs collected in one place — aptly puts each into the pool
-          # and the index records both amd64 + arm64 Packages entries.
+
+          # We REGENERATE the index from the .deb pool instead of `aptly mirror`-ing
+          # the live repo. Two reasons:
+          #   1. aptly's strict parser rejects the existing apt.z.cash Packages with
+          #      "malformed stanza syntax" — some historical zcashd entries have
+          #      Description continuation lines that don't start with a space (apt &
+          #      dpkg tolerate this; aptly does not). Mirroring is therefore fragile.
+          #   2. Regenerating from the .deb files reads each package's control data
+          #      straight from the archive (always well-formed), producing a clean,
+          #      correct Packages — and incidentally repairs those malformed stanzas.
+          # We pull the existing pool from S3 and re-add every package so NOTHING is
+          # dropped; only the index is rebuilt. Per-suite bucketing (below) keeps
+          # stretch/buster packages out of the bullseye/bookworm indices.
+          mkdir -p poolcache
+          aws s3 sync "s3://${APT_BUCKET}/pool/" poolcache/ --no-progress --exclude '*' --include '*.deb'
+          echo "pool debs pulled: $(find poolcache -name '*.deb' | wc -l)"
+
           mapfile -t dists < /tmp/dists.txt
           for dist in "${dists[@]}"; do
-            mirror="zcash-${dist}"; repo="zcash_local_${dist}"
-            snap_m="snap_mirror_${dist}"; snap_l="snap_local_${dist}"; snap_c="snap_combined_${dist}"
-            aptly mirror drop -force "$mirror" >/dev/null 2>&1 || true
-            aptly mirror create "$mirror" https://apt.z.cash "$dist"
-            aptly mirror update "$mirror"
+            repo="zcash_${dist}"; snap="snap_${dist}"
             aptly repo drop -force "$repo" >/dev/null 2>&1 || true
             aptly repo create --distribution "$dist" --component main "$repo"
-            # add EVERY arch's .deb (amd64 + arm64) into the one repo
-            find debs -name 'zallet_*.deb' -exec aptly repo add "$repo" {} +
-            for s in "$snap_m" "$snap_l" "$snap_c"; do aptly snapshot drop -force "$s" >/dev/null 2>&1 || true; done
-            aptly snapshot create "$snap_m" from mirror "$mirror"
-            aptly snapshot create "$snap_l" from repo "$repo"
-            aptly snapshot merge "$snap_c" "$snap_m" "$snap_l"
-            # ONE publish with BOTH architectures → consistent dists/ index.
-            aptly publish snapshot -architectures=amd64,arm64 -gpg-key="$key" "$snap_c"
+
+            # Existing pool packages for THIS suite only. Suite is encoded in the
+            # filename (e.g. zcash-6.11.0-amd64-bookworm.deb, zallet_..._bullseye.deb),
+            # matched on a -/_ boundary so 'bullseye' never matches 'bookworm'.
+            while IFS= read -r deb; do
+              aptly repo add -force-replace "$repo" "$deb" || echo "skip (already present?): $deb"
+            done < <(find poolcache -name "*[-_]${dist}.deb")
+
+            # Our NEW zallet .debs (amd64 + arm64) carry no suite suffix — they're
+            # static-musl and valid on every suite, so add them to each dist.
+            find debs -name 'zallet_*.deb' -exec aptly repo add -force-replace "$repo" {} +
+
+            aptly snapshot drop -force "$snap" >/dev/null 2>&1 || true
+            aptly snapshot create "$snap" from repo "$repo"
+            # ONE publish per suite with BOTH architectures → consistent dists/ index.
+            aptly publish snapshot -architectures=amd64,arm64 -gpg-key="$key" -distribution="$dist" "$snap"
           done
       - name: Sync merged index + pool to apt.z.cash (single writer)
         run: |
           set -euo pipefail
-          aws s3 sync "$HOME/.aptly/public/pool/main/z/zallet/" "s3://${{ secrets.AWS_APT_BUCKET }}/pool/main/z/zallet/"
-          aws s3 sync "$HOME/.aptly/public/dists/" "s3://${{ secrets.AWS_APT_BUCKET }}/dists/"
+          # Sync the FULL published pool (aptly lays out every package the index
+          # references — zcash + zallet — under pool/main/z/...). The regenerated
+          # dists/ index points at these exact pool paths, so push the whole pool
+          # tree to keep index↔pool consistent. No --delete: stretch/buster dists
+          # we didn't republish stay untouched in S3.
+          aws s3 sync "$HOME/.aptly/public/pool/" "s3://${{ secrets.AWS_APT_BUCKET }}/pool/" --no-progress
+          aws s3 sync "$HOME/.aptly/public/dists/" "s3://${{ secrets.AWS_APT_BUCKET }}/dists/" --no-progress
 
   publish:
     name: Create/Update GitHub Release (aggregate)
