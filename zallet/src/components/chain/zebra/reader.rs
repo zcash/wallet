@@ -216,7 +216,11 @@ impl ChainReader for ReadStateChainReader {
             ReadResponse::Transaction(Some(mined)) => Ok(Some(MinedTxInfo {
                 raw: convert::tx_to_bytes(&mined.tx)?,
                 height: convert::height(mined.height),
-                block_time: mined.block_time.timestamp() as u32,
+                block_time: mined
+                    .block_time
+                    .timestamp()
+                    .try_into()
+                    .map_err(ChainError::invalid_data)?,
             })),
             ReadResponse::Transaction(None) => Ok(None),
             other => unreachable!("unexpected response to Transaction: {other:?}"),
