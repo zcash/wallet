@@ -420,6 +420,18 @@ jobs:
 
       - name: Build package (cargo deb --no-build)
         run: |
+          set -euo pipefail
+          # The deb matrix runs on amd64 runners. cargo-deb honours the crate's
+          # `separate-debug-symbols = true`, which shells out to `strip`. The host
+          # (amd64) `strip` can't process the cross-arch (arm64) ELF and fails with
+          # "Unable to strip binary ... strip: exit status: 1". Install the
+          # target's binutils and point cargo-deb's strip at it via $STRIP so the
+          # debug-symbol split works for BOTH arches (no behaviour change vs the
+          # amd64-only pipeline).
+          case "${{ matrix.target }}" in
+            aarch64-*) sudo apt-get update -qq && sudo apt-get install -y -qq binutils-aarch64-linux-gnu
+                       export STRIP=aarch64-linux-gnu-strip OBJCOPY=aarch64-linux-gnu-objcopy ;;
+          esac
           cargo deb --no-build --target ${{ matrix.target }}
 
       - name: Rename package to not collide across the matrix
