@@ -6183,7 +6183,7 @@ dependencies = [
 [[package]]
 name = "tower-batch-control"
 version = "1.0.1"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "futures",
  "futures-core",
@@ -6211,7 +6211,7 @@ dependencies = [
 [[package]]
 name = "tower-fallback"
 version = "0.2.41"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "futures-core",
  "pin-project",
@@ -7748,7 +7748,7 @@ dependencies = [
 [[package]]
 name = "zebra-chain"
 version = "10.1.0"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "bech32 0.11.0",
  "bitflags 2.10.0",
@@ -7854,7 +7854,7 @@ dependencies = [
 [[package]]
 name = "zebra-consensus"
 version = "9.0.1"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -7878,8 +7878,8 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tower 0.4.13",
- "tower-batch-control 1.0.1 (git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0)",
- "tower-fallback 0.2.41 (git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0)",
+ "tower-batch-control 1.0.1 (git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b)",
+ "tower-fallback 0.2.41 (git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b)",
  "tracing",
  "tracing-futures",
  "zcash_primitives",
@@ -7934,7 +7934,7 @@ dependencies = [
 [[package]]
 name = "zebra-network"
 version = "9.0.0"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "bitflags 2.10.0",
  "byteorder",
@@ -7987,7 +7987,7 @@ dependencies = [
 [[package]]
 name = "zebra-node-services"
 version = "8.0.0"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "color-eyre",
  "jsonrpsee-types",
@@ -8062,7 +8062,7 @@ dependencies = [
 [[package]]
 name = "zebra-rpc"
 version = "10.0.1"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -8135,7 +8135,7 @@ dependencies = [
 [[package]]
 name = "zebra-script"
 version = "9.0.0"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "libzcash_script",
  "rand 0.8.5",
@@ -8186,7 +8186,7 @@ dependencies = [
 [[package]]
 name = "zebra-state"
 version = "9.0.1"
-source = "git+https://github.com/nuttycom/zebra.git?rev=e847d886e2e38326c521a51800ac7bd40c2516d0#e847d886e2e38326c521a51800ac7bd40c2516d0"
+source = "git+https://github.com/nuttycom/zebra.git?rev=4a6bb46e137a314bbd185e9436dd2f98b835f54b#4a6bb46e137a314bbd185e9436dd2f98b835f54b"
 dependencies = [
  "bincode",
  "chrono",
