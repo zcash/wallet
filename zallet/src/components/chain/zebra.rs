@@ -12,8 +12,7 @@ use std::time::Duration;
 
 use futures::{StreamExt as _, stream::BoxStream};
 use incrementalmerkletree::frontier::CommitmentTree;
-use jsonrpsee::tracing::{info, warn};
-use tokio::net::lookup_host;
+use jsonrpsee::tracing::warn;
 use zcash_client_backend::data_api::{
     TransactionStatus,
     chain::{ChainState, CommitmentTreeRoot},
@@ -27,12 +26,11 @@ use zcash_protocol::{
     TxId,
     consensus::{BlockHeight, BranchId},
 };
-use zebra_rpc::sync::init_read_state_with_syncer;
 use zebra_state::ReadStateService;
 
+use super::read_state::{AbortOnDrop, init_read_state_service};
 use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView};
 use crate::{
-    commands::resolve_datadir_path,
     components::TaskHandle,
     config::ZalletConfig,
     error::{Error, ErrorKind},
@@ -48,15 +46,6 @@ use rpc::ValidatorRpcClient;
 /// The maximum reorg depth (`zebra-state`'s `MAX_BLOCK_REORG_HEIGHT`); blocks deeper than
 /// this below the captured tip are treated as finalized and served by height.
 const MAX_REORG_DEPTH: u32 = 1000;
-
-/// Aborts the wrapped syncer task when the last clone of the owning [`Arc`] is dropped.
-struct AbortOnDrop(tokio::task::JoinHandle<()>);
-
-impl Drop for AbortOnDrop {
-    fn drop(&mut self) {
-        self.0.abort();
-    }
-}
 
 /// A handle to chain data read from a local zebrad's `zebra-state`.
 #[derive(Clone)]
@@ -101,69 +90,8 @@ impl ZebraChain {
             config.indexer.validator_cookie_path.as_deref(),
         )?;
 
-        // Resolve the gRPC indexer address used by the non-finalized syncer.
-        let grpc_addr = lookup_host(&rss.grpc_address)
-            .await
-            .map_err(|e| {
-                ErrorKind::Init.context(format!(
-                    "failed to resolve indexer.read_state_service.grpc_address '{}': {e}",
-                    rss.grpc_address,
-                ))
-            })?
-            .next()
-            .ok_or_else(|| {
-                ErrorKind::Init.context(format!(
-                    "indexer.read_state_service.grpc_address '{}' resolved to no IP addresses",
-                    rss.grpc_address,
-                ))
-            })?;
-
-        let zebra_network = params.to_zebra().map_err(|e| ErrorKind::Init.context(e))?;
-        let zebra_state_path = resolve_datadir_path(config.datadir(), &rss.zebra_state_path);
-        let zebra_config = zebra_state::Config {
-            cache_dir: zebra_state_path,
-            // The standalone read state service cannot use ephemeral state; it reads
-            // zebrad's on-disk database in place.
-            ephemeral: false,
-            // We are a read-only secondary; never delete or back up zebrad's database.
-            delete_old_database: false,
-            should_backup_non_finalized_state: false,
-            ..Default::default()
-        };
-
-        // Fail fast with an actionable error if there is no compatible zebra-state
-        // database at the configured path, rather than letting zebra-state silently
-        // create a new (empty) database there.
-        match zebra_state::state_database_format_version_on_disk(&zebra_config, &zebra_network)
-            .map_err(|e| {
-                ErrorKind::Init.context(format!(
-                    "failed to read the zebra-state database version at '{}': {e}",
-                    zebra_config.cache_dir.display(),
-                ))
-            })? {
-            Some(_) => {}
-            None => {
-                return Err(ErrorKind::Init
-                    .context(format!(
-                        "no zebra-state v{} database found under '{}'; check that \
-                         indexer.read_state_service.zebra_state_path points at zebrad's \
-                         state cache directory, and that zebrad's on-disk state format \
-                         matches Zallet's zebra-state version",
-                        zebra_state::state_database_format_version_in_code().major,
-                        zebra_config.cache_dir.display(),
-                    ))
-                    .into());
-            }
-        }
-
-        info!("Initializing read-only Zebra state service");
-        let (read_state_service, _latest_tip, _tip_change, sync_task) =
-            init_read_state_with_syncer(zebra_config, &zebra_network, grpc_addr)
-                .await
-                // Outer JoinError from the spawned init task.
-                .map_err(|e| ErrorKind::Init.context(e))?
-                // Inner BoxError from read-state initialization.
-                .map_err(|e| ErrorKind::Init.context(e))?;
+        // Open zebrad's state read-only and start the non-finalized syncer.
+        let (read_state_service, sync_task) = init_read_state_service(config, &params, rss).await?;
 
         let chain = Self {
             read_state_service,

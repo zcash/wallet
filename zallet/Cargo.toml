@@ -206,7 +206,19 @@ default = ["zebra-state"]
 
 ## Zaino-backed chain-data backend. Mutually exclusive with `zebra-state`.
 ## Enable with `--no-default-features --features zaino`.
-zaino = ["dep:zaino-common", "dep:zaino-fetch", "dep:zaino-state"]
+##
+## Pulls in the `zebra-*` crates (already present transitively via `zaino-state`) so the
+## backend can optionally read finalized state directly from a co-located zebrad's
+## `ReadStateService` when `[indexer.read_state_service]` is configured, instead of
+## fetching all chain data over JSON-RPC.
+zaino = [
+  "dep:zaino-common",
+  "dep:zaino-fetch",
+  "dep:zaino-state",
+  "dep:zebra-chain",
+  "dep:zebra-rpc",
+  "dep:zebra-state",
+]
 
 ## zebra-state + Zebra-RPC chain-data backend (default). Mutually exclusive with `zaino`.
 ## Requires a co-located zebrad built with the `indexer` feature; no regtest support.

@@ -14,7 +14,7 @@ use zaino_state::{
     NodeBackedChainIndexSubscriber, StatusType,
     chain_index::{
         ShieldedPool,
-        source::ValidatorConnector,
+        source::{State, ValidatorConnector},
         types::{BestChainLocation, NonBestChainLocation},
     },
 };
@@ -39,6 +39,7 @@ use crate::{
     network::Network,
 };
 
+use super::read_state::{AbortOnDrop, init_read_state_service};
 use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView};
 
 /// Converts a `zcash_protocol` block height into a Zaino block height.
@@ -162,11 +163,28 @@ impl ZainoChain {
             true,
         );
 
+        // Select the chain-data source. By default Zaino fetches all chain data over
+        // JSON-RPC; if `[indexer.read_state_service]` is configured, it instead reads
+        // finalized state directly from a co-located zebrad (read-only secondary) and
+        // follows the non-finalized tip over zebrad's gRPC indexer interface.
+        let (source, sync_handle) = match &config.indexer.read_state_service {
+            None => (ValidatorConnector::Fetch(fetcher.clone()), None),
+            Some(rss) => {
+                let (read_state_service, sync_task) =
+                    init_read_state_service(config, &params, rss).await?;
+                let source = ValidatorConnector::State(State {
+                    read_state_service,
+                    mempool_fetcher: fetcher.clone(),
+                    network: params.to_zaino(),
+                });
+                (source, Some(AbortOnDrop(sync_task)))
+            }
+        };
+
         info!("Starting Zaino indexer");
-        let indexer =
-            NodeBackedChainIndex::new(ValidatorConnector::Fetch(fetcher.clone()), indexer_config)
-                .await
-                .map_err(|e| ErrorKind::Init.context(e))?;
+        let indexer = NodeBackedChainIndex::new(source, indexer_config)
+            .await
+            .map_err(|e| ErrorKind::Init.context(e))?;
         info!("Started Zaino indexer");
 
         let chain = Self {
@@ -177,6 +195,11 @@ impl ZainoChain {
 
         // Spawn a task that stops the indexer when appropriate internal signals occur.
         let task = crate::spawn!("Indexer shutdown", async move {
+            // Hold the read-state syncer for the lifetime of this task. Dropping the guard
+            // aborts the syncer on every shutdown path, including when this task is itself
+            // aborted externally, so the syncer never outlives the indexer.
+            let _sync_handle = sync_handle;
+
             let mut server_interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(100));
 

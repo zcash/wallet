@@ -95,7 +95,7 @@ impl Network {
     ///
     /// Returns an error for regtest, which the read-state-service backend does not
     /// support.
-    #[cfg(feature = "zebra-state")]
+    #[cfg(any(feature = "zaino", feature = "zebra-state"))]
     pub(crate) fn to_zebra(self) -> Result<zebra_chain::parameters::Network, &'static str> {
         use zebra_chain::parameters::Network as ZebraNetwork;
         match self {
