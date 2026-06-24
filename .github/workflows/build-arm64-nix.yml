@@ -112,6 +112,17 @@ jobs:
           if [ -z "${AWS_ROLE_ARN}" ]; then echo "no cache-writer role; skipping push"; exit 0; fi
           echo "(cache push handled by the EKS prebake CronJob; CI is read-only by default)"
 
+      # push-by-digest=true + name-canonical=true REQUIRE the containerd image
+      # store; the default docker driver can't push a tagless digest-only image.
+      # The amd64 StageX job sets these up too — the arm64 job needs the same.
+      - name: Set up Docker Buildx
+        if: ${{ inputs.dockerhub-namespace != '' }}
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Enable containerd image store
+        if: ${{ inputs.dockerhub-namespace != '' }}
+        uses: depot/use-containerd-snapshotter-action@2e6f905d28e7ca519b216e2219d00545537e9f46 # v1.0.0
+
       - name: Build + push the arm64 image variant (by digest)
         id: push
         if: ${{ inputs.dockerhub-namespace != '' }}
@@ -133,13 +144,20 @@ jobs:
           ENTRYPOINT ["zallet"]
           DF
           echo "${DH_PASS}" | docker login docker.io -u "${DH_USER}" --password-stdin
-          docker buildx create --use --name armb >/dev/null 2>&1 || docker buildx use armb
           # Push by digest only (no tag) — the manifest job stitches amd64+arm64
-          # into the real tags. rewrite-timestamp keeps it reproducible.
-          DIGEST=$(docker buildx build --platform linux/arm64 \
+          # into the real tags. rewrite-timestamp keeps it reproducible. Do NOT
+          # swallow stderr: a failing buildx push must surface, not vanish into
+          # an empty DIGEST that breaks the manifest job downstream.
+          docker buildx build --platform linux/arm64 \
             --provenance=false --sbom=false \
             --output "type=image,name=${REPO},push-by-digest=true,name-canonical=true,push=true,rewrite-timestamp=true" \
-            --metadata-file /tmp/meta.json ctx >/dev/null 2>&1 && jq -r '."containerimage.digest"' /tmp/meta.json)
+            --metadata-file /tmp/meta.json ctx
+          DIGEST="$(jq -r '."containerimage.digest"' /tmp/meta.json)"
+          if [ -z "${DIGEST}" ] || [ "${DIGEST}" = "null" ]; then
+            echo "no digest produced by buildx" >&2
+            cat /tmp/meta.json >&2 || true
+            exit 1
+          fi
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
           echo "image_ref=${REPO}" >> "$GITHUB_OUTPUT"
           echo "pushed arm64 variant ${REPO}@${DIGEST}"
