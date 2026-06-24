@@ -92,8 +92,6 @@ impl Network {
     }
 
     /// Converts this network into the corresponding `zebra-chain` network.
-    ///
-    /// Converts this network into the corresponding `zebra-chain` network.
     #[cfg(feature = "zebra-state")]
     pub(crate) fn to_zebra(self) -> Result<zebra_chain::parameters::Network, &'static str> {
         use zebra_chain::parameters::Network as ZebraNetwork;
@@ -104,7 +102,7 @@ impl Network {
             }
             Network::RegTest(local) => {
                 use zebra_chain::parameters::testnet::{
-                    ConfiguredActivationHeights, RegtestParameters,
+                    ConfiguredActivationHeights, Parameters, RegtestParameters,
                 };
 
                 let h = |height: Option<BlockHeight>| height.map(u32::from);
@@ -124,7 +122,10 @@ impl Network {
                     ..Default::default()
                 };
 
-                Ok(ZebraNetwork::new_regtest(RegtestParameters::from(heights)))
+                let params = Parameters::new_regtest(RegtestParameters::from(heights)).map_err(
+                    |_| "failed to build a Regtest network from the configured activation heights",
+                )?;
+                Ok(ZebraNetwork::new_configured_testnet(params))
             }
         }
     }
@@ -188,6 +189,8 @@ pub(crate) fn regtest_nuparams_from_configured_heights(
             out.push(RegTestNuParam::new(branch, BlockHeight::from_u32(h)));
         }
     };
+    // `before_overwinter` is intentionally omitted: Regtest has no separate BeforeOverwinter
+    // nuparam, and `Network::from_type` fills down from Overwinter to cover earlier heights.
     push(BranchId::Overwinter, heights.overwinter);
     push(BranchId::Sapling, heights.sapling);
     push(BranchId::Blossom, heights.blossom);
@@ -285,6 +288,21 @@ mod tests {
             .to_zebra()
             .unwrap();
         assert!(net.is_regtest());
+    }
+
+    #[test]
+    fn regtest_out_of_order_heights_returns_err() {
+        // Sapling (BranchId 0x76b809bb) @ 200, Overwinter (BranchId 0x5ba81b19) @ 300:
+        // Sapling activates before Overwinter — this is out of order and must not panic.
+        let nuparams: Vec<RegTestNuParam> = vec![
+            RegTestNuParam::try_from("76b809bb:200".to_string()).unwrap(), // Sapling @ 200
+            RegTestNuParam::try_from("5ba81b19:300".to_string()).unwrap(), // Overwinter @ 300
+        ];
+        let result = Network::from_type(NetworkType::Regtest, &nuparams).to_zebra();
+        assert!(
+            result.is_err(),
+            "out-of-order activation heights should return Err, not panic"
+        );
     }
 }
 

@@ -62,6 +62,18 @@ pub(crate) struct BootstrapInfo {
     state_db_path: std::path::PathBuf,
 }
 
+/// Maps a node-reported network kind string (as returned by `getreadstateinfo`) to a
+/// `NetworkType`. Returns `None` for an unrecognized kind.
+fn node_kind_to_network_type(kind: &str) -> Option<zcash_protocol::consensus::NetworkType> {
+    use zcash_protocol::consensus::NetworkType;
+    match kind {
+        "Mainnet" => Some(NetworkType::Main),
+        "Testnet" => Some(NetworkType::Test),
+        "Regtest" => Some(NetworkType::Regtest),
+        _ => None,
+    }
+}
+
 /// Resolves Zallet's effective read-state configuration, bootstrapping from the co-located
 /// node when no `[indexer.read_state_service]` section is configured.
 ///
@@ -97,23 +109,17 @@ pub(crate) async fn resolve_bootstrap(
     // Cross-check the node's network kind against Zallet's configuration: following a node
     // on a different network would silently corrupt the wallet's view of the chain.
     let node_kind = info.network().kind().as_str();
-    let node_network = match node_kind {
-        "Mainnet" => NetworkType::Main,
-        "Testnet" => NetworkType::Test,
-        "Regtest" => NetworkType::Regtest,
-        other => {
-            return Err(ErrorKind::Init
-                .context(format!(
-                    "the validator reported an unknown network kind '{other}'"
-                ))
-                .into());
-        }
-    };
+    let node_network = node_kind_to_network_type(node_kind).ok_or_else(|| {
+        ErrorKind::Init.context(format!(
+            "the validator reported an unknown network kind '{node_kind}'"
+        ))
+    })?;
     if node_network != config.consensus.network {
         return Err(ErrorKind::Init
             .context(format!(
-                "network mismatch: the validator is on {node_kind}, but Zallet is configured \
-                 for {}; set consensus.network to match the node",
+                "network mismatch: the validator reports network kind '{}' (node), but Zallet \
+                 is configured for '{}' (consensus.network); set consensus.network to match the node",
+                node_kind,
                 crate::network::kind::type_to_str(&config.consensus.network),
             ))
             .into());
@@ -729,8 +735,33 @@ mod tests {
     use zcash_client_backend::data_api::chain::CommitmentTreeRoot;
     use zcash_protocol::consensus::NetworkType;
 
+    use super::node_kind_to_network_type;
     use super::reader::{ChainReader, HeaderInfo, MinedTxInfo, SideTxInfo};
     use super::*;
+
+    #[test]
+    fn node_kind_to_network_type_known_kinds() {
+        assert_eq!(
+            node_kind_to_network_type("Mainnet"),
+            Some(NetworkType::Main)
+        );
+        assert_eq!(
+            node_kind_to_network_type("Testnet"),
+            Some(NetworkType::Test)
+        );
+        assert_eq!(
+            node_kind_to_network_type("Regtest"),
+            Some(NetworkType::Regtest)
+        );
+    }
+
+    #[test]
+    fn node_kind_to_network_type_unknown_returns_none() {
+        assert_eq!(node_kind_to_network_type("main"), None);
+        assert_eq!(node_kind_to_network_type("MAINNET"), None);
+        assert_eq!(node_kind_to_network_type(""), None);
+        assert_eq!(node_kind_to_network_type("unknown"), None);
+    }
 
     /// Deterministic block hash for a height (`< 256`): `[height; 32]`.
     fn h(height: u32) -> BlockHash {
