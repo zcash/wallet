@@ -58,6 +58,7 @@ use zcash_client_backend::{
     sync::decryptor,
 };
 use zcash_client_sqlite::AccountUuid;
+use zcash_primitives::block::BlockHash;
 #[cfg(not(feature = "spend-index"))]
 use zcash_protocol::TxId;
 use zcash_protocol::consensus::BlockHeight;
@@ -65,7 +66,7 @@ use zip32::Scope;
 
 use super::{
     TaskHandle,
-    chain::{BlockLocator, Chain, ChainBlock, ChainError, ChainView},
+    chain::{Chain, ChainBlock, ChainError, ChainView},
     database::{Database, DbConnection},
 };
 use crate::{config::ZalletConfig, error::Error, network::Network};
@@ -299,28 +300,103 @@ fn is_retryable(error: &SyncError) -> bool {
     matches!(error, SyncError::Chain(ChainError::Unavailable(_)))
 }
 
-/// Resolves the fork point between the wallet and the backend's best chain from a
-/// [`ChainView::find_fork_point`] result and the `locator` that was queried.
+/// How far back to step each time the wallet's recorded history is found to be off the
+/// backend's best chain. Reorgs are almost always only a few blocks, so the fallback walk
+/// below is rarely exercised; it mirrors the mobile wallets, which on a hash mismatch
+/// truncate and step back a small fixed amount at a time along their own view of the chain.
+const FORK_SEARCH_STEP: u32 = 10;
+
+/// Locates the block from which to resume scanning after the wallet's view of the chain
+/// diverges from the backend's best chain.
 ///
-/// An **empty** locator means the wallet has no recorded chain history yet — a fresh
-/// wallet whose first observed tip is genesis, which `initialize` does not record. There
-/// is then no reorg to detect, so the wallet simply syncs forward from its current
-/// `prev_tip`. A **non-empty** locator that matches nothing on the best chain is instead a
-/// genuine inconsistency (a reorg deeper than the locator spans, or an unknown tip), which
-/// is fatal.
-fn resolve_fork_point(
-    found: Option<ChainBlock>,
-    locator: &BlockLocator,
+/// First asks the backend for the most recent entry of a [block locator](locator) spanning
+/// the reorg window that is on the best chain, which resolves ordinary reorgs in a single
+/// round-trip. An **empty** locator means the wallet has no recorded history yet (a fresh
+/// wallet), so it simply syncs forward from `prev_tip`.
+///
+/// If the wallet has fallen far enough behind that its recorded history is below the
+/// backend's non-finalized state — so `find_fork_point` cannot locate the divergence — the
+/// search falls back to the mobile-wallet behaviour: walk the wallet's own view of the
+/// chain back [`FORK_SEARCH_STEP`] blocks at a time, comparing each of the wallet's block
+/// hashes against the backend's best chain, until one matches (the resume point) or the
+/// wallet birthday is reached (a genuine divergence, which halts syncing).
+async fn locate_fork_point<V: ChainView>(
+    chain_view: &V,
+    db_data: &DbConnection,
     prev_tip: ChainBlock,
 ) -> Result<ChainBlock, SyncError> {
-    match found {
-        Some(fork_point) => Ok(fork_point),
-        None if locator.hashes().is_empty() => Ok(prev_tip),
-        None => Err(SyncError::Chain(ChainError::backend(format!(
-            "Could not determine the reorg point: the wallet's previous chain tip {} \
-             (height {}) is not known to the chain indexer",
-            prev_tip.hash, prev_tip.height,
-        )))),
+    let birthday = db_data
+        .get_wallet_birthday()?
+        .unwrap_or(BlockHeight::from_u32(0));
+
+    // Fast path: locate the fork point within the reorg window in one round-trip.
+    let locator = locator::build_block_locator(db_data, prev_tip.height)?;
+    match chain_view
+        .find_fork_point(&locator)
+        .await
+        .map_err(SyncError::Chain)?
+    {
+        Some(fork_point) => return Ok(fork_point),
+        // A fresh wallet has no recorded history to fork from; sync forward from prev_tip.
+        None if locator.hashes().is_empty() => return Ok(prev_tip),
+        None => {}
+    }
+
+    // The wallet's recent history is not on the best chain. Walk its own view of the chain
+    // back a fixed step at a time, looking for one of its blocks still on the best chain.
+    debug!(
+        "wallet tip {} (height {}) is not on the best chain; stepping back to find a resume point",
+        prev_tip.hash, prev_tip.height,
+    );
+    step_back_to_best_chain(chain_view, prev_tip, birthday, |height| {
+        Ok(db_data.get_block_hash(height)?)
+    })
+    .await
+}
+
+/// The next height to probe when walking back from `height` toward `birthday`, and whether
+/// that probe is the birthday floor (so the search must stop after it).
+fn rewind_step(height: BlockHeight, birthday: BlockHeight) -> (BlockHeight, bool) {
+    let next = u32::from(height)
+        .saturating_sub(FORK_SEARCH_STEP)
+        .max(u32::from(birthday));
+    (BlockHeight::from_u32(next), next <= u32::from(birthday))
+}
+
+/// Walks the wallet's own view of the chain back from `prev_tip` a fixed [`FORK_SEARCH_STEP`]
+/// at a time, returning the first of the wallet's blocks whose hash is on the backend's best
+/// chain — the point to resume scanning from. `wallet_hash` supplies the wallet's recorded
+/// block hash at a height (`None` if it has none there).
+///
+/// Returns [`SyncError::WalletDivergedBelowBirthday`] if the walk reaches the wallet birthday
+/// without rejoining the best chain.
+async fn step_back_to_best_chain<V, F>(
+    chain_view: &V,
+    prev_tip: ChainBlock,
+    birthday: BlockHeight,
+    wallet_hash: F,
+) -> Result<ChainBlock, SyncError>
+where
+    V: ChainView,
+    F: Fn(BlockHeight) -> Result<Option<BlockHash>, SyncError>,
+{
+    let mut height = prev_tip.height;
+    loop {
+        let (next, reached_birthday) = rewind_step(height, birthday);
+        height = next;
+        if let Some(wh) = wallet_hash(height)? {
+            let best_chain_hash = chain_view
+                .get_block_header(height)
+                .await
+                .map_err(SyncError::Chain)?
+                .map(|header| header.hash());
+            if best_chain_hash == Some(wh) {
+                return Ok(ChainBlock { height, hash: wh });
+            }
+        }
+        if reached_birthday {
+            return Err(SyncError::WalletDivergedBelowBirthday { birthday });
+        }
     }
 }
 
@@ -395,13 +471,8 @@ async fn steady_state_iteration<C: Chain>(
             .expect("closure always returns Some");
         tip_change_signal.notify_one();
 
-        // Figure out the diff between the previous and current chain tips.
-        let locator = locator::build_block_locator(db_data, prev_tip.height)?;
-        let found = chain_view
-            .find_fork_point(&locator)
-            .await
-            .map_err(SyncError::Chain)?;
-        let fork_point = resolve_fork_point(found, &locator, *prev_tip)?;
+        // Find where the wallet's history rejoins the backend's best chain.
+        let fork_point = locate_fork_point(&chain_view, db_data, *prev_tip).await?;
         assert!(fork_point.height <= current_tip.height);
 
         // Fetch blocks that need to be applied to the wallet.
@@ -755,49 +826,35 @@ async fn batch_decryptor(
 
 #[cfg(test)]
 mod tests {
-    use super::{ChainBlock, ChainError, SyncError, is_retryable, resolve_fork_point};
-    use crate::components::chain::BlockLocator;
-    use zcash_primitives::block::BlockHash;
+    use super::{ChainError, SyncError, is_retryable, rewind_step};
     use zcash_protocol::consensus::BlockHeight;
 
-    fn block(height: u32, hash: u8) -> ChainBlock {
-        ChainBlock {
-            height: BlockHeight::from_u32(height),
-            hash: BlockHash([hash; 32]),
-        }
+    fn h(height: u32) -> BlockHeight {
+        BlockHeight::from_u32(height)
     }
 
     #[test]
-    fn empty_locator_syncs_forward_from_prev_tip() {
-        // A fresh wallet has no recorded history, so the locator is empty. A missing fork
-        // point is then not fatal — there is nothing to fork from, so the wallet syncs
-        // forward from its own tip. This is the genesis-start case the integration tests hit.
-        let empty = BlockLocator::from_blocks([]);
-        let genesis = block(0, 1);
-        assert_eq!(resolve_fork_point(None, &empty, genesis).unwrap(), genesis);
-        // The same holds for a fresh wallet whose first observed tip is above genesis.
-        let birthday = block(500, 2);
-        assert_eq!(
-            resolve_fork_point(None, &empty, birthday).unwrap(),
-            birthday
-        );
+    fn rewind_step_jumps_back_by_the_step() {
+        // Well above the birthday: step back exactly FORK_SEARCH_STEP, not the floor.
+        assert_eq!(rewind_step(h(5000), h(1000)), (h(4990), false));
     }
 
     #[test]
-    fn nonempty_locator_with_no_match_is_fatal() {
-        // A wallet that has recorded history but finds none of it on the best chain is a
-        // genuine inconsistency (a reorg deeper than the locator), which must surface.
-        let tip = block(100, 3);
-        let locator = BlockLocator::from_blocks([tip]);
-        assert!(resolve_fork_point(None, &locator, tip).is_err());
+    fn rewind_step_is_floored_at_the_birthday() {
+        // A step that would cross the birthday is clamped to it and flagged as the last.
+        assert_eq!(rewind_step(h(5000), h(4995)), (h(4995), true));
+        // Landing exactly on the birthday is also the last step.
+        assert_eq!(rewind_step(h(1010), h(1000)), (h(1000), true));
+        // A normal step that happens to land on the birthday is the last step.
+        assert_eq!(rewind_step(h(1009), h(1000)), (h(1000), true));
+        // Two clear steps above the birthday is a normal, non-final step.
+        assert_eq!(rewind_step(h(1015), h(1000)), (h(1005), false));
     }
 
     #[test]
-    fn found_fork_point_is_returned() {
-        let tip = block(100, 3);
-        let locator = BlockLocator::from_blocks([tip]);
-        let fork = block(90, 4);
-        assert_eq!(resolve_fork_point(Some(fork), &locator, tip).unwrap(), fork);
+    fn rewind_step_at_birthday_stops() {
+        // Already at the birthday: cannot step further, so this is the final probe.
+        assert_eq!(rewind_step(h(1000), h(1000)), (h(1000), true));
     }
 
     #[test]
@@ -856,5 +913,213 @@ mod tests {
             BlockHeight::from_u32(1_810_000)..BlockHeight::from_u32(4_090_001)
         );
         assert_eq!(as_of, tip);
+    }
+}
+
+#[cfg(test)]
+mod fork_fallback_tests {
+    use std::collections::BTreeMap;
+    use std::ops::Range;
+
+    use futures::{
+        StreamExt as _,
+        stream::{self, BoxStream},
+    };
+    use zcash_client_backend::data_api::{TransactionStatus, chain::ChainState};
+    use zcash_primitives::{
+        block::{Block, BlockHash, BlockHeader, BlockHeaderData},
+        transaction::Transaction,
+    };
+    use zcash_protocol::{TxId, consensus::BlockHeight};
+
+    use super::{ChainBlock, ChainView, SyncError, step_back_to_best_chain};
+    #[cfg(feature = "spend-index")]
+    use crate::components::chain::SpendStatus;
+    use crate::components::chain::{BlockLocator, ChainError, ChainTx};
+    #[cfg(not(feature = "spend-index"))]
+    use transparent::address::TransparentAddress;
+    #[cfg(feature = "spend-index")]
+    use transparent::bundle::OutPoint;
+
+    fn h(height: u32) -> BlockHeight {
+        BlockHeight::from_u32(height)
+    }
+
+    /// Builds a distinct, deterministic block header whose hash varies with `seed`.
+    fn header(seed: u8) -> BlockHeader {
+        BlockHeaderData {
+            version: 4,
+            prev_block: BlockHash([0; 32]),
+            merkle_root: [0; 32],
+            final_sapling_root: [0; 32],
+            time: 0,
+            bits: 0,
+            nonce: [seed; 32],
+            solution: vec![],
+        }
+        .freeze()
+        .unwrap()
+    }
+
+    /// A [`ChainView`] whose best chain is a fixed set of header seeds by height (`BlockHeader`
+    /// is not `Clone`, so headers are rebuilt from their seed on demand). `find_fork_point`
+    /// always returns `None` (forcing the step-back fallback); every other method is a stub.
+    #[derive(Clone)]
+    struct MockChainView {
+        headers: BTreeMap<BlockHeight, u8>,
+    }
+
+    impl ChainView for MockChainView {
+        async fn tip(&self) -> Result<ChainBlock, ChainError> {
+            unimplemented!("not used by the fork-point fallback")
+        }
+
+        async fn find_fork_point(
+            &self,
+            _locator: &BlockLocator,
+        ) -> Result<Option<ChainBlock>, ChainError> {
+            Ok(None)
+        }
+
+        async fn tree_state_as_of(
+            &self,
+            _height: BlockHeight,
+        ) -> Result<Option<ChainState>, ChainError> {
+            Ok(None)
+        }
+
+        async fn get_block_header(
+            &self,
+            height: BlockHeight,
+        ) -> Result<Option<BlockHeader>, ChainError> {
+            Ok(self.headers.get(&height).map(|&seed| header(seed)))
+        }
+
+        async fn get_block(&self, _height: BlockHeight) -> Result<Option<Block>, ChainError> {
+            Ok(None)
+        }
+
+        fn stream_blocks_to_tip(
+            &self,
+            _start: BlockHeight,
+        ) -> BoxStream<'_, Result<Block, ChainError>> {
+            stream::empty().boxed()
+        }
+
+        fn stream_blocks(
+            &self,
+            _range: &Range<BlockHeight>,
+        ) -> BoxStream<'_, Result<Block, ChainError>> {
+            stream::empty().boxed()
+        }
+
+        async fn get_mempool_stream(
+            &self,
+        ) -> Result<Option<BoxStream<'_, Transaction>>, ChainError> {
+            Ok(None)
+        }
+
+        async fn get_transaction(&self, _txid: TxId) -> Result<Option<ChainTx>, ChainError> {
+            Ok(None)
+        }
+
+        async fn get_transaction_status(
+            &self,
+            _txid: TxId,
+        ) -> Result<TransactionStatus, ChainError> {
+            Ok(TransactionStatus::TxidNotRecognized)
+        }
+
+        #[cfg(feature = "spend-index")]
+        async fn outpoint_spend_status(
+            &self,
+            _outpoint: &OutPoint,
+        ) -> Result<SpendStatus, ChainError> {
+            Ok(SpendStatus::Unspent)
+        }
+
+        #[cfg(not(feature = "spend-index"))]
+        async fn get_address_unspent_outpoints(
+            &self,
+            _address: &TransparentAddress,
+        ) -> Result<Vec<(TxId, u32)>, ChainError> {
+            Ok(Vec::new())
+        }
+
+        #[cfg(not(feature = "spend-index"))]
+        async fn get_address_tx_ids(
+            &self,
+            _address: &TransparentAddress,
+            _range: Range<BlockHeight>,
+        ) -> Result<Vec<TxId>, ChainError> {
+            Ok(Vec::new())
+        }
+
+        #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
+        async fn block_height(&self, _hash: &BlockHash) -> Result<Option<BlockHeight>, ChainError> {
+            Ok(None)
+        }
+    }
+
+    #[tokio::test]
+    async fn steps_back_to_the_matching_block() {
+        // Backend best chain: distinct header seeds at the heights the walk will probe.
+        let view = MockChainView {
+            headers: BTreeMap::from([(h(90), 90), (h(80), 80), (h(70), 70)]),
+        };
+
+        // Wallet view: on a fork at 90 and 80 (mismatched hashes), rejoining the best chain
+        // at 70 (its recorded hash there matches the backend's).
+        let wallet = BTreeMap::from([
+            (h(90), header(190).hash()),
+            (h(80), header(180).hash()),
+            (h(70), header(70).hash()),
+        ]);
+
+        let prev_tip = ChainBlock {
+            height: h(100),
+            hash: header(200).hash(),
+        };
+        let resume = step_back_to_best_chain(&view, prev_tip, h(0), |height| {
+            Ok(wallet.get(&height).copied())
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resume,
+            ChainBlock {
+                height: h(70),
+                hash: header(70).hash(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn halts_at_the_birthday_when_never_rejoining() {
+        let view = MockChainView {
+            headers: BTreeMap::from([(h(90), 90), (h(80), 80), (h(70), 70)]),
+        };
+
+        // Wallet view is on a fork all the way down to the birthday at height 70.
+        let wallet = BTreeMap::from([
+            (h(90), header(190).hash()),
+            (h(80), header(180).hash()),
+            (h(70), header(170).hash()),
+        ]);
+
+        let prev_tip = ChainBlock {
+            height: h(100),
+            hash: header(200).hash(),
+        };
+        let result = step_back_to_best_chain(&view, prev_tip, h(70), |height| {
+            Ok(wallet.get(&height).copied())
+        })
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(SyncError::WalletDivergedBelowBirthday { birthday }) if birthday == h(70)
+        ));
     }
 }
