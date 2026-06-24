@@ -34,24 +34,22 @@ ENV PROTOC=/usr/bin/protoc
 WORKDIR /usr/src/zallet
 COPY . .
 
-# Build for the image's target architecture. buildx sets TARGETARCH
-# (amd64|arm64) automatically per --platform; default to amd64 for a plain
-# `docker build` on an amd64 host.
-ARG TARGETARCH=amd64
+# Build NATIVELY for whatever architecture this image is running as. buildx
+# already places the container on the target arch (per --platform), so the
+# host's default Rust target IS the target — we must NOT pass an explicit
+# `--target`. Passing one turns the build into a "cross" build in cc-rs's eyes,
+# which then looks for a triple-prefixed cross compiler (e.g.
+# `aarch64-linux-gnu-gcc`) that isn't installed, and the *-sys crates
+# (secp256k1-sys, etc.) fail with "failed to find tool ...-gcc". A plain
+# `cargo build` uses the in-image gcc/clang for the native arch and Just Works
+# on both amd64 and arm64.
 RUN set -eux; \
-    case "$TARGETARCH" in \
-      amd64) RUST_TARGET=x86_64-unknown-linux-gnu  ;; \
-      arm64) RUST_TARGET=aarch64-unknown-linux-gnu ;; \
-      *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
-    esac; \
-    rustup target add "$RUST_TARGET"; \
     cargo build --release --locked \
-      --bin zallet --features rpc-cli,zcashd-import \
-      --target "$RUST_TARGET"; \
-    install -D -m0755 "target/${RUST_TARGET}/release/zallet" /out/zallet; \
+      --bin zallet --features rpc-cli,zcashd-import; \
+    install -D -m0755 target/release/zallet /out/zallet; \
     # Collect the build.rs-generated share tree (completions, manpages,
     # debian-copyright), matching the StageX export layout where present.
-    REL="target/${RUST_TARGET}/release"; \
+    REL="target/release"; \
     mkdir -p /out/usr/local/share/zallet; \
     for d in completions manpages; do \
       [ -d "$REL/$d" ] && cp -a "$REL/$d" /out/usr/local/share/zallet/ || true; \
