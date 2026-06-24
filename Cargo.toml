@@ -127,9 +127,9 @@ zaino-state = "0.3"
 # Zebra crates for the zebra-state backend, pinned to the find-fork-point branch
 # (direct git, NOT via [patch.crates-io]: a global patch would also rewrite Zaino's
 # transitive zebra deps and break the default build).
-zebra-chain = { git = "https://github.com/nuttycom/zebra.git", rev = "dd415da2f7fbf4db9cdd69de1235c6b125dbe576" }
-zebra-rpc = { git = "https://github.com/nuttycom/zebra.git", rev = "dd415da2f7fbf4db9cdd69de1235c6b125dbe576" }
-zebra-state = { git = "https://github.com/nuttycom/zebra.git", rev = "dd415da2f7fbf4db9cdd69de1235c6b125dbe576" }
+zebra-chain = { git = "https://github.com/nuttycom/zebra.git", rev = "e847d886e2e38326c521a51800ac7bd40c2516d0" }
+zebra-rpc = { git = "https://github.com/nuttycom/zebra.git", rev = "e847d886e2e38326c521a51800ac7bd40c2516d0" }
+zebra-state = { git = "https://github.com/nuttycom/zebra.git", rev = "e847d886e2e38326c521a51800ac7bd40c2516d0" }
 base64 = "0.22"
 
 # Zcash wallet
