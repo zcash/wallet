@@ -10,9 +10,9 @@ use zcash_client_backend::data_api::chain::CommitmentTreeRoot;
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
 use zebra_chain::subtree::NoteCommitmentSubtreeIndex;
-use zebra_state::{HashOrHeight, ReadRequest, ReadResponse, ReadStateService};
 #[cfg(feature = "spend-index")]
 use zebra_state::Spend;
+use zebra_state::{HashOrHeight, ReadRequest, ReadResponse, ReadStateService};
 
 use super::super::{BlockLocator, ChainBlock, ChainError};
 use super::convert;
