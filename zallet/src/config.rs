@@ -68,6 +68,12 @@ pub struct ZalletConfig {
 
     /// Settings for the JSON-RPC interface.
     pub rpc: RpcSection,
+
+    /// Settings controlling how Zallet synchronizes the wallet with the chain.
+    ///
+    /// Defaulted so that configs written before this section existed continue to parse.
+    #[serde(default)]
+    pub sync: SyncSection,
 }
 
 impl ZalletConfig {
@@ -688,6 +694,30 @@ fn serialize_rpc_password<S: serde::Serializer>(
     }
 }
 
+/// Settings controlling how Zallet synchronizes the wallet with the chain.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Documented, DocumentedFields)]
+#[serde(deny_unknown_fields)]
+pub struct SyncSection {
+    /// The maximum number of blocks that the history-recovery task downloads and scans in
+    /// a single batch.
+    ///
+    /// Larger batches improve scanning throughput, but increase peak memory usage: every
+    /// block in a batch is held in memory while it is downloaded and trial-decrypted.
+    /// Mainnet blocks can currently be up to 2 MiB each, so a batch of N blocks can require
+    /// on the order of N * 2 MiB of memory.
+    pub recover_batch_size: Option<NonZeroU32>,
+}
+
+impl SyncSection {
+    /// The maximum number of blocks that the history-recovery task downloads and scans in
+    /// a single batch.
+    ///
+    /// Default is 1000.
+    pub fn recover_batch_size(&self) -> u32 {
+        self.recover_batch_size.map_or(1000, NonZeroU32::get)
+    }
+}
+
 impl ZalletConfig {
     /// Generates an example config file, with all default values included as comments.
     pub fn generate_example() -> String {
@@ -744,6 +774,7 @@ impl ZalletConfig {
             ),
             rpc("bind", &conf.rpc.bind),
             rpc("timeout", conf.rpc.timeout().as_secs()),
+            sync("recover_batch_size", conf.sync.recover_batch_size()),
         ]
         .into_iter()
         .collect::<HashMap<_, _>>();
@@ -765,6 +796,7 @@ impl ZalletConfig {
         const NOTE_MANAGEMENT: &str = "note_management";
         const RPC: &str = "rpc";
         const RPC_AUTH: &str = "rpc.auth";
+        const SYNC: &str = "sync";
         fn builder<T: Serialize>(
             f: &'static str,
             d: T,
@@ -832,6 +864,12 @@ impl ZalletConfig {
             d: T,
         ) -> ((&'static str, &'static str), Option<toml::Value>) {
             field(RPC, f, d)
+        }
+        fn sync<T: Serialize>(
+            f: &'static str,
+            d: T,
+        ) -> ((&'static str, &'static str), Option<toml::Value>) {
+            field(SYNC, f, d)
         }
         fn field<T: Serialize>(
             s: &'static str,
@@ -1040,6 +1078,7 @@ impl ZalletConfig {
                     write_section::<NoteManagementSection>(&mut config, field_name, &sec_def)
                 }
                 RPC => write_section::<RpcSection>(&mut config, field_name, &sec_def),
+                SYNC => write_section::<SyncSection>(&mut config, field_name, &sec_def),
                 // Top-level fields correspond to CLI settings, and cannot be configured
                 // via a file.
                 _ => (),
@@ -1072,5 +1111,22 @@ zebra_state_path = "/home/user/.cache/zebra"
     fn read_state_service_section_requires_all_fields() {
         let toml = r#"grpc_address = "127.0.0.1:8231""#;
         assert!(toml::from_str::<ReadStateServiceSection>(toml).is_err());
+    }
+
+    #[test]
+    fn sync_section_uses_default_batch_size_when_unset() {
+        let section: super::SyncSection = toml::from_str("").unwrap();
+        assert_eq!(section.recover_batch_size(), 1000);
+    }
+
+    #[test]
+    fn sync_section_parses_override() {
+        let section: super::SyncSection = toml::from_str("recover_batch_size = 10000").unwrap();
+        assert_eq!(section.recover_batch_size(), 10000);
+    }
+
+    #[test]
+    fn sync_section_rejects_zero_batch_size() {
+        assert!(toml::from_str::<super::SyncSection>("recover_batch_size = 0").is_err());
     }
 }

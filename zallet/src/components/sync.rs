@@ -76,10 +76,6 @@ pub(crate) use error::SyncError;
 mod locator;
 mod steps;
 
-/// The maximum number of blocks that the history-recovery task downloads and scans in a
-/// single batch.
-const RECOVER_BATCH_SIZE: u32 = 1000;
-
 #[derive(Debug)]
 pub(crate) struct WalletSync {}
 
@@ -90,6 +86,7 @@ impl WalletSync {
         chain: C,
     ) -> Result<(TaskHandle, TaskHandle, TaskHandle, TaskHandle), Error> {
         let params = config.consensus.network();
+        let recover_batch_size = config.sync.recover_batch_size();
 
         // The batch decryptor's built-in defaults (queue size 1000, batch-size threshold
         // 200, batch start delay 500ms) are appropriate for Zallet, so use them as-is.
@@ -150,7 +147,7 @@ impl WalletSync {
                     db_data.as_mut(),
                     upper_boundary,
                     decryptor,
-                    RECOVER_BATCH_SIZE,
+                    recover_batch_size,
                 )
                 .await?;
                 Ok(())

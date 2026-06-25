@@ -37,5 +37,7 @@ as_of_version = "0.1.0-alpha.4"
 
 [rpc]
 
+[sync]
+
 """
 stderr = "..."
