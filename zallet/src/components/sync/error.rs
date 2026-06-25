@@ -3,6 +3,7 @@ use std::fmt;
 use shardtree::error::ShardTreeError;
 use zcash_client_backend::scanning::ScanError;
 use zcash_client_sqlite::error::SqliteClientError;
+use zcash_protocol::consensus::BlockHeight;
 
 use crate::components::chain::ChainError;
 
@@ -13,6 +14,12 @@ pub(crate) enum SyncError {
     Scan(ScanError),
     Tree(Box<ShardTreeError<zcash_client_sqlite::wallet::commitment_tree::Error>>),
     Other(Box<SqliteClientError>),
+    /// The wallet's recorded chain history diverges from the backend's best chain below the
+    /// wallet's birthday, so no common block can be found to rewind to. Syncing cannot
+    /// safely continue.
+    WalletDivergedBelowBirthday {
+        birthday: BlockHeight,
+    },
 }
 
 impl fmt::Display for SyncError {
@@ -23,6 +30,11 @@ impl fmt::Display for SyncError {
             SyncError::Scan(e) => write!(f, "{e}"),
             SyncError::Tree(e) => write!(f, "{e}"),
             SyncError::Other(e) => write!(f, "{e}"),
+            SyncError::WalletDivergedBelowBirthday { birthday } => write!(
+                f,
+                "the wallet's chain history diverges from the best chain below its birthday \
+                 (height {birthday}); cannot continue syncing",
+            ),
         }
     }
 }
