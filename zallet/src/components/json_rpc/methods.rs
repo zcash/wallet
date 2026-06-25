@@ -58,6 +58,8 @@ mod validate_address;
 mod verify_message;
 mod view_transaction;
 #[cfg(zallet_build = "wallet")]
+mod z_get_balance_for_account;
+#[cfg(zallet_build = "wallet")]
 mod z_get_total_balance;
 #[cfg(zallet_build = "wallet")]
 mod z_import_address;
@@ -410,6 +412,24 @@ pub(crate) trait WalletRpc {
     ///   transactions confirmed at least this many times.
     #[method(name = "z_getbalances")]
     async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response;
+
+    /// Returns the account's spendable balance for each value pool ("transparent",
+    /// "sapling", and "orchard").
+    ///
+    /// Pools for which the balance is zero are not shown.
+    ///
+    /// # Arguments
+    ///
+    /// - `account` (string or numeric, required) Either the UUID or the ZIP 32 account
+    ///   index of the account, as returned by `z_getnewaccount`.
+    /// - `minconf` (numeric, optional, default=1) Only include outputs in transactions
+    ///   confirmed at least this many times.
+    #[method(name = "z_getbalanceforaccount")]
+    async fn z_get_balance_for_account(
+        &self,
+        account: JsonValue,
+        minconf: Option<u32>,
+    ) -> z_get_balance_for_account::Response;
 
     /// Imports a transparent address into the wallet for a given account.
     ///
@@ -902,6 +922,20 @@ impl WalletRpcServer for WalletRpcImpl {
 
     async fn get_balances(&self, minconf: Option<u32>) -> get_balances::Response {
         get_balances::call(self.wallet().await?.as_ref(), minconf)
+    }
+
+    async fn z_get_balance_for_account(
+        &self,
+        account: JsonValue,
+        minconf: Option<u32>,
+    ) -> z_get_balance_for_account::Response {
+        z_get_balance_for_account::call(
+            self.wallet().await?.as_ref(),
+            &self.keystore,
+            account,
+            minconf,
+        )
+        .await
     }
 
     async fn import_address(
