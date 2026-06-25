@@ -159,5 +159,12 @@ methods have been updated to replace them.
 | `z_getmigrationstatus` |
 | `z_getnewaddress`      | `z_getnewaccount`, `z_getaddressforaccount` |
 | `z_listaddresses`      | `listaddresses` |
+| `z_setmigration`       |
+
+The `z_getmigrationstatus` and `z_setmigration` methods configured and reported
+on the automatic Sprout-to-Sapling fund migration. Zallet does not support
+Sprout, so there is nothing to migrate and no equivalent method is provided. If
+you still hold Sprout funds, migrate them out of the Sprout pool before
+transitioning your wallet to Zallet.
 
 [pczts]: https://github.com/zcash/wallet/issues/99
