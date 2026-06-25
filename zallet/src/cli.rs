@@ -34,6 +34,8 @@ pub struct EntryPoint {
     /// Specify the data directory for the Zallet wallet.
     ///
     /// This must be an absolute path.
+    ///
+    /// [default: $HOME/.zallet]
     #[arg(short, long)]
     pub(crate) datadir: Option<PathBuf>,
 

@@ -1,10 +1,11 @@
 //! Zallet Abscissa Application
 
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use abscissa_core::{
-    Application, Component, FrameworkError, StandardPaths,
+    Application, Component, FrameworkError, FrameworkErrorKind, StandardPaths,
     application::{self, AppCell},
     config::{self, CfgCell},
     terminal::component::Terminal,
@@ -12,7 +13,7 @@ use abscissa_core::{
 use abscissa_tokio::TokioComponent;
 use i18n_embed::unic_langid::LanguageIdentifier;
 
-use crate::{cli::EntryPoint, components::tracing::Tracing, config::ZalletConfig, i18n};
+use crate::{cli::EntryPoint, components::tracing::Tracing, config::ZalletConfig, fl, i18n};
 
 /// Application state
 pub static APP: AppCell<ZalletApp> = AppCell::new();
@@ -50,6 +51,35 @@ impl Application for ZalletApp {
 
     fn config(&self) -> config::Reader<ZalletConfig> {
         self.config.read()
+    }
+
+    /// Overridden so config errors name the file: a missing config reports
+    /// `err-config-file-not-found`, and a parse error reports
+    /// `err-config-file-invalid` with the offending path (the framework
+    /// otherwise omits it).
+    fn load_config(&mut self, path: &Path) -> Result<Self::Cfg, FrameworkError> {
+        let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+
+        if !path.exists() {
+            return Err(FrameworkErrorKind::ConfigError
+                .context(fl!(
+                    "err-config-file-not-found",
+                    path = abs.display().to_string()
+                ))
+                .into());
+        }
+
+        let contents =
+            std::fs::read_to_string(path).map_err(|e| FrameworkErrorKind::IoError.context(e))?;
+        toml::from_str(&contents).map_err(|e| {
+            FrameworkErrorKind::ConfigError
+                .context(fl!(
+                    "err-config-file-invalid",
+                    path = abs.display().to_string(),
+                    error = e.to_string()
+                ))
+                .into()
+        })
     }
 
     fn state(&self) -> &application::State<Self> {

@@ -102,6 +102,8 @@ fn setup_new_wallet() {
             .run();
         let stderr = cmd.stderr();
         wait_until_running(stderr);
+        // Every command first logs the configuration file it is loading.
+        stderr.expect_regex(".*Loading configuration.*");
         stderr.expect_regex(".*Creating empty database.*");
         cmd.wait().unwrap().expect_code(0);
     }
@@ -116,6 +118,8 @@ fn setup_new_wallet() {
             .run();
         let stderr = cmd.stderr();
         wait_until_running(stderr);
+        // Every command first logs the configuration file it is loading.
+        stderr.expect_regex(".*Loading configuration.*");
         stderr.expect_regex(".*Applying latest database migrations.*");
         cmd.wait().unwrap().expect_code(0);
     }
@@ -199,6 +203,8 @@ fn generate_encryption_identity_drives_setup() {
             .run();
         let stderr = cmd.stderr();
         wait_until_running(stderr);
+        // Every command first logs the configuration file it is loading.
+        stderr.expect_regex(".*Loading configuration.*");
         stderr.expect_regex(".*Creating empty database.*");
         cmd.wait().unwrap().expect_code(0);
     }
@@ -214,6 +220,8 @@ fn generate_encryption_identity_drives_setup() {
             .run();
         let stderr = cmd.stderr();
         wait_until_running(stderr);
+        // Every command first logs the configuration file it is loading.
+        stderr.expect_regex(".*Loading configuration.*");
         stderr.expect_regex(".*Applying latest database migrations.*");
         cmd.wait().unwrap().expect_code(0);
     }

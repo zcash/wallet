@@ -38,4 +38,4 @@ pwhash = "50bb6ea2ab224071ecc3ef195a3a8$9090d8985b8d9969aa2062d134ebb2d568cd585a
 user = "foobar"
 
 """
-stderr = ""
+stderr = "..."
