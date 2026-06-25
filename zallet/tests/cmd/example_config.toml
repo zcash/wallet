@@ -4,4 +4,4 @@ stdin = ""
 stdout = """
 zallet config written to zallet.toml
 """
-stderr = ""
+stderr = "..."

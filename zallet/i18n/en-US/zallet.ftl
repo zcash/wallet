@@ -155,6 +155,8 @@ err-init-identity-not-passphrase-encrypted = {$path} is not encrypted with a pas
 err-init-path-not-utf8 = {$path} is not currently supported (not UTF-8)
 err-init-identity-not-usable = Identity file at {$path} is not usable: {$error}
 err-init-rpc-auth-invalid = Invalid '{-cfg-rpc-auth}' configuration
+err-config-file-not-found = Configuration file at {$path} does not exist.
+err-config-file-invalid = Failed to parse configuration file at {$path}: {$error}
 
 ## Keystore errors
 

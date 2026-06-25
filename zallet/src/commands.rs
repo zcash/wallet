@@ -88,6 +88,22 @@ pub(crate) fn resolve_datadir_path(datadir: &Path, path: &Path) -> PathBuf {
     datadir.join(path)
 }
 
+/// Resolves the configuration file path for a given datadir and optional config override.
+///
+/// If `config_override` is `Some`, it is used as the config file path:
+/// - Absolute paths are returned as-is.
+/// - Relative paths are resolved relative to `datadir`.
+///
+/// If `config_override` is `None`, defaults to `CONFIG_FILE`.
+pub(crate) fn resolve_config_path(datadir: &Path, config_override: Option<&Path>) -> PathBuf {
+    let config_buf = config_override.unwrap_or_else(|| Path::new(CONFIG_FILE));
+    if config_buf.is_absolute() {
+        config_buf.to_path_buf()
+    } else {
+        resolve_datadir_path(datadir, config_buf)
+    }
+}
+
 impl EntryPoint {
     /// Returns the data directory to use for this Zallet command.
     fn datadir(&self) -> Result<PathBuf, FrameworkError> {
@@ -134,17 +150,11 @@ impl Runnable for EntryPoint {
 
 impl Configurable<ZalletConfig> for EntryPoint {
     fn config_path(&self) -> Option<PathBuf> {
-        // Check if the config file exists, and if it does not, ignore it.
-        // If you'd like for a missing configuration file to be a hard error
-        // instead, always return `Some(CONFIG_FILE)` here.
-        let filename = resolve_datadir_path(
-            &self.datadir().ok()?,
-            self.config
-                .as_deref()
-                .unwrap_or_else(|| Path::new(CONFIG_FILE)),
-        );
+        let filename = resolve_config_path(&self.datadir().ok()?, self.config.as_deref());
 
-        if filename.exists() {
+        // An explicit `--config` is always returned (loading fails loudly if
+        // missing); a missing default config is ignored.
+        if self.config.is_some() || filename.exists() {
             Some(filename)
         } else {
             None
@@ -152,9 +162,13 @@ impl Configurable<ZalletConfig> for EntryPoint {
     }
 
     fn process_config(&self, mut config: ZalletConfig) -> Result<ZalletConfig, FrameworkError> {
-        // Components access top-level CLI settings solely through `ZalletConfig`.
-        // Load them in here.
-        config.datadir = Some(self.datadir()?);
+        let datadir = self.datadir()?;
+
+        // Log the resolved path, not the raw `--config` argument.
+        let config_path = resolve_config_path(&datadir, self.config.as_deref());
+        tracing::info!(config = %config_path.display(), "Loading configuration");
+
+        config.datadir = Some(datadir);
 
         match &self.cmd {
             ZalletCmd::Start(cmd) => cmd.override_config(config),
@@ -222,5 +236,41 @@ async fn shutdown() {
             .expect("listening for ctrl-c signal should never fail");
 
         info!("Received Ctrl-C, starting shutdown");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_config_path_defaults_to_datadir() {
+        let datadir = Path::new("/data");
+        assert_eq!(
+            resolve_config_path(datadir, None),
+            Path::new("/data").join(CONFIG_FILE),
+        );
+    }
+
+    #[test]
+    fn resolve_config_path_relative_override_is_prefixed_by_datadir() {
+        let datadir = Path::new("/data");
+        assert_eq!(
+            resolve_config_path(datadir, Some(Path::new("zallet.toml"))),
+            PathBuf::from("/data/zallet.toml"),
+        );
+        assert_eq!(
+            resolve_config_path(datadir, Some(Path::new("sub/zallet.toml"))),
+            PathBuf::from("/data/sub/zallet.toml"),
+        );
+    }
+
+    #[test]
+    fn resolve_config_path_absolute_override_is_used_directly() {
+        let datadir = Path::new("/data");
+        assert_eq!(
+            resolve_config_path(datadir, Some(Path::new("/etc/zallet/zallet.toml"))),
+            PathBuf::from("/etc/zallet/zallet.toml"),
+        );
     }
 }
