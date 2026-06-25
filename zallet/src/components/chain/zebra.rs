@@ -29,7 +29,11 @@ use zcash_protocol::{
 use zebra_state::ReadStateService;
 
 use super::read_state::{AbortOnDrop, init_read_state_service};
+#[cfg(feature = "spend-index")]
+use super::SpendStatus;
 use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView};
+#[cfg(feature = "spend-index")]
+use transparent::bundle::OutPoint;
 use crate::{
     components::TaskHandle,
     config::ZalletConfig,
@@ -499,6 +503,23 @@ impl<R: ChainReader> ChainView for ZebraChainView<R> {
         Ok(TransactionStatus::TxidNotRecognized)
     }
 
+    #[cfg(feature = "spend-index")]
+    async fn outpoint_spend_status(&self, outpoint: &OutPoint) -> Result<SpendStatus, ChainError> {
+        let zoutpoint = convert::to_zebra_outpoint(outpoint);
+        // Authoritative spentness from the UTXO set, independent of the (optional, lazily-built)
+        // spend index.
+        if self.reader.is_unspent(zoutpoint).await? {
+            return Ok(SpendStatus::Unspent);
+        }
+        // Spent: resolve the spending transaction via the spend index. A missing entry means the
+        // index has not caught up yet (ZcashFoundation/zebra#10806), so signal a retry rather
+        // than treating the output as unspent.
+        match self.reader.spending_transaction(zoutpoint).await? {
+            Some(h) => Ok(SpendStatus::SpentBy(convert::from_zebra_tx_hash(h))),
+            None => Ok(SpendStatus::SpentSpenderUnknown),
+        }
+    }
+
     #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]
     async fn block_height(&self, hash: &BlockHash) -> Result<Option<BlockHeight>, ChainError> {
         Ok(self
@@ -593,6 +614,20 @@ mod tests {
             &self,
         ) -> Result<Vec<CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>>, ChainError> {
             Ok(vec![])
+        }
+        #[cfg(feature = "spend-index")]
+        async fn is_unspent(
+            &self,
+            _: zebra_chain::transparent::OutPoint,
+        ) -> Result<bool, ChainError> {
+            Ok(true)
+        }
+        #[cfg(feature = "spend-index")]
+        async fn spending_transaction(
+            &self,
+            _: zebra_chain::transparent::OutPoint,
+        ) -> Result<Option<zebra_chain::transaction::Hash>, ChainError> {
+            Ok(None)
         }
     }
 

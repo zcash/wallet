@@ -17,6 +17,8 @@ use zcash_primitives::{
     transaction::Transaction,
 };
 use zcash_protocol::{TxId, consensus::BlockHeight};
+#[cfg(feature = "spend-index")]
+use transparent::bundle::OutPoint;
 
 mod error;
 pub(crate) use error::ChainError;
@@ -135,6 +137,18 @@ pub(crate) trait ChainView: Clone + Send + Sync + 'static {
         txid: TxId,
     ) -> impl Future<Output = Result<TransactionStatus, ChainError>> + Send;
 
+    /// Returns the spend status of the transparent output `outpoint` on this view's chain.
+    ///
+    /// Spentness is authoritative (taken from the node's UTXO set); a per-outpoint spend index
+    /// is used only to resolve the spending transaction. A spent output whose spender cannot yet
+    /// be resolved is reported as [`SpendStatus::SpentSpenderUnknown`] so the caller retries
+    /// rather than concluding the output is unspent (see ZcashFoundation/zebra#10806).
+    #[cfg(feature = "spend-index")]
+    fn outpoint_spend_status(
+        &self,
+        outpoint: &OutPoint,
+    ) -> impl Future<Output = Result<SpendStatus, ChainError>> + Send;
+
     /// Returns the height of the given block if it is on this view's main chain.
     ///
     /// Gated to the `zcashd-import` migration: its only caller resolves block hashes to
@@ -203,6 +217,18 @@ pub(crate) struct ChainTx {
     pub(crate) block_time: Option<u32>,
 }
 
+/// The spend status of a transparent output, as reported by [`ChainView::outpoint_spend_status`].
+#[cfg(feature = "spend-index")]
+pub(crate) enum SpendStatus {
+    /// The output is unspent on this view's chain.
+    Unspent,
+    /// The output was spent by the transaction with this txid.
+    SpentBy(TxId),
+    /// The output is spent, but the spending transaction cannot yet be resolved (e.g. the
+    /// backend's spend index has not finished building); the caller should retry later.
+    SpentSpenderUnknown,
+}
+
 #[cfg(test)]
 mod tests {
     use std::ops::Range;
@@ -219,6 +245,10 @@ mod tests {
     use zcash_protocol::{TxId, consensus::BlockHeight};
 
     use super::{BlockLocator, ChainBlock, ChainError, ChainTx, ChainView};
+    #[cfg(feature = "spend-index")]
+    use super::SpendStatus;
+    #[cfg(feature = "spend-index")]
+    use transparent::bundle::OutPoint;
 
     /// A trivial in-memory [`ChainView`], proving the trait is implementable by a non-Zaino
     /// backend and locking the contract.
@@ -291,6 +321,14 @@ mod tests {
             _txid: TxId,
         ) -> Result<TransactionStatus, ChainError> {
             Ok(TransactionStatus::TxidNotRecognized)
+        }
+
+        #[cfg(feature = "spend-index")]
+        async fn outpoint_spend_status(
+            &self,
+            _outpoint: &OutPoint,
+        ) -> Result<SpendStatus, ChainError> {
+            Ok(SpendStatus::Unspent)
         }
 
         #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]

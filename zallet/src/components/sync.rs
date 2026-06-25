@@ -553,6 +553,8 @@ async fn data_requests<C: Chain>(
             continue;
         }
 
+        #[cfg(feature = "spend-index")]
+        let view_tip = chain_view.tip().await.map_err(SyncError::Chain)?.height;
         info!("{} transaction data requests to service", requests.len());
         for request in requests {
             match request {
@@ -589,8 +591,43 @@ async fn data_requests<C: Chain>(
                             .set_transaction_status(txid, TransactionStatus::TxidNotRecognized)?;
                     }
                 }
-                // Ignore these, we do all transparent detection through full blocks.
+                // Under `spend-index`, spend detection uses `GetSpendingTx` (below);
+                // remaining `TransactionsInvolvingAddress` requests are ephemeral-address
+                // discovery, covered by full-block scanning. (The `zaino` build, with
+                // `spend-index` off, services these via address queries instead.)
                 TransactionDataRequest::TransactionsInvolvingAddress(_) => (),
+                #[cfg(feature = "spend-index")]
+                TransactionDataRequest::GetSpendingTx(outpoint) => {
+                    use crate::components::chain::SpendStatus;
+                    match chain_view.outpoint_spend_status(&outpoint).await {
+                        Ok(SpendStatus::Unspent) => {
+                            // Confirmed unspent through the snapshot tip; record so the request
+                            // is not re-issued for this range.
+                            db_data.notify_output_verified_unspent(outpoint, view_tip)?;
+                        }
+                        Ok(SpendStatus::SpentBy(txid)) => {
+                            info!("Recovering spend of {outpoint:?} by {txid}");
+                            if let Some(tx) = chain_view
+                                .get_transaction(txid)
+                                .await
+                                .map_err(SyncError::Chain)?
+                            {
+                                decrypt_and_store_transaction(
+                                    params,
+                                    db_data,
+                                    &tx.inner,
+                                    tx.mined_height,
+                                )?;
+                            }
+                        }
+                        Ok(SpendStatus::SpentSpenderUnknown) => {
+                            // Spent, but the spend index has not yet recorded the spender
+                            // (ZcashFoundation/zebra#10806); leave queued to retry later.
+                            debug!("Spend of {outpoint:?} not yet resolvable; will retry");
+                        }
+                        Err(e) => warn!("Failed to service spend query for {outpoint:?}: {e}"),
+                    }
+                }
             }
         }
     }
