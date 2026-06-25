@@ -158,8 +158,14 @@ anyhow = "1.0"
 tonic = "0.14"
 
 [patch.crates-io]
-# TEMPORARY: pin librustzcash crates to the `spend-index` PR (zcash/librustzcash#2463)
-# until it merges and is released.
+# TEMPORARY: pin librustzcash crates to
+# 4cdba554f5545050da784fc9e1eb073ae958d819 Commits beyond this point on
+# `librustzcash` main introduce breaking API changes that neither `zebrad` nor
+# `zaino` can currently build with. If additional librustzcash changes are
+# needed, branch from this commit and pin to whatever subsequent commit
+# introduces changes to that branch; merges to `librustzcash` main are
+# exclusively proper history-preserving merge commits, so after such a branch
+# merges the commit reference will remain valid.
 equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
