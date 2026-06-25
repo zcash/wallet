@@ -16,6 +16,15 @@
 #[cfg(all(zallet_build = "wallet", zallet_build = "merchant_terminal"))]
 compile_error!("zallet_build must only be set to a single value");
 
+#[cfg(all(feature = "zaino", feature = "zebra-state"))]
+compile_error!(
+    "the `zaino` and `zebra-state` chain backends are mutually exclusive; \
+     enable exactly one (e.g. `--no-default-features --features zaino`)"
+);
+
+#[cfg(not(any(feature = "zaino", feature = "zebra-state")))]
+compile_error!("exactly one chain backend must be enabled: `zebra-state` (default) or `zaino`");
+
 pub mod application;
 mod cli;
 mod commands;

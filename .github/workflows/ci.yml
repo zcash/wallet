@@ -31,11 +31,20 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Run tests
+      # The `zaino` and `zebra-state` chain backends are mutually exclusive, so each is
+      # tested separately rather than via `--all-features`.
+      - name: Run tests (zaino backend)
         run: >
           cargo test
           --workspace
-          --all-features
+          --no-default-features
+          --features zaino,zcashd-import,rpc-cli,tokio-console
+      - name: Run tests (zebra-state backend)
+        run: >
+          cargo test
+          --workspace
+          --no-default-features
+          --features zebra-state,zcashd-import,rpc-cli,tokio-console
       - name: Verify working directory is clean
         run: git diff --exit-code
 
@@ -80,11 +89,14 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      # Cross-platform / NU7 / merchant_terminal coverage tracks the default (`zaino`)
+      # backend; the `zebra-state` backend is Linux-only and covered by `test-msrv-required`.
       - name: Run tests
         run: >
           cargo test
           --workspace
-          --all-features
+          --no-default-features
+          --features zaino,zcashd-import,rpc-cli,tokio-console
       - name: Verify working directory is clean
         run: git diff --exit-code
 
@@ -106,12 +118,21 @@ jobs:
           RUST_TOOLCHAIN: ${{steps.toolchain.outputs.name}}
       - name: Remove lockfile to build with latest dependencies
         run: rm Cargo.lock
-      - name: Build crates
+      - name: Build crates (zaino backend)
         run: >
           cargo build
           --workspace
           --all-targets
-          --all-features
+          --no-default-features
+          --features zaino,zcashd-import,rpc-cli,tokio-console
+      - name: Build crates (zebra-state backend)
+        if: runner.os == 'Linux'
+        run: >
+          cargo build
+          --workspace
+          --all-targets
+          --no-default-features
+          --features zebra-state,zcashd-import,rpc-cli,tokio-console
       - name: Verify working directory is clean (excluding lockfile)
         run: git diff --exit-code ':!Cargo.lock'
 

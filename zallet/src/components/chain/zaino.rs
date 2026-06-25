@@ -10,11 +10,11 @@ use tokio::net::lookup_host;
 use zaino_common::{CacheConfig, DatabaseConfig, StorageConfig};
 use zaino_fetch::jsonrpsee::connector::JsonRpSeeConnector;
 use zaino_state::{
-    BlockCacheConfig, ChainIndex as _, ChainIndexSnapshot, NodeBackedChainIndex,
+    ChainIndex as _, ChainIndexConfig, ChainIndexSnapshot, NodeBackedChainIndex,
     NodeBackedChainIndexSubscriber, StatusType,
     chain_index::{
         ShieldedPool,
-        source::ValidatorConnector,
+        source::{State, ValidatorConnector},
         types::{BestChainLocation, NonBestChainLocation},
     },
 };
@@ -39,7 +39,8 @@ use crate::{
     network::Network,
 };
 
-use super::{Chain, ChainBlock, ChainError, ChainTx, ChainView};
+use super::read_state::{AbortOnDrop, init_read_state_service};
+use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView};
 
 /// Converts a `zcash_protocol` block height into a Zaino block height.
 fn to_zaino_height(height: BlockHeight) -> zaino_state::Height {
@@ -51,7 +52,7 @@ fn to_zaino_height(height: BlockHeight) -> zaino_state::Height {
 /// The Zaino finalised-state database schema version to target.
 ///
 /// `1` selects Zaino's latest v1 finalised-state schema. We run the indexer in ephemeral
-/// mode (see [`BlockCacheConfig::new`] below), so no persistent finalised-state database
+/// mode (see [`ChainIndexConfig::new`] below), so no persistent finalised-state database
 /// is actually opened and this value has no on-disk effect; it is set to the current
 /// schema version for forward-compatibility if ephemeral mode is ever disabled.
 const ZAINO_FINALISED_DB_VERSION: u32 = 1;
@@ -142,7 +143,7 @@ impl ZainoChain {
         .await
         .map_err(|e| ErrorKind::Init.context(e))?;
 
-        let indexer_config = BlockCacheConfig::new(
+        let indexer_config = ChainIndexConfig::new(
             StorageConfig {
                 cache: CacheConfig::default(),
                 database: DatabaseConfig {
@@ -162,11 +163,28 @@ impl ZainoChain {
             true,
         );
 
+        // Select the chain-data source. By default Zaino fetches all chain data over
+        // JSON-RPC; if `[indexer.read_state_service]` is configured, it instead reads
+        // finalized state directly from a co-located zebrad (read-only secondary) and
+        // follows the non-finalized tip over zebrad's gRPC indexer interface.
+        let (source, sync_handle) = match &config.indexer.read_state_service {
+            None => (ValidatorConnector::Fetch(fetcher.clone()), None),
+            Some(rss) => {
+                let (read_state_service, sync_task) =
+                    init_read_state_service(config, &params, rss).await?;
+                let source = ValidatorConnector::State(State {
+                    read_state_service,
+                    mempool_fetcher: fetcher.clone(),
+                    network: params.to_zaino(),
+                });
+                (source, Some(AbortOnDrop(sync_task)))
+            }
+        };
+
         info!("Starting Zaino indexer");
-        let indexer =
-            NodeBackedChainIndex::new(ValidatorConnector::Fetch(fetcher.clone()), indexer_config)
-                .await
-                .map_err(|e| ErrorKind::Init.context(e))?;
+        let indexer = NodeBackedChainIndex::new(source, indexer_config)
+            .await
+            .map_err(|e| ErrorKind::Init.context(e))?;
         info!("Started Zaino indexer");
 
         let chain = Self {
@@ -177,6 +195,11 @@ impl ZainoChain {
 
         // Spawn a task that stops the indexer when appropriate internal signals occur.
         let task = crate::spawn!("Indexer shutdown", async move {
+            // Hold the read-state syncer for the lifetime of this task. Dropping the guard
+            // aborts the syncer on every shutdown path, including when this task is itself
+            // aborted externally, so the syncer never outlives the indexer.
+            let _sync_handle = sync_handle;
+
             let mut server_interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(100));
 
@@ -296,14 +319,19 @@ impl ChainView for ZainoChainView {
 
     async fn find_fork_point(
         &self,
-        known_tip: &BlockHash,
+        locator: &BlockLocator,
     ) -> Result<Option<ChainBlock>, ChainError> {
-        Ok(self
-            .chain
-            .find_fork_point(&self.snapshot, &zaino_state::BlockHash(known_tip.0))
-            .await
-            .map_err(ChainError::backend)?
-            .map(ChainBlock::from_zaino))
+        for known_tip in locator.hashes() {
+            if let Some(fork) = self
+                .chain
+                .find_fork_point(&self.snapshot, &zaino_state::BlockHash(known_tip.0))
+                .await
+                .map_err(ChainError::backend)?
+            {
+                return Ok(Some(ChainBlock::from_zaino(fork)));
+            }
+        }
+        Ok(None)
     }
 
     async fn tree_state_as_of(

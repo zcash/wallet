@@ -18,12 +18,25 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Run clippy
+      # The `zaino` and `zebra-state` chain backends are mutually exclusive, so each is
+      # linted separately rather than via `--all-features`.
+      - name: Run clippy (zaino backend)
         uses: auguwu/clippy-action@94a9ff2f6920180b89e5c03d121d0af04a9d3e03 # 1.4.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           check-args: >
-            --all-features
+            --no-default-features
+            --features zaino,zcashd-import,rpc-cli,tokio-console
+            --all-targets
+          args: >
+            -D warnings
+      - name: Run clippy (zebra-state backend)
+        uses: auguwu/clippy-action@94a9ff2f6920180b89e5c03d121d0af04a9d3e03 # 1.4.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          check-args: >
+            --no-default-features
+            --features zebra-state,zcashd-import,rpc-cli,tokio-console
             --all-targets
           args: >
             -D warnings
@@ -46,12 +59,23 @@ jobs:
         shell: sh
         env:
           TOOLCHAIN: ${{steps.toolchain.outputs.name}}
-      - name: Run Clippy (beta)
+      - name: Run Clippy (beta, zaino backend)
         uses: auguwu/clippy-action@94a9ff2f6920180b89e5c03d121d0af04a9d3e03 # 1.4.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           check-args: >
-            --all-features
+            --no-default-features
+            --features zaino,zcashd-import,rpc-cli,tokio-console
+            --all-targets
+          args: >
+            -W clippy::all
+      - name: Run Clippy (beta, zebra-state backend)
+        uses: auguwu/clippy-action@94a9ff2f6920180b89e5c03d121d0af04a9d3e03 # 1.4.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          check-args: >
+            --no-default-features
+            --features zebra-state,zcashd-import,rpc-cli,tokio-console
             --all-targets
           args: >
             -W clippy::all

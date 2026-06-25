@@ -164,8 +164,8 @@ impl DbConnection {
     /// must only include addresses for which the spending application holds or can obtain
     /// the spending keys.
     ///
-    /// [`create_proposed_transactions`]: zcash_client_sqlite::data_api::wallet::create_proposed_transactions
-    /// [`propose_shielding`]: zcash_client_sqlite::data_api::wallet::propose_shielding
+    /// [`create_proposed_transactions`]: zcash_client_backend::data_api::wallet::create_proposed_transactions
+    /// [`propose_shielding`]: zcash_client_backend::data_api::wallet::propose_shielding
     #[cfg(feature = "zcashd-import")]
     pub(crate) fn import_standalone_transparent_pubkeys(
         &mut self,
