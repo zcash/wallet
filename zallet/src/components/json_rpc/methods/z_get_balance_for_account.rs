@@ -4,7 +4,7 @@ use documented::Documented;
 use jsonrpsee::core::{JsonValue, RpcResult};
 use schemars::JsonSchema;
 use serde::Serialize;
-use zcash_client_backend::data_api::{WalletRead, wallet::ConfirmationsPolicy};
+use zcash_client_backend::data_api::{AccountBalance, WalletRead, wallet::ConfirmationsPolicy};
 use zcash_protocol::value::Zatoshis;
 
 use crate::components::{
@@ -95,15 +95,25 @@ pub(crate) async fn call(
         ))
     })?;
 
-    Ok(BalanceForAccount {
+    Ok(response_for_balance(account_balance, minconf))
+}
+
+/// Builds the response from an account's balance.
+///
+/// Reports each value pool's spendable balance, omitting pools whose balance is
+/// zero, and echoes the effective `minconf` (defaulting to 1, as in zcashd).
+fn response_for_balance(
+    account_balance: &AccountBalance,
+    minconf: Option<u32>,
+) -> BalanceForAccount {
+    BalanceForAccount {
         pools: Pools {
             transparent: pool_balance(account_balance.unshielded_balance().spendable_value()),
             sapling: pool_balance(account_balance.sapling_balance().spendable_value()),
             orchard: pool_balance(account_balance.orchard_balance().spendable_value()),
         },
-        // `minconf` defaults to 1, matching zcashd.
         minimum_confirmations: minconf.unwrap_or(1),
-    })
+    }
 }
 
 /// Renders a pool's spendable balance, omitting pools with a zero balance to
@@ -112,4 +122,123 @@ fn pool_balance(value: Zatoshis) -> Option<PoolBalance> {
     (!value.is_zero()).then(|| PoolBalance {
         value_zat: value.into_u64(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use zcash_client_backend::data_api::AccountBalance;
+    use zcash_protocol::value::{BalanceError, COIN, Zatoshis};
+
+    use super::response_for_balance;
+
+    /// Builds an `AccountBalance` with the given spendable values (in zatoshis)
+    /// in the transparent, Sapling, and Orchard pools respectively.
+    fn account_balance(transparent: u64, sapling: u64, orchard: u64) -> AccountBalance {
+        let zat = Zatoshis::const_from_u64;
+        let mut balance = AccountBalance::ZERO;
+        balance
+            .with_unshielded_balance_mut::<_, BalanceError>(|b| {
+                b.add_spendable_value(zat(transparent))
+            })
+            .unwrap();
+        balance
+            .with_sapling_balance_mut::<_, BalanceError>(|b| b.add_spendable_value(zat(sapling)))
+            .unwrap();
+        balance
+            .with_orchard_balance_mut::<_, BalanceError>(|b| b.add_spendable_value(zat(orchard)))
+            .unwrap();
+        balance
+    }
+
+    /// Renders the response for a balance to its JSON representation (the actual
+    /// RPC output contract).
+    fn rendered(
+        transparent: u64,
+        sapling: u64,
+        orchard: u64,
+        minconf: Option<u32>,
+    ) -> serde_json::Value {
+        serde_json::to_value(response_for_balance(
+            &account_balance(transparent, sapling, orchard),
+            minconf,
+        ))
+        .unwrap()
+    }
+
+    // An account with no funds reports no pools (matching `mining_shielded_coinbase.py`
+    // and `wallet_orchard.py` in zcashd, which expect `{'pools': {}, ...}`).
+    #[test]
+    fn empty_account_has_no_pools() {
+        assert_eq!(
+            rendered(0, 0, 0, None),
+            json!({"pools": {}, "minimum_confirmations": 1}),
+        );
+    }
+
+    // A single funded pool is rendered on its own, in zatoshis under `valueZat`
+    // (cf. zcashd `z_getbalanceforaccount(0)['pools'] == {'sapling': {'valueZat': 5 * COIN}}`).
+    #[test]
+    fn single_pool_is_rendered() {
+        assert_eq!(
+            rendered(0, 5 * COIN, 0, None),
+            json!({"pools": {"sapling": {"valueZat": 5 * COIN}}, "minimum_confirmations": 1}),
+        );
+        assert_eq!(
+            rendered(0, 0, 5 * COIN, None),
+            json!({"pools": {"orchard": {"valueZat": 5 * COIN}}, "minimum_confirmations": 1}),
+        );
+        assert_eq!(
+            rendered(COIN, 0, 0, None),
+            json!({"pools": {"transparent": {"valueZat": COIN}}, "minimum_confirmations": 1}),
+        );
+    }
+
+    // Multiple funded pools all appear (cf. zcashd post-NU5 shielded coinbase, which
+    // reports both `sapling` and `orchard`).
+    #[test]
+    fn multiple_pools_are_rendered() {
+        assert_eq!(
+            rendered(0, 5 * COIN, 625 * COIN / 100, None),
+            json!({
+                "pools": {
+                    "sapling": {"valueZat": 5 * COIN},
+                    "orchard": {"valueZat": 625 * COIN / 100},
+                },
+                "minimum_confirmations": 1,
+            }),
+        );
+    }
+
+    // Pools with a zero balance are omitted even when other pools are funded.
+    #[test]
+    fn zero_pools_are_omitted_among_funded_pools() {
+        assert_eq!(
+            rendered(COIN, 0, 2 * COIN, None),
+            json!({
+                "pools": {
+                    "transparent": {"valueZat": COIN},
+                    "orchard": {"valueZat": 2 * COIN},
+                },
+                "minimum_confirmations": 1,
+            }),
+        );
+    }
+
+    // The effective `minconf` is echoed back; omitting it defaults to 1 (as in zcashd).
+    #[test]
+    fn minimum_confirmations_echoes_minconf() {
+        assert_eq!(
+            rendered(0, COIN, 0, None)["minimum_confirmations"],
+            json!(1)
+        );
+        assert_eq!(
+            rendered(0, COIN, 0, Some(5))["minimum_confirmations"],
+            json!(5)
+        );
+        assert_eq!(
+            rendered(0, COIN, 0, Some(0))["minimum_confirmations"],
+            json!(0)
+        );
+    }
 }
