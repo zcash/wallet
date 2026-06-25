@@ -74,6 +74,9 @@ be considered breaking changes.
   not defined.
 - Zallet now refuses to open wallet databases from incompatible earlier alpha
   releases instead of attempting to migrate them.
+- The network-mismatch startup error now reports the path of the wallet database
+  and explains that a database is permanently tied to one network, so the cause
+  and the available remedies are clear.
 - `z_sendmany` no longer drop standalone transparent signing keys when the same
   address backs multiple proposal inputs. Keys are now accumulated per address
   rather than overwritten.
