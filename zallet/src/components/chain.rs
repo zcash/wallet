@@ -1,7 +1,8 @@
 //! The wallet's view of the Zcash chain.
 //!
 //! [`Chain`] and [`ChainView`] are the backend-neutral interface the rest of the wallet
-//! uses to read chain data. The Zaino-backed implementation lives in [`zaino`].
+//! uses to read chain data. The backend implementations live in the `zaino` and `zebra`
+//! modules, selected by cargo feature.
 
 use std::future::Future;
 use std::ops::Range;
