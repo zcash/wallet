@@ -329,3 +329,18 @@ as_of_version = "0.1.0-alpha.4"
 # This can be generated with `zallet rpc add-user`.
 #pwhash = UNSET
 
+
+#
+# Settings controlling how Zallet synchronizes the wallet with the chain.
+#
+[sync]
+
+# The maximum number of blocks that the history-recovery task downloads and scans in
+# a single batch.
+#
+# Larger batches improve scanning throughput, but increase peak memory usage: every
+# block in a batch is held in memory while it is downloaded and trial-decrypted.
+# Mainnet blocks can currently be up to 2 MiB each, so a batch of N blocks can require
+# on the order of N * 2 MiB of memory.
+#recover_batch_size = 1000
+
