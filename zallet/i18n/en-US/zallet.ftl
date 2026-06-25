@@ -147,7 +147,7 @@ err-init-db-invalid-zallet-version =
     The wallet database recorded an invalid {-zallet} version '{$version}':
     {$err}
 
-err-init-identity-not-found = Encryption identity file could not be located at {$path}
+err-init-identity-not-found = Encryption identity file could not be located at {$path}. An identity can be generated using generate-encryption-identity.
 err-init-identity-not-passphrase-encrypted = {$path} is not encrypted with a passphrase
 err-init-path-not-utf8 = {$path} is not currently supported (not UTF-8)
 err-init-identity-not-usable = Identity file at {$path} is not usable: {$error}
