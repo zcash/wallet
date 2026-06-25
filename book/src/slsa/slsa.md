@@ -45,7 +45,7 @@ The supply-chain machinery above governs **the artifacts we publish** — it doe
 | Tier | Command | Arch | Output | Guarantee |
 | --- | --- | --- | --- | --- |
 | **1. Cargo** (developer) | `cargo build --release --bin zallet --features rpc-cli,zcashd-import` | host arch | local binary | none beyond Cargo's lockfile |
-| **2. Docker** (convenience) | `docker buildx build --platform linux/amd64,linux/arm64 -t zallet .` | amd64 + arm64 | container image | standard multi-arch image |
+| **2. Docker** (standard) | `docker buildx build --platform linux/amd64,linux/arm64 -t zallet .` | amd64 + arm64 | container image | rebuild-reproducible (digest-pinned bases, SOURCE_DATE_EPOCH) |
 | **3a. Nix** (reproducible) | `nix build .#zallet` | amd64 **or** arm64 (native) | static-musl binary | bit-for-bit reproducible |
 | **3b. StageX** (bootstrap-grade) | the `Dockerfile.stagex` build the CI runs | amd64 | static-musl image | full-source-bootstrapped + reproducible |
 
@@ -62,7 +62,7 @@ docker build -t zallet .                                   # host arch
 docker buildx build --platform linux/amd64,linux/arm64 .   # both
 ```
 
-This image is for convenience and accessibility. It is **not** intended to reproduce the published digest bit-for-bit (it uses the standard `debian`/glibc toolchain, not the static-musl bootstrap). Use tier 3 if you want to reproduce a published release artifact.
+This image is **rebuild-reproducible**: the `rust` and `debian` bases are digest-pinned, `SOURCE_DATE_EPOCH` (passed from the commit time) drives all build timestamps, absolute build paths are remapped out of the binary, and the apt/ldconfig caches are dropped. Two builds of the same commit with the same base digests produce the same bytes — verify by building twice and comparing, or with `--output type=image,rewrite-timestamp=true`. It does **not** bootstrap its toolchain (it pins a prebuilt `rust` + `debian`, like most reproducible-build setups), so it is not bootstrap-grade the way tier 3b (StageX, amd64) is — use tier 3 to reproduce the exact published release artifact.
 
 ### Tier 3a — Nix (reproducible, both arches)
 

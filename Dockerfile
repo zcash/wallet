@@ -1,4 +1,4 @@
-# Standard, multi-arch Zallet image — the "build it yourself" path.
+# Standard, multi-arch Zallet image — the everyday `docker build` path.
 #
 # This is the DEFAULT Dockerfile: a plain, widely-understood multi-stage build
 # on official images that works out of the box on linux/amd64 AND linux/arm64
@@ -9,18 +9,24 @@
 #   docker build -t zallet .
 #   docker buildx build --platform linux/amd64,linux/arm64 -t zallet .
 #
-# It does NOT attempt to reproduce the published artifact bit-for-bit. For the
-# high-assurance, reproducible release artifacts we publish, see:
-#   * Dockerfile.stagex — full-source-bootstrapped amd64 image (StageX), and
-#   * flake.nix         — bit-for-bit reproducible static-musl build for both
-#                         arches (`nix build .#zallet`).
-# Both are documented in book/src/slsa/slsa.md. This file is for convenience and
-# accessibility; the release pipeline does not use it.
+# It is also REPRODUCIBLE (rebuild-deterministic): bases are digest-pinned,
+# timestamps come from SOURCE_DATE_EPOCH, build paths are remapped out of the
+# binary, and the apt/ldconfig caches (which embed wall-clock times) are dropped.
+# Two builds of the same commit + same base digests produce the same bytes.
+# Build reproducibly with:
+#   docker buildx build --build-arg SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) \
+#     --output type=image,rewrite-timestamp=true .
+#
+# This does NOT bootstrap its toolchain (it pins a prebuilt rust + debian, like
+# most reproducible-build setups). The full-source-bootstrapped release path is
+# `Dockerfile.stagex` (amd64); `flake.nix` gives a bit-for-bit static-musl build
+# for both arches. See book/src/slsa/slsa.md.
 
 # --- Stage 1: build ---------------------------------------------------------
-# Pin a specific Rust to match Cargo's expectations; bookworm matches the
-# runtime base below so the dynamically-linked glibc binary just works.
-FROM rust:1.91.1-slim-bookworm AS builder
+# Digest-pin the base so the build is a function of its inputs only (bump the
+# tag AND the digest together, deliberately). rust 1.91.1 on bookworm matches
+# the runtime base below so the dynamically-linked glibc binary just works.
+FROM rust:1.91.1-slim-bookworm@sha256:8514999d4786ef12efe89239e86b3d0a021b94b9d35108c8efe6c79ca7dc1a65 AS builder
 
 # Build deps: protobuf (tonic/PROTOC), clang+llvm (bindgen / *-sys C/C++ deps),
 # pkg-config, and git (zaino-state's build.rs embeds the commit).
@@ -31,8 +37,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PROTOC=/usr/bin/protoc
+# CARGO_INCREMENTAL=0: incremental artifacts are nondeterministic.
+ENV CARGO_INCREMENTAL=0
 WORKDIR /usr/src/zallet
 COPY . .
+
+# Reproducibility: SOURCE_DATE_EPOCH (passed from the commit time) feeds any
+# timestamp the build would otherwise take from the wall clock; remap the
+# absolute build path out of the binary so a different checkout dir doesn't
+# change the bytes.
+ARG SOURCE_DATE_EPOCH=0
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 # Build NATIVELY for whatever architecture this image is running as. buildx
 # already places the container on the target arch (per --platform), so the
@@ -44,6 +59,7 @@ COPY . .
 # `cargo build` uses the in-image gcc/clang for the native arch and Just Works
 # on both amd64 and arm64.
 RUN set -eux; \
+    export CARGO_BUILD_RUSTFLAGS="--remap-path-prefix=$PWD=/build --remap-path-prefix=$CARGO_HOME=/cargo"; \
     cargo build --release --locked \
       --bin zallet --features rpc-cli,zcashd-import; \
     install -D -m0755 target/release/zallet /out/zallet; \
@@ -67,12 +83,14 @@ COPY --from=builder /out/usr/local/share/zallet /usr/local/share/zallet
 # debian-slim (not scratch): this is a dynamically-linked glibc binary, so it
 # needs a libc + CA certs at runtime. The reproducible StageX/Nix paths produce
 # a static-musl binary that can live on scratch; this convenience image trades
-# that for a standard, easy-to-extend base.
-FROM debian:bookworm-slim AS runtime
+# that for a standard, easy-to-extend base. Digest-pinned for reproducibility.
+FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df AS runtime
+# --shadow-time + dropping the apt/dpkg/ldconfig caches keeps the layer free of
+# wall-clock timestamps that would otherwise drift the image digest day to day.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin zallet
+    && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin zallet \
+    && rm -rf /var/lib/apt/lists/* /var/log/* /var/cache/ldconfig/aux-cache
 COPY --from=builder /out/zallet /usr/local/bin/zallet
 COPY --from=builder /out/usr/local/share/zallet /usr/local/share/zallet
 USER 1000:1000
