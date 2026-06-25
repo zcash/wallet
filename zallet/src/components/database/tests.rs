@@ -211,8 +211,7 @@ fn network_mismatch_still_reports_network_error() {
 
     let err = open_database(&config).expect_err("network mismatch must be rejected");
     assert!(
-        err.to_string()
-            .contains("The wallet database was created for network type"),
+        err.to_string().contains("was created for network type"),
         "unexpected error: {err}",
     );
 }

@@ -137,8 +137,11 @@ err-init-zallet-already-running =
     Cannot obtain a lock on data directory {$datadir}. {-zallet} is probably already running.
 
 err-init-config-db-mismatch =
-    The wallet database was created for network type {$db_network_type}, but the
-    config is using network type {$config_network_type}.
+    The wallet database at {$db_path} was created for network type
+    {$db_network_type}, but the config is using network type
+    {$config_network_type}. A wallet database is permanently tied to one network;
+    set 'network' back to {$db_network_type}, or use a different data directory to
+    create a fresh {$config_network_type} wallet.
 err-init-db-incompatible-alpha =
     This wallet database was created by an incompatible alpha version of {-zallet}.
     To use this {-zallet} release, start again with a fresh Zallet wallet or a
