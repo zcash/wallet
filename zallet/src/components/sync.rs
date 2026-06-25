@@ -39,7 +39,16 @@ use std::time::Duration;
 
 use futures::{StreamExt as _, TryStreamExt as _};
 use jsonrpsee::tracing::{self, debug, info, warn};
+#[cfg(not(feature = "spend-index"))]
+use std::collections::HashSet;
+#[cfg(not(feature = "spend-index"))]
+use std::ops::Range;
 use tokio::{sync::Notify, time};
+#[cfg(not(feature = "spend-index"))]
+use zcash_client_backend::data_api::{
+    InputSource, TransactionsInvolvingAddress, TransparentOutputFilter,
+    wallet::{ConfirmationsPolicy, TargetHeight},
+};
 use zcash_client_backend::{
     data_api::{
         TransactionDataRequest, TransactionStatus, WalletRead, WalletWrite, scanning::ScanPriority,
@@ -49,6 +58,8 @@ use zcash_client_backend::{
     sync::decryptor,
 };
 use zcash_client_sqlite::AccountUuid;
+#[cfg(not(feature = "spend-index"))]
+use zcash_protocol::TxId;
 use zcash_protocol::consensus::BlockHeight;
 use zip32::Scope;
 
@@ -531,6 +542,88 @@ async fn recover_history<C: Chain>(
     }
 }
 
+/// Computes the half-open block range `[start, end)` to query for a transparent-address data
+/// request, and the height to report to `notify_address_checked` as the highest block inspected.
+///
+/// `block_range_end` is exclusive; when unset it defaults to one past `view_tip` so the tip block
+/// is covered, and an explicit end is clamped to that bound. `as_of_height` is the last block
+/// covered (`end - 1`).
+#[cfg(not(feature = "spend-index"))]
+fn address_request_bounds(
+    block_range_start: BlockHeight,
+    block_range_end: Option<BlockHeight>,
+    view_tip: BlockHeight,
+) -> (Range<BlockHeight>, BlockHeight) {
+    let tip_exclusive = view_tip + 1;
+    let end = block_range_end
+        .map(|e| std::cmp::min(e, tip_exclusive))
+        .unwrap_or(tip_exclusive);
+    let end = std::cmp::max(end, block_range_start);
+    let as_of_height = BlockHeight::from_u32(u32::from(end).saturating_sub(1));
+    (block_range_start..end, as_of_height)
+}
+
+/// Services a [`TransactionDataRequest::TransactionsInvolvingAddress`] spend-search request on a
+/// backend without a per-outpoint spend index (the `zaino` build).
+///
+/// Cheap path first: diff the wallet's tracked unspent outputs at the address against the chain's
+/// current unspent set. Only if one of ours is missing (i.e. actually spent on chain) is the
+/// potentially-large address transaction history fetched and ingested to record the spend. The
+/// address is then recorded as checked so the request is not re-issued for the same range. (For
+/// requests with no tracked outputs at the address — e.g. ephemeral-address discovery — this just
+/// advances the watermark; full-block scanning covers those receipts.)
+#[cfg(not(feature = "spend-index"))]
+async fn service_address_request<V: ChainView>(
+    chain_view: &V,
+    params: &Network,
+    db_data: &mut DbConnection,
+    request: TransactionsInvolvingAddress,
+    view_tip: BlockHeight,
+) -> Result<(), SyncError> {
+    let address = request.address();
+    let (range, as_of_height) = address_request_bounds(
+        request.block_range_start(),
+        request.block_range_end(),
+        view_tip,
+    );
+
+    let chain_unspent: HashSet<(TxId, u32)> = chain_view
+        .get_address_unspent_outpoints(&address)
+        .await
+        .map_err(SyncError::Chain)?
+        .into_iter()
+        .collect();
+    let our_outputs = db_data.get_spendable_transparent_outputs(
+        &address,
+        TargetHeight::from(view_tip + 1),
+        ConfirmationsPolicy::MIN,
+        TransparentOutputFilter::All,
+    )?;
+    let any_spent = our_outputs.iter().any(|output| {
+        let outpoint = output.outpoint();
+        !chain_unspent.contains(&(*outpoint.txid(), outpoint.n()))
+    });
+
+    if any_spent {
+        let txids = chain_view
+            .get_address_tx_ids(&address, range)
+            .await
+            .map_err(SyncError::Chain)?;
+        for txid in txids {
+            if let Some(tx) = chain_view
+                .get_transaction(txid)
+                .await
+                .map_err(SyncError::Chain)?
+            {
+                decrypt_and_store_transaction(params, db_data, &tx.inner, tx.mined_height)?;
+            }
+        }
+    }
+
+    db_data.notify_address_checked(request, as_of_height)?;
+    Ok(())
+}
+
 /// Fetches information that the wallet requests to complete its view of transaction
 /// history.
 #[tracing::instrument(skip_all)]
@@ -553,6 +646,7 @@ async fn data_requests<C: Chain>(
             continue;
         }
 
+        let view_tip = chain_view.tip().await.map_err(SyncError::Chain)?.height;
         info!("{} transaction data requests to service", requests.len());
         for request in requests {
             match request {
@@ -589,8 +683,53 @@ async fn data_requests<C: Chain>(
                             .set_transaction_status(txid, TransactionStatus::TxidNotRecognized)?;
                     }
                 }
-                // Ignore these, we do all transparent detection through full blocks.
+                // With `spend-index`, spend detection uses `GetSpendingTx` (below) and any
+                // remaining `TransactionsInvolvingAddress` requests are ephemeral-address
+                // discovery, covered by full-block scanning. Without it (the `zaino` build),
+                // these carry the spend-search requests and are serviced via address queries.
+                #[cfg(feature = "spend-index")]
                 TransactionDataRequest::TransactionsInvolvingAddress(_) => (),
+                #[cfg(not(feature = "spend-index"))]
+                TransactionDataRequest::TransactionsInvolvingAddress(request) => {
+                    if let Err(e) =
+                        service_address_request(&chain_view, params, db_data, request, view_tip)
+                            .await
+                    {
+                        warn!("Failed to service transparent-address data request: {e}");
+                    }
+                }
+                #[cfg(feature = "spend-index")]
+                TransactionDataRequest::GetSpendingTx(outpoint) => {
+                    use crate::components::chain::SpendStatus;
+                    match chain_view.outpoint_spend_status(&outpoint).await {
+                        Ok(SpendStatus::Unspent) => {
+                            // Confirmed unspent through the snapshot tip; record so the request
+                            // is not re-issued for this range.
+                            db_data.notify_output_verified_unspent(outpoint, view_tip)?;
+                        }
+                        Ok(SpendStatus::SpentBy(txid)) => {
+                            info!("Recovering spend of {outpoint:?} by {txid}");
+                            if let Some(tx) = chain_view
+                                .get_transaction(txid)
+                                .await
+                                .map_err(SyncError::Chain)?
+                            {
+                                decrypt_and_store_transaction(
+                                    params,
+                                    db_data,
+                                    &tx.inner,
+                                    tx.mined_height,
+                                )?;
+                            }
+                        }
+                        Ok(SpendStatus::SpentSpenderUnknown) => {
+                            // Spent, but the spend index has not yet recorded the spender
+                            // (ZcashFoundation/zebra#10806); leave queued to retry later.
+                            debug!("Spend of {outpoint:?} not yet resolvable; will retry");
+                        }
+                        Err(e) => warn!("Failed to service spend query for {outpoint:?}: {e}"),
+                    }
+                }
             }
         }
     }
@@ -677,5 +816,45 @@ mod tests {
             "bad bytes",
         ))));
         assert!(!is_retryable(&SyncError::BatchDecryptorUnavailable));
+    }
+
+    #[cfg(not(feature = "spend-index"))]
+    #[test]
+    fn address_request_bounds_clamps_and_reports_as_of() {
+        use super::address_request_bounds;
+
+        let tip = BlockHeight::from_u32(4_090_000);
+
+        // Explicit end below the tip is used as-is; as_of is end - 1.
+        let (range, as_of) = address_request_bounds(
+            BlockHeight::from_u32(1_810_000),
+            Some(BlockHeight::from_u32(1_900_000)),
+            tip,
+        );
+        assert_eq!(
+            range,
+            BlockHeight::from_u32(1_810_000)..BlockHeight::from_u32(1_900_000)
+        );
+        assert_eq!(as_of, BlockHeight::from_u32(1_899_999));
+
+        // Open end defaults to tip + 1; as_of is the tip.
+        let (range, as_of) = address_request_bounds(BlockHeight::from_u32(1_810_000), None, tip);
+        assert_eq!(
+            range,
+            BlockHeight::from_u32(1_810_000)..BlockHeight::from_u32(4_090_001)
+        );
+        assert_eq!(as_of, tip);
+
+        // An end past the tip is clamped to tip + 1.
+        let (range, as_of) = address_request_bounds(
+            BlockHeight::from_u32(1_810_000),
+            Some(BlockHeight::from_u32(9_000_000)),
+            tip,
+        );
+        assert_eq!(
+            range,
+            BlockHeight::from_u32(1_810_000)..BlockHeight::from_u32(4_090_001)
+        );
+        assert_eq!(as_of, tip);
     }
 }

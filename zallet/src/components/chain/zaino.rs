@@ -7,6 +7,8 @@ use futures::{StreamExt, stream::BoxStream};
 use incrementalmerkletree::frontier::CommitmentTree;
 use jsonrpsee::tracing::{error, info, warn};
 use tokio::net::lookup_host;
+#[cfg(not(feature = "spend-index"))]
+use transparent::address::TransparentAddress;
 use zaino_common::{CacheConfig, DatabaseConfig, StorageConfig};
 use zaino_fetch::jsonrpsee::connector::JsonRpSeeConnector;
 use zaino_state::{
@@ -22,6 +24,8 @@ use zcash_client_backend::data_api::{
     TransactionStatus,
     chain::{ChainState, CommitmentTreeRoot},
 };
+#[cfg(not(feature = "spend-index"))]
+use zcash_keys::address::Address;
 use zcash_primitives::{
     block::{Block, BlockHash, BlockHeader},
     merkle_tree::read_commitment_tree,
@@ -31,6 +35,8 @@ use zcash_protocol::{
     TxId,
     consensus::{self, BlockHeight},
 };
+#[cfg(not(feature = "spend-index"))]
+use zebra_rpc::client::{GetAddressBalanceRequest, GetAddressTxIdsRequest};
 
 use crate::{
     components::TaskHandle,
@@ -534,6 +540,51 @@ impl ChainView for ZainoChainView {
             (None, orphans) if orphans.is_empty() => TransactionStatus::TxidNotRecognized,
             (None, _) => TransactionStatus::NotInMainChain,
         })
+    }
+
+    #[cfg(not(feature = "spend-index"))]
+    async fn get_address_unspent_outpoints(
+        &self,
+        address: &TransparentAddress,
+    ) -> Result<Vec<(TxId, u32)>, ChainError> {
+        let addr_str = Address::Transparent(*address).encode(&self.params);
+        let utxos = self
+            .chain
+            .get_address_utxos(GetAddressBalanceRequest::new(vec![addr_str]))
+            .await
+            .map_err(ChainError::backend)?;
+        Ok(utxos
+            .into_iter()
+            .map(|utxo| (TxId::from_bytes(utxo.txid().0), utxo.output_index().index()))
+            .collect())
+    }
+
+    #[cfg(not(feature = "spend-index"))]
+    async fn get_address_tx_ids(
+        &self,
+        address: &TransparentAddress,
+        range: Range<BlockHeight>,
+    ) -> Result<Vec<TxId>, ChainError> {
+        if range.is_empty() {
+            return Ok(Vec::new());
+        }
+        let addr_str = Address::Transparent(*address).encode(&self.params);
+        let start = u32::from(range.start);
+        // `range` is non-empty, so `range.end >= start + 1 >= 1`.
+        let end_inclusive = u32::from(range.end) - 1;
+        let hashes = self
+            .chain
+            .get_address_txids(GetAddressTxIdsRequest::new(
+                vec![addr_str],
+                Some(start),
+                Some(end_inclusive),
+            ))
+            .await
+            .map_err(ChainError::backend)?;
+        Ok(hashes
+            .into_iter()
+            .map(|hash| TxId::from_bytes(hash.0))
+            .collect())
     }
 
     /// Returns the height of the given block, if it is in the main chain within this

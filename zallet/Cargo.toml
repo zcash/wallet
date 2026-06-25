@@ -229,7 +229,15 @@ zebra-state = [
   "dep:jsonrpsee-http-client",
   "jsonrpsee/async-client",
   "dep:base64",
+  "zebra-state/indexer",
+  "spend-index",
 ]
+
+## Enables per-outpoint transparent spend detection: the wallet emits
+## `TransactionDataRequest::SpendsOfTransparentOutput` and the backend resolves spends via a
+## per-outpoint spend index. Enabled by `zebra-state` (which reaches Zebra's spend index); the
+## `zaino` backend leaves it off and uses address-based spend detection instead.
+spend-index = ["zcash_client_sqlite/spend-index"]
 
 ## `zallet rpc` CLI support
 rpc-cli = ["jsonrpsee/async-client", "dep:jsonrpsee-http-client"]

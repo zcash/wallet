@@ -8,6 +8,10 @@ use std::future::Future;
 use std::ops::Range;
 
 use futures::stream::BoxStream;
+#[cfg(not(feature = "spend-index"))]
+use transparent::address::TransparentAddress;
+#[cfg(feature = "spend-index")]
+use transparent::bundle::OutPoint;
 use zcash_client_backend::data_api::{
     TransactionStatus,
     chain::{ChainState, CommitmentTreeRoot},
@@ -135,6 +139,37 @@ pub(crate) trait ChainView: Clone + Send + Sync + 'static {
         txid: TxId,
     ) -> impl Future<Output = Result<TransactionStatus, ChainError>> + Send;
 
+    /// Returns the spend status of the transparent output `outpoint` on this view's chain.
+    ///
+    /// Spentness is authoritative (taken from the node's UTXO set); a per-outpoint spend index
+    /// is used only to resolve the spending transaction. A spent output whose spender cannot yet
+    /// be resolved is reported as [`SpendStatus::SpentSpenderUnknown`] so the caller retries
+    /// rather than concluding the output is unspent (see ZcashFoundation/zebra#10806).
+    #[cfg(feature = "spend-index")]
+    fn outpoint_spend_status(
+        &self,
+        outpoint: &OutPoint,
+    ) -> impl Future<Output = Result<SpendStatus, ChainError>> + Send;
+
+    /// Returns the outpoints `(txid, output_index)` currently unspent at `address` on this
+    /// view's chain, used (without a per-outpoint spend index) to cheaply decide whether any of
+    /// the wallet's tracked outputs at the address have been spent.
+    #[cfg(not(feature = "spend-index"))]
+    fn get_address_unspent_outpoints(
+        &self,
+        address: &TransparentAddress,
+    ) -> impl Future<Output = Result<Vec<(TxId, u32)>, ChainError>> + Send;
+
+    /// Returns the txids of transactions involving `address` mined within `range`
+    /// (start inclusive, end exclusive), used to recover the spending transaction once a missed
+    /// spend has been detected on a backend without a per-outpoint spend index.
+    #[cfg(not(feature = "spend-index"))]
+    fn get_address_tx_ids(
+        &self,
+        address: &TransparentAddress,
+        range: Range<BlockHeight>,
+    ) -> impl Future<Output = Result<Vec<TxId>, ChainError>> + Send;
+
     /// Returns the height of the given block if it is on this view's main chain.
     ///
     /// Gated to the `zcashd-import` migration: its only caller resolves block hashes to
@@ -203,6 +238,18 @@ pub(crate) struct ChainTx {
     pub(crate) block_time: Option<u32>,
 }
 
+/// The spend status of a transparent output, as reported by [`ChainView::outpoint_spend_status`].
+#[cfg(feature = "spend-index")]
+pub(crate) enum SpendStatus {
+    /// The output is unspent on this view's chain.
+    Unspent,
+    /// The output was spent by the transaction with this txid.
+    SpentBy(TxId),
+    /// The output is spent, but the spending transaction cannot yet be resolved (e.g. the
+    /// backend's spend index has not finished building); the caller should retry later.
+    SpentSpenderUnknown,
+}
+
 #[cfg(test)]
 mod tests {
     use std::ops::Range;
@@ -218,7 +265,13 @@ mod tests {
     };
     use zcash_protocol::{TxId, consensus::BlockHeight};
 
+    #[cfg(feature = "spend-index")]
+    use super::SpendStatus;
     use super::{BlockLocator, ChainBlock, ChainError, ChainTx, ChainView};
+    #[cfg(not(feature = "spend-index"))]
+    use transparent::address::TransparentAddress;
+    #[cfg(feature = "spend-index")]
+    use transparent::bundle::OutPoint;
 
     /// A trivial in-memory [`ChainView`], proving the trait is implementable by a non-Zaino
     /// backend and locking the contract.
@@ -291,6 +344,31 @@ mod tests {
             _txid: TxId,
         ) -> Result<TransactionStatus, ChainError> {
             Ok(TransactionStatus::TxidNotRecognized)
+        }
+
+        #[cfg(feature = "spend-index")]
+        async fn outpoint_spend_status(
+            &self,
+            _outpoint: &OutPoint,
+        ) -> Result<SpendStatus, ChainError> {
+            Ok(SpendStatus::Unspent)
+        }
+
+        #[cfg(not(feature = "spend-index"))]
+        async fn get_address_unspent_outpoints(
+            &self,
+            _address: &TransparentAddress,
+        ) -> Result<Vec<(TxId, u32)>, ChainError> {
+            Ok(Vec::new())
+        }
+
+        #[cfg(not(feature = "spend-index"))]
+        async fn get_address_tx_ids(
+            &self,
+            _address: &TransparentAddress,
+            _range: Range<BlockHeight>,
+        ) -> Result<Vec<TxId>, ChainError> {
+            Ok(Vec::new())
         }
 
         #[cfg(all(zallet_build = "wallet", feature = "zcashd-import"))]

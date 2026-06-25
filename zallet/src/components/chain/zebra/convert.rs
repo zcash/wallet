@@ -25,6 +25,23 @@ pub(super) fn to_zebra_txid(txid: TxId) -> zebra_chain::transaction::Hash {
     zebra_chain::transaction::Hash(*txid.as_ref())
 }
 
+/// `zebra-chain` transaction hash → wallet txid (same internal byte order).
+#[cfg(feature = "spend-index")]
+pub(super) fn from_zebra_tx_hash(h: zebra_chain::transaction::Hash) -> TxId {
+    TxId::from_bytes(h.0)
+}
+
+/// Wallet transparent outpoint → `zebra-chain` transparent outpoint.
+#[cfg(feature = "spend-index")]
+pub(super) fn to_zebra_outpoint(
+    outpoint: &transparent::bundle::OutPoint,
+) -> zebra_chain::transparent::OutPoint {
+    zebra_chain::transparent::OutPoint::from_usize(
+        zebra_chain::transaction::Hash(*outpoint.hash()),
+        outpoint.n() as usize,
+    )
+}
+
 /// `zebra-chain` height → wallet height.
 pub(super) fn height(h: zebra_chain::block::Height) -> BlockHeight {
     BlockHeight::from_u32(h.0)

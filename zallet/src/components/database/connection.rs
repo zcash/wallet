@@ -704,6 +704,15 @@ impl WalletWrite for DbConnection {
         self.with_mut(|mut db_data| db_data.notify_address_checked(request, as_of_height))
     }
 
+    #[cfg(feature = "spend-index")]
+    fn notify_output_verified_unspent(
+        &mut self,
+        outpoint: OutPoint,
+        as_of_height: BlockHeight,
+    ) -> Result<(), Self::Error> {
+        self.with_mut(|mut db_data| db_data.notify_output_verified_unspent(outpoint, as_of_height))
+    }
+
     fn mark_transparent_addresses_exposed(
         &mut self,
         exposures: &[(TransparentAddress, BlockHeight)],

@@ -10,6 +10,8 @@ use zcash_client_backend::data_api::chain::CommitmentTreeRoot;
 use zcash_primitives::block::BlockHash;
 use zcash_protocol::consensus::BlockHeight;
 use zebra_chain::subtree::NoteCommitmentSubtreeIndex;
+#[cfg(feature = "spend-index")]
+use zebra_state::Spend;
 use zebra_state::{HashOrHeight, ReadRequest, ReadResponse, ReadStateService};
 
 use super::super::{BlockLocator, ChainBlock, ChainError};
@@ -81,6 +83,23 @@ pub(crate) trait ChainReader: Clone + Send + Sync + 'static {
     ) -> impl Future<
         Output = Result<Vec<CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>>, ChainError>,
     > + Send;
+
+    /// Whether `outpoint` is unspent on the best chain. Authoritative (reads the UTXO set, not
+    /// the optional spend index).
+    #[cfg(feature = "spend-index")]
+    fn is_unspent(
+        &self,
+        outpoint: zebra_chain::transparent::OutPoint,
+    ) -> impl Future<Output = Result<bool, ChainError>> + Send;
+
+    /// The id of the transaction that spends `outpoint`, if the spend index has recorded it.
+    /// `None` may mean either unspent or not-yet-indexed, so callers must establish spentness
+    /// via [`ChainReader::is_unspent`] first.
+    #[cfg(feature = "spend-index")]
+    fn spending_transaction(
+        &self,
+        outpoint: zebra_chain::transparent::OutPoint,
+    ) -> impl Future<Output = Result<Option<zebra_chain::transaction::Hash>, ChainError>> + Send;
 }
 
 /// [`ChainReader`] backed by a `zebra-state` `ReadStateService`.
@@ -290,6 +309,34 @@ impl ChainReader for ReadStateChainReader {
                 })
                 .collect(),
             other => unreachable!("unexpected response to OrchardSubtrees: {other:?}"),
+        }
+    }
+
+    #[cfg(feature = "spend-index")]
+    async fn is_unspent(
+        &self,
+        outpoint: zebra_chain::transparent::OutPoint,
+    ) -> Result<bool, ChainError> {
+        match self
+            .call(ReadRequest::UnspentBestChainUtxo(outpoint))
+            .await?
+        {
+            ReadResponse::UnspentBestChainUtxo(opt) => Ok(opt.is_some()),
+            other => unreachable!("unexpected response to UnspentBestChainUtxo: {other:?}"),
+        }
+    }
+
+    #[cfg(feature = "spend-index")]
+    async fn spending_transaction(
+        &self,
+        outpoint: zebra_chain::transparent::OutPoint,
+    ) -> Result<Option<zebra_chain::transaction::Hash>, ChainError> {
+        match self
+            .call(ReadRequest::SpendingTransactionId(Spend::from(outpoint)))
+            .await?
+        {
+            ReadResponse::TransactionId(opt) => Ok(opt),
+            other => unreachable!("unexpected response to SpendingTransactionId: {other:?}"),
         }
     }
 }
