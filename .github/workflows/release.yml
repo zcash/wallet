@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # Manual trigger: run the full release against an EXISTING tag from the
+  # Actions UI or `gh workflow run release.yml -f tag=v1.2.3`. Useful for
+  # re-running a release (e.g. after a transient failure) without re-tagging.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v0.1.0-alpha.4"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -18,10 +27,19 @@ jobs:
       platforms: ${{ steps.version_step.outputs.platforms }}
       smoke_distro: ${{ steps.version_step.outputs.smoke_distro }}
       apt_distributions: ${{ steps.version_step.outputs.apt_distributions }}
+      ref_name: ${{ steps.version_step.outputs.ref_name }}
     env:
-      VERSION: ${{ github.ref_name }}
+      # On a tag push, github.ref_name is the tag. On manual dispatch, take the
+      # tag from the input so the rest of the pipeline is identical either way.
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       SHA: ${{ github.sha }}
-      PLATFORM_LIST: linux/amd64 #TODO: linux/amd64,linux/arm64
+      # amd64 is built by the StageX `container` job (full-source-bootstrapped).
+      # arm64 is built separately by `container_arm64` (Nix, rebuild-reproducible)
+      # because StageX's stage0 seed is x86-only and can't target aarch64. Both
+      # feed the same runtime artifact; the deb matrix builds both .debs and the
+      # `manifest` job stitches a single multi-arch image. So this list stays
+      # amd64-only (it drives ONLY the StageX container job).
+      PLATFORM_LIST: linux/amd64
       SMOKE_TEST_DISTRO: bullseye
       APT_DISTRIBUTIONS: bullseye,bookworm # TODO bullseye,bookworm,trixie
     steps:
@@ -46,6 +64,11 @@ jobs:
             exit 1
           fi
           echo "apt_distributions=${APT_LIST_NORMALIZED}" >> "$GITHUB_OUTPUT"
+
+          # ref_name is the resolved tag (input on manual dispatch, github.ref_name
+          # on a tag push). Downstream jobs use it instead of github.ref_name so a
+          # manual run releases the chosen tag, not the dispatch branch name.
+          echo "ref_name=${VERSION}" >> "$GITHUB_OUTPUT"
 
           if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$ ]]; then
             echo "Valid version: $VERSION"
@@ -75,9 +98,91 @@ jobs:
       dockerhub_username: ${{ secrets.ZODLINC_DOCKERHUB_USERNAME }}
       dockerhub_password: ${{ secrets.ZODLINC_DOCKERHUB_PASSWORD }}
 
+  # arm64 runtime via Nix (StageX can't target aarch64). Appends
+  # build/runtime/linux-arm64/ to the SAME oci artifact the amd64 container job
+  # produced, so the deb matrix + Release publish consume both arches unchanged.
+  container_arm64:
+    name: Build arm64 runtime (Nix)
+    needs: [set_env, container]
+    if: needs.set_env.outputs.should_run == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/build-arm64-nix.yml
+    with:
+      oci-artifact-name: ${{ needs.container.outputs.oci-artifact-name }}
+      # Pass image coords + creds so the arm64 variant is pushed by digest and
+      # the `manifest` job has an arm64 digest to stitch. Without these the push
+      # step is skipped and the multi-arch index would be amd64-only.
+      image-name: zallet
+      dockerhub-namespace: zodlinc
+    secrets:
+      dockerhub_username: ${{ secrets.ZODLINC_DOCKERHUB_USERNAME }}
+      dockerhub_password: ${{ secrets.ZODLINC_DOCKERHUB_PASSWORD }}
+
+  # Stitch the amd64 (StageX) + arm64 (Nix) image digests into one multi-arch
+  # OCI index per release tag. Both arches were pushed BY DIGEST (no tags) by
+  # their build jobs; `imagetools create` assembles the tags atomically here, so
+  # a tag never exists as single-arch. Re-attest SLSA provenance on the final
+  # index digest.
+  manifest:
+    name: Assemble multi-arch image manifest
+    needs: [set_env, container, container_arm64]
+    if: needs.set_env.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      REPO: docker.io/zodlinc/zallet
+      TAGS: ${{ needs.set_env.outputs.tags }}
+      AMD64_DIGEST: ${{ needs.container.outputs.image-digest }}
+      ARM64_DIGEST: ${{ needs.container_arm64.outputs.image-digest }}
+    outputs:
+      index-digest: ${{ steps.create.outputs.index_digest }}
+    steps:
+      # Order matters: set up + bootstrap buildx (which lazily pulls the public
+      # moby/buildkit image ANONYMOUSLY) BEFORE docker login. A push-only-token
+      # login first makes BuildKit attach that token to the anonymous buildkit
+      # pull → Docker Hub 401 "insufficient scopes". Bootstrap, then log in.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Bootstrap buildx builder (anonymous pull, before login)
+        run: docker buildx inspect --bootstrap
+      - name: Log in to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.ZODLINC_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.ZODLINC_DOCKERHUB_PASSWORD }}
+      - name: Create + push multi-arch tags from the per-arch digests
+        id: create
+        run: |
+          set -Eeuo pipefail
+          SRCS="${REPO}@${AMD64_DIGEST} ${REPO}@${ARM64_DIGEST}"
+          IFS=',' read -ra TAGLIST <<< "${TAGS}"
+          TAGARGS=()
+          for t in "${TAGLIST[@]}"; do
+            t="$(echo "$t" | xargs)"; [[ -z "$t" ]] && continue
+            TAGARGS+=( -t "${REPO}:${t}" )
+          done
+          docker buildx imagetools create "${TAGARGS[@]}" ${SRCS}
+          # Resolve the index digest of the first tag for provenance.
+          FIRST="$(echo "${TAGS%%,*}" | xargs)"
+          IDX=$(docker buildx imagetools inspect "${REPO}:${FIRST}" --format '{{.Manifest.Digest}}')
+          echo "index_digest=${IDX}" >> "$GITHUB_OUTPUT"
+          echo "multi-arch index: ${REPO}:${FIRST} -> ${IDX}"
+      - name: SLSA provenance on the multi-arch index
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: docker.io/zodlinc/zallet
+          subject-digest: ${{ steps.create.outputs.index_digest }}
+          push-to-registry: true
+
   binaries_release:
     name: Build standalone binaries and Debian packages
-    needs: [set_env, container]
+    needs: [set_env, container, container_arm64]
     if: needs.set_env.outputs.should_run == 'true'
     permissions:
       contents: write
@@ -85,12 +190,14 @@ jobs:
       attestations: write
     uses: ./.github/workflows/binaries-and-deb-release.yml
     with:
-      version: ${{ github.ref_name }}
+      version: ${{ needs.set_env.outputs.ref_name }}
       git-sha: ${{ github.sha }}
       oci-artifact-name: ${{ needs.container.outputs.oci-artifact-name }}
       source-image-ref: ${{ needs.container.outputs.image-ref }}
       source-image-digest: ${{ needs.container.outputs.image-digest }}
-      platforms: ${{ needs.container.outputs.platforms }}
+      # Build BOTH arch .debs from the shared runtime artifact (amd64 from StageX,
+      # arm64 from Nix). This drives only the deb matrix, not the StageX build.
+      platforms: linux/amd64,linux/arm64
       smoke-distro: ${{ needs.set_env.outputs.smoke_distro }}
       apt-distributions: ${{ needs.set_env.outputs.apt_distributions }}
     secrets:

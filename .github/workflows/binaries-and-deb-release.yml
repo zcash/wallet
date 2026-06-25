@@ -214,12 +214,23 @@ jobs:
           wget -qO - https://apt.z.cash/zcash.asc | gpg --no-default-keyring --keyring trustedkeys.gpg --import
 
       - name: Install cargo-deb
-        run: cargo install cargo-deb
+        # Pin cargo-deb: the floating latest (3.7.0) bumped its MSRV past the
+        # runner's stable toolchain and fails to compile with
+        # "error[E0658]: `let` expressions in this position are unstable".
+        # 2.x has a stable MSRV and the same `--no-build` interface we use.
+        # --locked builds against cargo-deb's own lockfile (reproducible deps).
+        run: cargo install cargo-deb --version "^2.10" --locked
 
+      # The amd64 and arm64 build jobs each upload a distinct per-arch artifact
+      # (`<name>-amd64`, `<name>-arm64`) because v4+ artifacts are immutable and
+      # same-name uploads don't merge. Pull BOTH with a pattern + merge-multiple
+      # so build/runtime-artifact/ contains linux-amd64/ AND linux-arm64/, and
+      # this matrix leg can find its own ${platform_key}/zallet.
       - name: Download exported binaries artifact
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
-          name: ${{ env.OCI_ARTIFACT_NAME }}
+          pattern: ${{ env.OCI_ARTIFACT_NAME }}-*
+          merge-multiple: true
           path: build/runtime-artifact
 
       - name: Prepare Debian distribution list
@@ -262,6 +273,16 @@ jobs:
           # Copy the usr/local tree as-is (completions, manpages, docs, etc.)
           # If there is no usr/local in the artifact, this won't fail because of '|| true'
           rsync -a "${ARTIFACT_ROOT}/usr/local/" "build/${PLATFORM_KEY}/usr/local/" 2>/dev/null || true
+
+      # The deb matrix runs on amd64 runners, but the smoke test execs the
+      # per-arch binary inside a `--platform ${{ matrix.platform }}` container.
+      # For the arm64 leg that needs QEMU binfmt registered, or the exec fails
+      # with "exec /usr/local/bin/zallet: exec format error". Registering QEMU
+      # is a no-op for the native amd64 leg.
+      - name: Set up QEMU (emulate the non-native arch for the smoke test)
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          platforms: ${{ matrix.platform }}
 
       - name: Smoke test exported binary
         run: |
@@ -399,12 +420,34 @@ jobs:
 
       - name: Build package (cargo deb --no-build)
         run: |
+          set -euo pipefail
+          # The deb matrix runs on amd64 runners. cargo-deb honours the crate's
+          # `separate-debug-symbols = true`, which shells out to `strip`. The host
+          # (amd64) `strip` can't process the cross-arch (arm64) ELF and fails with
+          # "Unable to strip binary ... strip: exit status: 1". Install the
+          # target's binutils and point cargo-deb's strip at it via $STRIP so the
+          # debug-symbol split works for BOTH arches (no behaviour change vs the
+          # amd64-only pipeline).
+          case "${{ matrix.target }}" in
+            aarch64-*) sudo apt-get update -qq && sudo apt-get install -y -qq binutils-aarch64-linux-gnu
+                       export STRIP=aarch64-linux-gnu-strip OBJCOPY=aarch64-linux-gnu-objcopy ;;
+          esac
           cargo deb --no-build --target ${{ matrix.target }}
 
       - name: Rename package to not collide across the matrix
         run: |
-          mv target/debian/zallet_*.deb ./
-          mv zallet_*.deb "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
+          set -euo pipefail
+          # cargo-deb writes under target/<triple>/debian/ when --target is used
+          # (not the bare target/debian/). Search the whole target tree for the
+          # .deb. NOTE: `find` over a path that doesn't exist (e.g. target/debian
+          # when --target was used) exits non-zero, and `set -euo pipefail` would
+          # then abort on the command substitution BEFORE we inspect $DEB — so
+          # search only `target` (always exists) and prune for the .deb. `|| true`
+          # guards the pipeline regardless.
+          DEB="$(find target -type f -name 'zallet_*.deb' 2>/dev/null | head -1 || true)"
+          if [ -z "$DEB" ]; then echo "no .deb produced by cargo-deb" >&2; find target -name '*.deb' 2>/dev/null || true; exit 1; fi
+          echo "found deb: $DEB"
+          mv "$DEB" "zallet_${RELEASE_VERSION}_${{ matrix.arch }}.deb"
 
       - name: Smoke test Debian package
         run: |
@@ -420,55 +463,14 @@ jobs:
               dpkg -i /release/package.deb || apt-get -f install -y >/dev/null && \
               zallet -h >/dev/null"
 
-      - name: Mirror apt.z.cash
-        run: |
-          set -euo pipefail
-          mapfile -t dists < build/apt-dists.txt
-          for dist in "${dists[@]}"; do
-            mirror="zcash-${dist}"
-            aptly mirror drop -force "$mirror" >/dev/null 2>&1 || true
-            aptly mirror create "$mirror" https://apt.z.cash "$dist"
-            aptly mirror update "$mirror"
-          done
-
-      - name: Create local snapshot of apt.z.cash with zallet
-        run: |
-          set -euo pipefail
-          mapfile -t dists < build/apt-dists.txt
-          for dist in "${dists[@]}"; do
-            mirror="zcash-${dist}"
-            repo="zcash_local_${dist}"
-            snap_mirror="snapshot_zcash_${dist}"
-            snap_local="snapshot_local_${dist}"
-            snap_combined="snapshot_combined_${dist}"
-
-            aptly repo drop -force "$repo" >/dev/null 2>&1 || true
-            aptly repo create --distribution "$dist" --component main "$repo"
-            aptly repo add "$repo" zallet_*.deb
-
-            aptly snapshot drop -force "$snap_mirror" >/dev/null 2>&1 || true
-            aptly snapshot drop -force "$snap_local" >/dev/null 2>&1 || true
-            aptly snapshot drop -force "$snap_combined" >/dev/null 2>&1 || true
-
-            aptly snapshot create "$snap_mirror" from mirror "$mirror"
-            aptly snapshot create "$snap_local" from repo "$repo"
-            aptly snapshot merge "$snap_combined" "$snap_mirror" "$snap_local"
-          done
-
-      - name: Sign & publish snapshot of local apt repository
-        run: |
-          set -euo pipefail
-          export key=$(gpg --list-secret-keys --keyid-format=long sysadmin@zodl.com | head -n 2 | grep -v sec)
-          mapfile -t dists < build/apt-dists.txt
-          for dist in "${dists[@]}"; do
-            snap_combined="snapshot_combined_${dist}"
-            aptly publish snapshot -architectures=${{ matrix.arch }} -gpg-key="$key" "$snap_combined"
-          done
-
-      - name: Upload snapshot to the apt.z.cash bucket for approval
-        run: |
-          aws s3 sync $HOME/.aptly/public/pool/main/z/zallet/ s3://${{ secrets.AWS_APT_BUCKET }}/pool/main/z/zallet/
-          aws s3 sync $HOME/.aptly/public/dists/ s3://${{ secrets.AWS_APT_BUCKET }}/dists/
+      # NOTE: APT index publishing (aptly mirror/snapshot/publish + S3 sync) was
+      # MOVED OUT of this per-arch matrix into the single `apt_publish` job below.
+      # Reason: when the matrix runs amd64 + arm64 in parallel, each job would
+      # regenerate dists/ (the signed APT index) seeing only its OWN arch and
+      # race to S3 sync it — leaving the published index listing just one
+      # architecture. A single downstream job that ingests BOTH .debs and
+      # publishes with `-architectures=amd64,arm64` produces a consistent index.
+      # Here the matrix only builds, smoke-tests, signs, and uploads its .deb.
 
       - name: GPG sign Debian package
         run: |
@@ -572,6 +574,111 @@ jobs:
         with:
           name: release-${{ matrix.platform_key }}
           path: release/${{ matrix.platform_key }}/*
+
+  # Single APT-index publish for ALL architectures. The per-arch matrix only
+  # builds + signs + uploads its .deb (as release-<platform_key> artifacts); this
+  # job ingests every arch's .deb, builds ONE merged snapshot per distribution,
+  # and publishes it with `-architectures=amd64,arm64` + a single S3 sync — so
+  # the signed dists/ index lists BOTH arches consistently (no parallel race).
+  apt_publish:
+    name: Publish multi-arch APT index
+    needs: binaries_deb_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      APT_DISTRIBUTIONS: ${{ inputs.apt-distributions }}
+    steps:
+      - name: Download all per-arch release artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          path: debs
+          merge-multiple: true
+          pattern: release-*
+      - name: Install aptly + tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # NB: don't apt-install awscli — it was dropped from the Ubuntu 24.04
+          # (noble) repos ("Package 'awscli' has no installation candidate"). The
+          # GH runner ships AWS CLI v2 preinstalled and configure-aws-credentials
+          # (next step) relies on it, so only aptly + gnupg are needed here.
+          sudo apt-get install -y --no-install-recommends aptly gnupg
+          aws --version
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Import GPG signing key from Secrets Manager
+        run: |
+          set -euo pipefail
+          aws secretsmanager get-secret-value --secret-id /release/gpg-signing-key \
+            --query SecretString --output text > /tmp/k.pgp
+          gpg --batch --import /tmp/k.pgp
+          shred -u /tmp/k.pgp
+      - name: Build distribution list
+        run: |
+          set -euo pipefail
+          echo "${APT_DISTRIBUTIONS}" | tr ',' '\n' | sed '/^$/d' > /tmp/dists.txt
+          echo "dists:"; cat /tmp/dists.txt
+      - name: Publish merged multi-arch APT index
+        env:
+          APT_BUCKET: ${{ secrets.AWS_APT_BUCKET }}
+        run: |
+          set -euo pipefail
+          key=$(gpg --list-secret-keys --keyid-format=long sysadmin@zodl.com | head -n 2 | grep -v sec | tr -d ' ')
+
+          # We REGENERATE the index from the .deb pool instead of `aptly mirror`-ing
+          # the live repo. Two reasons:
+          #   1. aptly's strict parser rejects the existing apt.z.cash Packages with
+          #      "malformed stanza syntax" — some historical zcashd entries have
+          #      Description continuation lines that don't start with a space (apt &
+          #      dpkg tolerate this; aptly does not). Mirroring is therefore fragile.
+          #   2. Regenerating from the .deb files reads each package's control data
+          #      straight from the archive (always well-formed), producing a clean,
+          #      correct Packages — and incidentally repairs those malformed stanzas.
+          # We pull the existing pool from S3 and re-add every package so NOTHING is
+          # dropped; only the index is rebuilt. Per-suite bucketing (below) keeps
+          # stretch/buster packages out of the bullseye/bookworm indices.
+          mkdir -p poolcache
+          aws s3 sync "s3://${APT_BUCKET}/pool/" poolcache/ --no-progress --exclude '*' --include '*.deb'
+          echo "pool debs pulled: $(find poolcache -name '*.deb' | wc -l)"
+
+          mapfile -t dists < /tmp/dists.txt
+          for dist in "${dists[@]}"; do
+            repo="zcash_${dist}"; snap="snap_${dist}"
+            aptly repo drop -force "$repo" >/dev/null 2>&1 || true
+            aptly repo create --distribution "$dist" --component main "$repo"
+
+            # Existing pool packages for THIS suite only. Suite is encoded in the
+            # filename (e.g. zcash-6.11.0-amd64-bookworm.deb, zallet_..._bullseye.deb),
+            # matched on a -/_ boundary so 'bullseye' never matches 'bookworm'.
+            while IFS= read -r deb; do
+              aptly repo add -force-replace "$repo" "$deb" || echo "skip (already present?): $deb"
+            done < <(find poolcache -name "*[-_]${dist}.deb")
+
+            # Our NEW zallet .debs (amd64 + arm64) carry no suite suffix — they're
+            # static-musl and valid on every suite, so add them to each dist.
+            find debs -name 'zallet_*.deb' -exec aptly repo add -force-replace "$repo" {} +
+
+            aptly snapshot drop -force "$snap" >/dev/null 2>&1 || true
+            aptly snapshot create "$snap" from repo "$repo"
+            # ONE publish per suite with BOTH architectures → consistent dists/ index.
+            aptly publish snapshot -architectures=amd64,arm64 -gpg-key="$key" -distribution="$dist" "$snap"
+          done
+      - name: Sync merged index + pool to apt.z.cash (single writer)
+        run: |
+          set -euo pipefail
+          # Sync the FULL published pool (aptly lays out every package the index
+          # references — zcash + zallet — under pool/main/z/...). The regenerated
+          # dists/ index points at these exact pool paths, so push the whole pool
+          # tree to keep index↔pool consistent. No --delete: stretch/buster dists
+          # we didn't republish stay untouched in S3.
+          aws s3 sync "$HOME/.aptly/public/pool/" "s3://${{ secrets.AWS_APT_BUCKET }}/pool/" --no-progress
+          aws s3 sync "$HOME/.aptly/public/dists/" "s3://${{ secrets.AWS_APT_BUCKET }}/dists/" --no-progress
 
   publish:
     name: Create/Update GitHub Release (aggregate)

@@ -77,7 +77,7 @@ jobs:
       IMAGE_NAME: ${{ inputs.image-name }}
       OCI_ARTIFACT_NAME: ${{ inputs.oci-artifact-name }}
     outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
+      image-digest: ${{ steps.push.outputs.digest }}
       image-ref: ${{ steps.emit.outputs.image_ref }}
       oci-artifact-name: ${{ steps.emit.outputs.artifact_name }}
       platforms: ${{ steps.platforms.outputs.platforms }}
@@ -106,26 +106,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Compute Docker image tags
-        id: set-tags
-        env:
-          INPUT_IMAGE_TAGS: ${{ inputs.image-tags }}
-        run: |
-          set -euo pipefail
-          TAGS="$INPUT_IMAGE_TAGS"
-          IFS=',' read -ra ELEMENTS <<< "$TAGS"
-          TAGS_FIXED=""
-          for ELEMENT in "${ELEMENTS[@]}"; do
-            ELEMENT_TRIMMED="$(echo "$ELEMENT" | xargs)"
-            [[ -z "$ELEMENT_TRIMMED" ]] && continue
-            TAGS_FIXED+="${IMAGE_FULL_NAME}:$ELEMENT_TRIMMED,"
-          done
-          TAGS_FIXED=${TAGS_FIXED%,}
-          if [[ -z "$TAGS_FIXED" ]]; then
-            echo "No valid tags were computed" >&2
-            exit 1
-          fi
-          echo "tags_fixed=$TAGS_FIXED" >> "$GITHUB_ENV"
+      # NOTE: tags are no longer computed here. The amd64 image is pushed BY
+      # DIGEST (no tags); the `manifest` job in release.yml assigns the real tags
+      # when it stitches the multi-arch index. IMAGE_FULL_NAME (set above) is the
+      # tagless repo ref used by push-by-digest, cosign, and SBOM steps.
 
       - name: Determine target platforms
         id: platforms
@@ -165,38 +149,74 @@ jobs:
       - name: Enable containerd image store
         uses: depot/use-containerd-snapshotter-action@2e6f905d28e7ca519b216e2219d00545537e9f46 # v1.0.0
 
-      - name: Log in to Docker registry
+      # IMPORTANT: do NOT `docker login` before THIS build. The Dockerfile pulls
+      # public images anonymously (the `docker/dockerfile` syntax frontend and
+      # the `stagex/*` bases). A global login here would make BuildKit attach the
+      # registry token to those anonymous public pulls, and Docker Hub rejects
+      # token-bearing requests it considers out-of-scope ("insufficient scopes").
+      # So BUILD to a local OCI archive with no login (anonymous pulls succeed);
+      # the push (skopeo) and cosign/SBOM steps authenticate later, after this.
+      - name: Build amd64 image to a local OCI archive (anonymous pulls)
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          file: Dockerfile.stagex
+          context: .
+          platforms: ${{ steps.platforms.outputs.platforms }}
+          sbom: true
+          provenance: mode=max
+          outputs: |
+            type=oci,dest=image-amd64.tar,rewrite-timestamp=true,force-compression=true
+
+      # Push BY DIGEST with skopeo, authenticating only here (push-only token is
+      # fine for a push). The multi-arch tags are assembled later by the
+      # `manifest` job (release.yml), which stitches this amd64 digest with the
+      # Nix-built arm64 digest into one OCI index per tag — so a tag never appears
+      # single-arch, and the two arches build on different systems.
+      - name: Push amd64 by digest (skopeo, push-only auth)
+        id: push
+        env:
+          DH_USER: ${{ secrets.dockerhub_username }}
+          DH_PASS: ${{ secrets.dockerhub_password }}
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq skopeo >/dev/null
+          REPO="${IMAGE_FULL_NAME}"
+          DF="$(mktemp)"
+          # skopeo can't push to a tagless ref, so push to a short-lived per-run
+          # tag and capture the digest. The manifest job references the digest;
+          # the temp tag is cleaned up after the release.
+          TMP_TAG="sha-${GITHUB_SHA::12}-amd64"
+          skopeo copy --dest-creds "${DH_USER}:${DH_PASS}" --digestfile "$DF" \
+            "oci-archive:image-amd64.tar" "docker://${REPO}:${TMP_TAG}"
+          DIGEST="$(cat "$DF")"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "tmp_tag=${TMP_TAG}" >> "$GITHUB_OUTPUT"
+          echo "pushed amd64 ${REPO}@${DIGEST} (temp tag ${TMP_TAG})"
+
+      - name: Extract artifacts from export stage
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          file: Dockerfile.stagex
+          context: .
+          push: false
+          platforms: ${{ steps.platforms.outputs.platforms }}
+          target: export
+          outputs: |
+            type=local,dest=./out,rewrite-timestamp=true,force-compression=true
+
+      # Log in to Docker Hub NOW — AFTER the anonymous-pull build, BEFORE cosign.
+      # cosign/syft read credentials from the Docker config store; the build
+      # above deliberately ran without login (so its public pulls stayed
+      # anonymous), so cosign would otherwise have no creds and 401. The zodlinc
+      # token grants pull+push on zodlinc/zallet, which is what cosign needs to
+      # write signature/attestation artifacts back to the repo.
+      - name: Log in to Docker registry (for cosign/SBOM/attest)
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ${{ env.REGISTRY_HOST }}
           username: ${{ secrets.dockerhub_username }}
           password: ${{ secrets.dockerhub_password }}
-
-      - name: Build & Push (SBOM + provenance)
-        id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          file: Dockerfile
-          context: .
-          push: true
-          platforms: ${{ steps.platforms.outputs.platforms }}
-          tags: ${{ env.tags_fixed }}
-          sbom: true
-          provenance: mode=max
-          outputs: |
-            type=registry,rewrite-timestamp=true,force-compression=true
-
-      - name: Extract artifacts from export stage
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          file: Dockerfile
-          context: .
-          push: false
-          platforms: ${{ steps.platforms.outputs.platforms }}
-          tags: ${{ env.tags_fixed }}
-          target: export
-          outputs: |
-            type=local,dest=./out,rewrite-timestamp=true,force-compression=true
 
       - name: Collect runtime artifacts per platform
         env:
@@ -262,10 +282,15 @@ jobs:
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
 
+      # cosign/syft below WRITE signatures + SBOM attestations back to the
+      # registry as OCI artifacts (pull+push). They read creds from the Docker
+      # config store, which is why the "Log in to Docker registry" step runs
+      # right before them (after the anonymous-pull build). The zodlinc token
+      # grants pull+push on zodlinc/zallet, so these succeed.
       - name: Cosign sign image by digest (keyless OIDC)
         env:
           IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           set -euo pipefail
           echo "Signing $IMAGE_REF@$DIGEST"
@@ -275,7 +300,7 @@ jobs:
         id: sbom
         env:
           IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.push.outputs.digest }}
           PLATFORMS: ${{ steps.platforms.outputs.platforms }}
         run: |
           set -euo pipefail
@@ -294,7 +319,7 @@ jobs:
       - name: Attach SBOM attestations
         env:
           IMAGE_REF: ${{ env.IMAGE_FULL_NAME }}
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.push.outputs.digest }}
           PLATFORMS: ${{ steps.platforms.outputs.platforms }}
         run: |
           set -euo pipefail
@@ -319,13 +344,18 @@ jobs:
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-name: ${{ env.IMAGE_FULL_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
+      # Per-arch artifact name. upload-artifact v4+ makes each name IMMUTABLE —
+      # two uploads of the SAME name do NOT merge (unlike v3); they'd coexist as
+      # duplicates and download-by-name would grab only one, so the deb job would
+      # find linux-arm64/ but not linux-amd64/ (or vice-versa). The deb job
+      # downloads both with a `<name>-*` pattern + merge instead.
       - name: Upload exported binaries artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: ${{ env.OCI_ARTIFACT_NAME }}
+          name: ${{ env.OCI_ARTIFACT_NAME }}-amd64
           path: build/runtime
           if-no-files-found: error
 
