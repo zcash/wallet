@@ -66,6 +66,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Don't leave the GitHub token in .git/config: this job later runs
+          # upload-artifact, and a persisted credential could be packed into the
+          # artifact (zizmor's "artipacked"). The arm64 build only needs to read
+          # the source for `nix build`, never to push. Matches the amd64 job.
+          persist-credentials: false
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@21a544727d0c62386e78b4befe52d19ad12692e3 # v17
