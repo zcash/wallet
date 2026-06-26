@@ -43,6 +43,7 @@ exceptions = [
     { name = "foldhash", allow = ["Zlib"] },
     { name = "human_bytes", allow = ["BSD-2-Clause"] },
     { name = "icu_collections", allow = ["Unicode-3.0"] },
+    { name = "icu_locale_core", allow = ["Unicode-3.0"] },
     { name = "icu_locid", allow = ["Unicode-3.0"] },
     { name = "icu_locid_transform", allow = ["Unicode-3.0"] },
     { name = "icu_locid_transform_data", allow = ["Unicode-3.0"] },
