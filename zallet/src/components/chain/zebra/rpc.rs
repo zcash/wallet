@@ -74,7 +74,11 @@ impl ValidatorRpcClient {
         HttpClientBuilder::default()
             .set_headers(headers)
             .build(&self.url)
-            .map_err(|e| ErrorKind::Generic.context(format!("building RPC client: {e}")).into())
+            .map_err(|e| {
+                ErrorKind::Generic
+                    .context(format!("building RPC client: {e}"))
+                    .into()
+            })
     }
 
     /// `sendrawtransaction(hex)` — returns the txid hex string.
