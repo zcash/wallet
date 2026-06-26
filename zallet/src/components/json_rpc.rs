@@ -21,6 +21,8 @@ use super::keystore::KeyStore;
 
 #[cfg(zallet_build = "wallet")]
 mod asyncop;
+#[cfg(zallet_build = "wallet")]
+mod fund_source;
 pub(crate) mod methods;
 #[cfg(zallet_build = "wallet")]
 mod payments;

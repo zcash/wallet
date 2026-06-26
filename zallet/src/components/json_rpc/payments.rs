@@ -285,6 +285,96 @@ pub(super) fn enforce_privacy_policy<FeeRuleT, NoteRef>(
     Ok(())
 }
 
+/// Returns the privacy policy required to execute the given proposal.
+///
+/// This is the inverse of [`enforce_privacy_policy`]: rather than checking a caller-
+/// supplied policy against the information a proposal would leak, it computes the
+/// strictest [`PrivacyPolicy`] that still permits the proposal. Any policy that
+/// [`PrivacyPolicy::is_compatible_with`] the returned value is sufficient to execute the
+/// transaction; the returned value is itself the strictest such policy.
+///
+/// Used by `z_proposetransaction` to report the privacy implications of a proposed
+/// transaction without requiring the caller to commit to a policy up front.
+pub(super) fn required_privacy_policy<FeeRuleT, NoteRef>(
+    proposal: &Proposal<FeeRuleT, NoteRef>,
+) -> PrivacyPolicy {
+    // The required policy for the whole proposal is the meet (greatest lower bound, i.e.
+    // most-permissive-needed) of the policies required by each step. We start from
+    // `FullPrivacy` (the strictest policy, the lattice top); `meet` with each step's
+    // requirement relaxes it exactly as much as that step's leakage demands.
+    proposal
+        .steps()
+        .iter()
+        .fold(PrivacyPolicy::FullPrivacy, |required, step| {
+            // This mirrors the branch structure of `enforce_privacy_policy` exactly; keep
+            // the two in sync. Each step fires exactly one branch, yielding the single
+            // policy level that step requires.
+            let input_in_pool = |pool_type: PoolType| match pool_type {
+                PoolType::Transparent => {
+                    step.is_shielding() || !step.transparent_inputs().is_empty()
+                }
+                PoolType::SAPLING => step.shielded_inputs().iter().any(|s_in| {
+                    s_in.notes()
+                        .iter()
+                        .any(|note| matches!(note.note().protocol(), ShieldedProtocol::Sapling))
+                }),
+                PoolType::ORCHARD => step.shielded_inputs().iter().any(|s_in| {
+                    s_in.notes()
+                        .iter()
+                        .any(|note| matches!(note.note().protocol(), ShieldedProtocol::Orchard))
+                }),
+            };
+            let output_in_pool =
+                |pool_type: PoolType| step.payment_pools().values().any(|pool| *pool == pool_type);
+            let change_in_pool = |pool_type: PoolType| {
+                step.balance()
+                    .proposed_change()
+                    .iter()
+                    .any(|c| c.output_pool() == pool_type)
+            };
+
+            let has_transparent_recipient = output_in_pool(PoolType::Transparent);
+            let has_transparent_change = change_in_pool(PoolType::Transparent);
+            let has_sapling_recipient =
+                output_in_pool(PoolType::SAPLING) || change_in_pool(PoolType::SAPLING);
+            let has_orchard_recipient =
+                output_in_pool(PoolType::ORCHARD) || change_in_pool(PoolType::ORCHARD);
+
+            let step_required = if input_in_pool(PoolType::Transparent) {
+                let received_addrs = step
+                    .transparent_inputs()
+                    .iter()
+                    .map(|input| input.recipient_address())
+                    .collect::<HashSet<_>>();
+
+                if received_addrs.len() > 1 {
+                    if has_transparent_recipient || has_transparent_change {
+                        PrivacyPolicy::NoPrivacy
+                    } else {
+                        PrivacyPolicy::AllowLinkingAccountAddresses
+                    }
+                } else if has_transparent_recipient || has_transparent_change {
+                    PrivacyPolicy::AllowFullyTransparent
+                } else {
+                    PrivacyPolicy::AllowRevealedSenders
+                }
+            } else if has_transparent_recipient || has_transparent_change {
+                PrivacyPolicy::AllowRevealedRecipients
+            } else if (input_in_pool(PoolType::ORCHARD) && has_sapling_recipient)
+                || (input_in_pool(PoolType::SAPLING) && has_orchard_recipient)
+            {
+                // TODO: As in `enforce_privacy_policy`, this should only trigger when there
+                // is a non-fee valueBalance.
+                PrivacyPolicy::AllowRevealedAmounts
+            } else {
+                // Nothing is revealed by this step.
+                PrivacyPolicy::FullPrivacy
+            };
+
+            required.meet(step_required)
+        })
+}
+
 pub(super) enum IncompatiblePrivacyPolicy {
     /// Requested [`PrivacyPolicy`] doesn’t include `NoPrivacy`.
     NoPrivacy,

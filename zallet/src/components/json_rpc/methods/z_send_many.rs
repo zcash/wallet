@@ -82,39 +82,23 @@ pub(super) const PARAM_FEE_DESC: &str = "If set, it must be null.";
 pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
     "Policy for what information leakage is acceptable.";
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn call<C: Chain>(
-    mut wallet: DbHandle,
-    keystore: KeyStore,
-    chain: C,
-    fromaddress: String,
-    amounts: Vec<AmountParameter>,
-    minconf: Option<u32>,
-    fee: Option<JsonValue>,
-    privacy_policy: Option<String>,
-) -> RpcResult<(
-    Option<ContextInfo>,
-    impl Future<Output = RpcResult<SendResult>>,
-)> {
-    // TODO: Check that Sapling is active, by inspecting height of `chain` snapshot.
-    //       https://github.com/zcash/wallet/issues/237
-
+/// Parses the `amounts`/`recipients` array shared by `z_sendmany`,
+/// `z_proposetransaction`, and `z_sendfromaccount` into a ZIP 321 transaction request.
+///
+/// Rejects an empty array, duplicate recipient addresses, malformed addresses, and total
+/// output value overflow.
+pub(super) fn build_request(amounts: &[AmountParameter]) -> RpcResult<TransactionRequest> {
     if amounts.is_empty() {
         return Err(
             LegacyCode::InvalidParameter.with_static("Invalid parameter, amounts array is empty.")
         );
     }
 
-    if fee.is_some() {
-        return Err(LegacyCode::InvalidParameter
-            .with_static("Zallet always calculates fees internally; the fee field must be null."));
-    }
-
     let mut recipient_addrs = HashSet::new();
     let mut payments = vec![];
     let mut total_out = Zatoshis::ZERO;
 
-    for amount in &amounts {
+    for amount in amounts {
         let addr: ZcashAddress = amount.address.parse().map_err(|_| {
             LegacyCode::InvalidParameter.with_message(format!(
                 "Invalid parameter, unknown address format: {}",
@@ -148,14 +132,35 @@ pub(crate) async fn call<C: Chain>(
             .ok_or_else(|| LegacyCode::InvalidParameter.with_static("Value too large"))?;
     }
 
-    if payments.is_empty() {
-        return Err(LegacyCode::InvalidParameter.with_static("No recipients"));
-    }
-
-    let request = TransactionRequest::new(payments).map_err(|e| {
+    TransactionRequest::new(payments).map_err(|e| {
         // TODO: Map errors to `zcashd` shape.
         LegacyCode::InvalidParameter.with_message(format!("Invalid payment request: {e}"))
-    })?;
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn call<C: Chain>(
+    mut wallet: DbHandle,
+    keystore: KeyStore,
+    chain: C,
+    fromaddress: String,
+    amounts: Vec<AmountParameter>,
+    minconf: Option<u32>,
+    fee: Option<JsonValue>,
+    privacy_policy: Option<String>,
+) -> RpcResult<(
+    Option<ContextInfo>,
+    impl Future<Output = RpcResult<SendResult>>,
+)> {
+    // TODO: Check that Sapling is active, by inspecting height of `chain` snapshot.
+    //       https://github.com/zcash/wallet/issues/237
+
+    if fee.is_some() {
+        return Err(LegacyCode::InvalidParameter
+            .with_static("Zallet always calculates fees internally; the fee field must be null."));
+    }
+
+    let request = build_request(&amounts)?;
 
     let account = match fromaddress.as_str() {
         // Select from the legacy transparent address pool.

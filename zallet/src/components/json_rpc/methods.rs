@@ -64,6 +64,7 @@ mod view_transaction;
 mod z_get_total_balance;
 #[cfg(zallet_build = "wallet")]
 mod z_import_address;
+mod z_propose_transaction;
 #[cfg(zallet_build = "wallet")]
 mod z_send_many;
 #[cfg(zallet_build = "wallet")]
@@ -612,6 +613,30 @@ pub(crate) trait WalletRpc {
         privacy_policy: Option<String>,
     ) -> z_send_many::Response;
 
+    /// Proposes a transaction sending funds from an account, returning a PCZT for
+    /// inspection along with the privacy policy required to execute it.
+    ///
+    /// Unlike `z_sendmany`, the source of funds is an account UUID together with an
+    /// explicit fund source, rather than an address. This method does not sign or broadcast
+    /// the transaction, and does not generate proofs; pass the returned PCZT to
+    /// `z_finalizetransaction` to do so.
+    ///
+    /// # Arguments
+    /// - `account`: The UUID of the account to send the funds from.
+    /// - `fund_source`: Where funds may be drawn from. One of the strings `"orchard"`,
+    ///   `"sapling"`, `"any_transparent"`, or an array of transparent address strings.
+    /// - `recipients`: An array of JSON objects representing the amounts to send, with the
+    ///   same shape as `z_sendmany`'s `amounts`.
+    /// - `minconf` (numeric, optional): Only use funds confirmed at least this many times.
+    #[method(name = "z_proposetransaction")]
+    async fn z_propose_transaction(
+        &self,
+        account: JsonValue,
+        fund_source: JsonValue,
+        recipients: Vec<z_send_many::AmountParameter>,
+        minconf: Option<u32>,
+    ) -> z_propose_transaction::Response;
+
     /// Shields coinbase UTXOs from a single wallet-owned source into a
     /// shielded address.
     ///
@@ -1037,6 +1062,24 @@ impl<C: Chain> WalletRpcServer for WalletRpcImpl<C> {
                 .await?,
             )
             .await)
+    }
+
+    async fn z_propose_transaction(
+        &self,
+        account: JsonValue,
+        fund_source: JsonValue,
+        recipients: Vec<z_send_many::AmountParameter>,
+        minconf: Option<u32>,
+    ) -> z_propose_transaction::Response {
+        z_propose_transaction::call(
+            self.wallet().await?,
+            self.keystore.clone(),
+            account,
+            fund_source,
+            recipients,
+            minconf,
+        )
+        .await
     }
 
     async fn z_shieldcoinbase(
