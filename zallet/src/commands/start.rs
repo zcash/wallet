@@ -7,7 +7,7 @@ use crate::{
     cli::StartCmd,
     commands::AsyncRunnable,
     components::{
-        chain::{Chain, ChainBackend},
+        chain::{ChainBackend, check_consensus_compatibility},
         database::Database,
         json_rpc::JsonRpc,
         sync::WalletSync,
@@ -57,7 +57,7 @@ impl AsyncRunnable for StartCmd {
 
         // Refuse to start if the backing full node follows consensus rules we do
         // not recognize.
-        chain.check_consensus_compatibility().await?;
+        check_consensus_compatibility(&chain).await?;
 
         // Launch RPC server.
         let rpc_task_handle = JsonRpc::spawn(

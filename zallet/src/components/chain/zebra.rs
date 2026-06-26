@@ -31,7 +31,9 @@ use zebra_state::ReadStateService;
 #[cfg(feature = "spend-index")]
 use super::SpendStatus;
 use super::read_state::{AbortOnDrop, init_read_state_service};
-use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView};
+use super::{
+    BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView, ReportedUpgrade, UpgradeStatus,
+};
 use crate::{
     components::TaskHandle,
     config::ZalletConfig,
@@ -120,11 +122,30 @@ impl ZebraChain {
 impl Chain for ZebraChain {
     type View = ZebraChainView<ReadStateChainReader>;
 
-    async fn check_consensus_compatibility(&self) -> Result<(), Error> {
-        // The in-process `zebra-state` backend derives consensus rules from the same
-        // `zebra-chain` crate this build of Zallet is compiled against, so it can never
-        // follow network upgrades that Zallet does not recognize.
-        Ok(())
+    async fn reported_upgrades(&self) -> Result<Vec<ReportedUpgrade>, Error> {
+        // The backing zebrad is a separate process that may follow newer consensus rules
+        // than this build of Zallet recognizes, so we ask it which upgrades it follows.
+        let info = self.validator_rpc.get_blockchain_info().await?;
+
+        info.upgrades
+            .into_iter()
+            .map(|(branch_id, upgrade)| {
+                let branch_id = u32::from_str_radix(&branch_id, 16).map_err(|e| {
+                    ErrorKind::Init
+                        .context(format!("invalid consensus branch ID {branch_id:?}: {e}"))
+                })?;
+                Ok(ReportedUpgrade {
+                    branch_id,
+                    name: upgrade.name,
+                    activation_height: upgrade.activation_height,
+                    status: match upgrade.status {
+                        rpc::NetworkUpgradeStatus::Active => UpgradeStatus::Active,
+                        rpc::NetworkUpgradeStatus::Pending => UpgradeStatus::Pending,
+                        rpc::NetworkUpgradeStatus::Disabled => UpgradeStatus::Disabled,
+                    },
+                })
+            })
+            .collect()
     }
 
     async fn broadcast_transaction(&self, tx: &Transaction) -> Result<(), ChainError> {

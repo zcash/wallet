@@ -8,6 +8,7 @@ use std::future::Future;
 use std::ops::Range;
 
 use futures::stream::BoxStream;
+use tracing::{error, info};
 #[cfg(not(feature = "spend-index"))]
 use transparent::address::TransparentAddress;
 #[cfg(feature = "spend-index")]
@@ -20,9 +21,13 @@ use zcash_primitives::{
     block::{Block, BlockHash, BlockHeader},
     transaction::Transaction,
 };
-use zcash_protocol::{TxId, consensus::BlockHeight};
+use zcash_protocol::{
+    TxId,
+    consensus::{self, BlockHeight},
+};
 
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
+use crate::fl;
 
 mod error;
 pub(crate) use error::ChainError;
@@ -56,9 +61,12 @@ pub(crate) trait Chain: Clone + Send + Sync + 'static {
     /// A consistent, reorg-immune view of the chain captured by [`Chain::snapshot`].
     type View: ChainView;
 
-    /// Refuses to continue if the backing full node follows consensus rules that this
-    /// build of Zallet does not recognize, and so cannot interpret correctly.
-    fn check_consensus_compatibility(&self) -> impl Future<Output = Result<(), Error>> + Send;
+    /// The network upgrades the backing full node reports, in backend-neutral form.
+    ///
+    /// Consumed by [`check_consensus_compatibility`] to confirm the node’s consensus
+    /// rules are compatible with this build of Zallet.
+    fn reported_upgrades(&self)
+    -> impl Future<Output = Result<Vec<ReportedUpgrade>, Error>> + Send;
 
     /// Broadcasts a transaction to the network's mempool.
     fn broadcast_transaction(
@@ -83,6 +91,120 @@ pub(crate) trait Chain: Clone + Send + Sync + 'static {
     /// Every read through the returned [`ChainView`] reflects one fixed chain history for
     /// the lifetime of the view, regardless of reorgs or new blocks observed afterward.
     fn snapshot(&self) -> impl Future<Output = Result<Self::View, ChainError>> + Send;
+}
+
+/// The status of a network upgrade as reported by a backing full node.
+enum UpgradeStatus {
+    /// The upgrade has activated on the node’s chain.
+    Active,
+    /// The upgrade is scheduled but has not yet activated.
+    Pending,
+    /// The upgrade has no activation height on the node’s network.
+    Disabled,
+}
+
+/// A network upgrade reported by a backing full node, in a backend-neutral form.
+///
+/// Each [`Chain`] backend converts its own representation into this so that the
+/// consensus-compatibility check ([`check_consensus_compatibility`]) is backend-neutral.
+pub(crate) struct ReportedUpgrade {
+    /// The consensus branch ID the node reports for this upgrade.
+    branch_id: u32,
+    /// The node’s name for the upgrade, used for diagnostics only.
+    name: String,
+    /// The activation height the node reports. Ignored when the status is
+    /// [`UpgradeStatus::Disabled`], since a disabled upgrade never activates.
+    activation_height: u32,
+    /// Whether the node treats the upgrade as active, pending, or disabled.
+    status: UpgradeStatus,
+}
+
+/// A network upgrade that the backing full node follows but that this build of
+/// Zallet does not recognize.
+struct UnknownUpgrade {
+    /// The consensus branch ID reported by the full node.
+    branch_id: u32,
+    /// The full node’s name for the upgrade, used for diagnostics only.
+    name: String,
+    /// The activation height, if the upgrade is pending rather than already active.
+    pending_at: Option<u32>,
+}
+
+impl UnknownUpgrade {
+    fn describe(&self) -> String {
+        match self.pending_at {
+            Some(height) => format!(
+                "{} (branch ID {:08x}, activates at height {height})",
+                self.name, self.branch_id,
+            ),
+            None => format!(
+                "{} (branch ID {:08x}, already active)",
+                self.name, self.branch_id
+            ),
+        }
+    }
+}
+
+/// Identifies the network upgrades reported by the backing full node whose
+/// consensus branch IDs this build of Zallet cannot interpret.
+///
+/// Upgrades with [`UpgradeStatus::Disabled`] are ignored: they have no activation
+/// height on the current network, and so will never take effect.
+fn detect_unknown_upgrades(upgrades: &[ReportedUpgrade]) -> Vec<UnknownUpgrade> {
+    upgrades
+        .iter()
+        .filter_map(|upgrade| {
+            let ReportedUpgrade {
+                branch_id,
+                name,
+                activation_height,
+                status,
+            } = upgrade;
+
+            // If we can map the branch ID onto a set of consensus rules we were
+            // compiled with, then we understand this upgrade.
+            if consensus::BranchId::try_from(*branch_id).is_ok() {
+                None
+            } else {
+                let unknown = |pending_at| {
+                    Some(UnknownUpgrade {
+                        branch_id: *branch_id,
+                        name: name.clone(),
+                        pending_at,
+                    })
+                };
+
+                match status {
+                    // Never activates on this network, so we ignore it.
+                    UpgradeStatus::Disabled => None,
+                    UpgradeStatus::Active => unknown(None),
+                    UpgradeStatus::Pending => unknown(Some(*activation_height)),
+                }
+            }
+        })
+        .collect()
+}
+
+/// Refuses to continue if `chain`’s backing full node follows consensus rules that this
+/// build of Zallet does not recognize, and so cannot interpret correctly.
+pub(crate) async fn check_consensus_compatibility(chain: &impl Chain) -> Result<(), Error> {
+    let upgrades = chain.reported_upgrades().await?;
+
+    let unknown = detect_unknown_upgrades(&upgrades);
+    if unknown.is_empty() {
+        info!("Backing full node consensus rules are compatible with this Zallet build");
+        return Ok(());
+    }
+
+    let upgrades = unknown
+        .iter()
+        .map(UnknownUpgrade::describe)
+        .collect::<Vec<_>>()
+        .join(", ");
+    error!("Backing full node follows unrecognized consensus rules: {upgrades}");
+    Err(ErrorKind::Init
+        .context(fl!("err-init-incompatible-consensus", upgrades = upgrades))
+        .into())
 }
 
 /// A consistent, reorg-immune view of the chain as of a fixed tip.
@@ -269,11 +391,17 @@ mod tests {
         block::{Block, BlockHash, BlockHeader},
         transaction::Transaction,
     };
-    use zcash_protocol::{TxId, consensus::BlockHeight};
+    use zcash_protocol::{
+        TxId,
+        consensus::{BlockHeight, BranchId},
+    };
 
     #[cfg(feature = "spend-index")]
     use super::SpendStatus;
-    use super::{BlockLocator, ChainBlock, ChainError, ChainTx, ChainView};
+    use super::{
+        BlockLocator, ChainBlock, ChainError, ChainTx, ChainView, ReportedUpgrade, UpgradeStatus,
+        detect_unknown_upgrades,
+    };
     #[cfg(not(feature = "spend-index"))]
     use transparent::address::TransparentAddress;
     #[cfg(feature = "spend-index")]
@@ -423,5 +551,50 @@ mod tests {
     fn block_locator_rejects_non_descending_heights() {
         // Equal heights violate the strictly-decreasing construction invariant.
         let _ = BlockLocator::from_blocks([block(10, 10), block(10, 9)]);
+    }
+
+    /// An invalid consensus branch ID, standing in for a network upgrade
+    /// from the future that this build of Zallet has never heard of.
+    const UNKNOWN_BRANCH_ID: u32 = 0xdead_beef;
+
+    fn upgrade(branch_id: u32, status: UpgradeStatus) -> ReportedUpgrade {
+        ReportedUpgrade {
+            branch_id,
+            // The upgrade name is diagnostic only; the branch ID and status drive the
+            // check, so the name is fixed here.
+            name: "test".into(),
+            activation_height: 1,
+            status,
+        }
+    }
+
+    #[test]
+    fn recognized_upgrade_is_compatible() {
+        let known = u32::from(BranchId::Nu5);
+        assert!(detect_unknown_upgrades(&[upgrade(known, UpgradeStatus::Active)]).is_empty());
+    }
+
+    #[test]
+    fn unknown_active_upgrade_is_flagged() {
+        let unknown = detect_unknown_upgrades(&[upgrade(UNKNOWN_BRANCH_ID, UpgradeStatus::Active)]);
+        assert_eq!(unknown.len(), 1);
+        assert_eq!(unknown[0].branch_id, UNKNOWN_BRANCH_ID);
+        assert_eq!(unknown[0].pending_at, None);
+    }
+
+    #[test]
+    fn unknown_pending_upgrade_is_flagged() {
+        let unknown =
+            detect_unknown_upgrades(&[upgrade(UNKNOWN_BRANCH_ID, UpgradeStatus::Pending)]);
+        assert_eq!(unknown.len(), 1);
+        assert_eq!(unknown[0].pending_at, Some(1));
+    }
+
+    #[test]
+    fn unknown_disabled_upgrade_is_ignored() {
+        assert!(
+            detect_unknown_upgrades(&[upgrade(UNKNOWN_BRANCH_ID, UpgradeStatus::Disabled)])
+                .is_empty()
+        );
     }
 }
