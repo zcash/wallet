@@ -29,11 +29,19 @@
 FROM rust:1.91.1-slim-bookworm@sha256:8514999d4786ef12efe89239e86b3d0a021b94b9d35108c8efe6c79ca7dc1a65 AS builder
 
 # Build deps: protobuf (tonic/PROTOC), clang+llvm (bindgen / *-sys C/C++ deps),
-# pkg-config, and git (zaino-state's build.rs embeds the commit).
+# pkg-config, and git (zaino-state's build.rs embeds the commit). Versions are
+# pinned to the bookworm snapshot that the digest-pinned base resolves to; bump
+# them together with the base digest above.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        build-essential clang llvm-dev libclang-dev \
-        protobuf-compiler pkg-config git ca-certificates \
+        build-essential=12.9 \
+        clang=1:14.0-55.7~deb12u1 \
+        llvm-dev=1:14.0-55.7~deb12u1 \
+        libclang-dev=1:14.0-55.7~deb12u1 \
+        protobuf-compiler=3.21.12-3 \
+        pkg-config=1.8.1-1 \
+        git=1:2.39.5-0+deb12u3 \
+        ca-certificates=20230311+deb12u1 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PROTOC=/usr/bin/protoc
@@ -87,8 +95,10 @@ COPY --from=builder /out/usr/local/share/zallet /usr/local/share/zallet
 FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df AS runtime
 # --shadow-time + dropping the apt/dpkg/ldconfig caches keeps the layer free of
 # wall-clock timestamps that would otherwise drift the image digest day to day.
+# ca-certificates is version-pinned to the digest-pinned base's snapshot.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates=20230311+deb12u1 \
     && useradd --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin zallet \
     && rm -rf /var/lib/apt/lists/* /var/log/* /var/cache/ldconfig/aux-cache
 COPY --from=builder /out/zallet /usr/local/bin/zallet
