@@ -48,6 +48,24 @@ use crate::{
 use super::read_state::{AbortOnDrop, init_read_state_service};
 use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView};
 
+/// Classifies a block-fetch error, distinguishing transient reorg-window failures from
+/// genuine backend errors.
+///
+/// Zebra returns RPC error -5 ("block height not in best chain") when a block is requested
+/// by height but it no longer exists in the best chain — this happens during reorgs and is
+/// transient. Returning `Unavailable` instead of `Backend` lets callers retry rather than
+/// treating the error as fatal.
+fn block_fetch_error(
+    e: impl Into<Box<dyn std::error::Error + Send + Sync + 'static>>,
+) -> ChainError {
+    let e: Box<dyn std::error::Error + Send + Sync + 'static> = e.into();
+    if e.to_string().contains("block height not in best chain") {
+        ChainError::Unavailable(e)
+    } else {
+        ChainError::Backend(e)
+    }
+}
+
 /// Converts a `zcash_protocol` block height into a Zaino block height.
 fn to_zaino_height(height: BlockHeight) -> zaino_state::Height {
     u32::from(height)
@@ -615,7 +633,7 @@ impl ZainoChainView {
             tokio::pin!(stream);
             let block_bytes = match stream.next().await {
                 None => return Ok(None),
-                Some(ret) => ret.map_err(ChainError::backend),
+                Some(ret) => ret.map_err(block_fetch_error),
             }?;
 
             f(block_bytes).map(Some)
@@ -638,7 +656,7 @@ impl ZainoChainView {
         ) {
             stream
                 .map(|res| {
-                    res.map_err(ChainError::backend).and_then(|block_bytes| {
+                    res.map_err(block_fetch_error).and_then(|block_bytes| {
                         Block::read(block_bytes.as_slice(), &self.params)
                             .map_err(ChainError::invalid_data)
                     })
@@ -655,6 +673,31 @@ impl ChainBlock {
         Self {
             height: BlockHeight::from_u32(height.into()),
             hash: BlockHash(hash.0),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn block_not_in_best_chain_is_unavailable() {
+        // The exact message zebra returns (embedded inside a tonic Status message).
+        let e = "unexpected error response from server: RPC Error (code: -5): block height not in best chain";
+        assert!(
+            matches!(block_fetch_error(e), ChainError::Unavailable(_)),
+            "expected Unavailable for the reorg-window -5 error"
+        );
+    }
+
+    #[test]
+    fn unrelated_backend_errors_remain_fatal() {
+        for msg in ["connection refused", "timed out", "internal server error"] {
+            assert!(
+                matches!(block_fetch_error(msg), ChainError::Backend(_)),
+                "expected Backend for '{msg}'"
+            );
         }
     }
 }
