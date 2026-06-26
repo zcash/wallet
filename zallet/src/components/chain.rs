@@ -28,7 +28,7 @@ use zcash_protocol::{
 
 use crate::error::{Error, ErrorKind};
 use crate::fl;
-use crate::network::Network;
+use crate::network::{NETWORK_UPGRADES, Network};
 
 mod error;
 pub(crate) use error::ChainError;
@@ -188,37 +188,44 @@ impl Incompatibility {
                 expected,
                 node,
             } => {
-                let show = |height: &Option<u32>| match height {
-                    Some(height) => height.to_string(),
-                    None => "not scheduled".to_string(),
+                let side = |height: &Option<u32>| match height {
+                    Some(height) => format!("activates it at height {height}"),
+                    None => "does not schedule it".to_string(),
                 };
                 format!(
-                    "{name} (branch ID {branch_id:08x}): full node activates at {}, \
-                     but this Zallet build expects {}",
-                    show(node),
-                    show(expected),
+                    "{name} (branch ID {branch_id:08x}): full node {}, but this Zallet build {}",
+                    side(node),
+                    side(expected),
                 )
             }
         }
     }
 }
 
-/// Identifies the ways in which the network upgrades reported by the backing full node
-/// are incompatible with this build of Zallet on `params`’s network.
+/// Identifies the ways in which the consensus rules of the backing full node and this build
+/// of Zallet are incompatible on `params`’s network. The comparison is symmetric:
 ///
-/// For each upgrade this checks two things:
-///
-/// * That this build recognizes the upgrade’s consensus branch ID, and so can interpret
-///   the consensus rules it selects.
-/// * That this build and the full node agree on the height at which those rules take
-///   effect.
+/// * For each upgrade the node reports, this build must recognize its consensus branch ID
+///   (so it can interpret the rules) and agree on the height at which it takes effect.
+/// * For each upgrade this build schedules, the node must also schedule it at the same
+///   height — otherwise the node follows rules this build does not, or vice versa.
 ///
 /// An upgrade with no activation height on a side is treated as not scheduled there:
-/// [`UpgradeStatus::Disabled`] on the node, or a `None` from
+/// [`UpgradeStatus::Disabled`] (or simply unreported) on the node, or a `None` from
 /// [`consensus::BranchId::height_bounds`] on our side. Such an upgrade never takes effect,
 /// so it is an incompatibility only when the two sides disagree about whether the upgrade
 /// is scheduled at all.
 fn detect_incompatibilities<P: consensus::Parameters>(
+    params: &P,
+    upgrades: &[ReportedUpgrade],
+) -> Vec<Incompatibility> {
+    let mut incompatibilities = node_reported_incompatibilities(params, upgrades);
+    incompatibilities.extend(unreported_scheduled_incompatibilities(params, upgrades));
+    incompatibilities
+}
+
+/// Pass 1: every upgrade the node reports must be one we recognize and agree with.
+fn node_reported_incompatibilities<P: consensus::Parameters>(
     params: &P,
     upgrades: &[ReportedUpgrade],
 ) -> Vec<Incompatibility> {
@@ -232,16 +239,16 @@ fn detect_incompatibilities<P: consensus::Parameters>(
                 status,
             } = upgrade;
 
-            // The height at which the full node switches to this upgrade’s consensus
-            // rules. A disabled upgrade never activates here.
+            // The height at which the full node switches to this upgrade’s consensus rules.
+            // A disabled upgrade never activates here.
             let node_height = match status {
                 UpgradeStatus::Disabled => None,
                 UpgradeStatus::Active | UpgradeStatus::Pending => Some(*activation_height),
             };
 
             match consensus::BranchId::try_from(*branch_id) {
-                // We recognize this branch ID, so we know which consensus rules it
-                // selects. Verify that we also agree on where they take effect.
+                // We recognize this branch ID, so we know which consensus rules it selects.
+                // Verify that we also agree on where they take effect.
                 Ok(branch) => {
                     let expected = branch
                         .height_bounds(params)
@@ -253,14 +260,42 @@ fn detect_incompatibilities<P: consensus::Parameters>(
                         node: node_height,
                     })
                 }
-                // We cannot interpret this branch ID at all. Flag it unless it is
-                // disabled, in which case it will never take effect here.
+                // We cannot interpret this branch ID at all. Flag it unless it is disabled,
+                // in which case it will never take effect here.
                 Err(_) => node_height.map(|activation_height| Incompatibility::UnknownUpgrade {
                     branch_id: *branch_id,
                     name: name.clone(),
                     activation_height,
                 }),
             }
+        })
+        .collect()
+}
+
+/// Pass 2 (the mirror of [`node_reported_incompatibilities`]): every upgrade we schedule on
+/// this network must also be one the node reports. One the node omits entirely is an upgrade
+/// it does not follow, so past our activation height we would interpret the chain under rules
+/// the node never applies.
+fn unreported_scheduled_incompatibilities<P: consensus::Parameters>(
+    params: &P,
+    upgrades: &[ReportedUpgrade],
+) -> Vec<Incompatibility> {
+    NETWORK_UPGRADES
+        .iter()
+        .filter_map(|branch| {
+            let branch_id = u32::from(*branch);
+            // If the node reported it, pass 1 already handled it (matched or mismatched).
+            if upgrades.iter().any(|u| u.branch_id == branch_id) {
+                return None;
+            }
+            // Only a divergence if this build actually schedules it on this network.
+            let expected = u32::from(branch.height_bounds(params)?.0);
+            Some(Incompatibility::ActivationHeightMismatch {
+                branch_id,
+                name: format!("{branch:?}"),
+                expected: Some(expected),
+                node: None,
+            })
         })
         .collect()
 }
@@ -553,6 +588,7 @@ mod tests {
     use super::{
         BlockLocator, ChainBlock, ChainError, ChainTx, ChainView, Decision, Incompatibility,
         ReportedUpgrade, UpgradeStatus, classify, detect_incompatibilities,
+        node_reported_incompatibilities,
     };
     #[cfg(not(feature = "spend-index"))]
     use transparent::address::TransparentAddress;
@@ -734,8 +770,15 @@ mod tests {
         }
     }
 
+    /// The full symmetric check (both passes).
     fn detect(upgrades: &[ReportedUpgrade]) -> Vec<Incompatibility> {
         detect_incompatibilities(&PARAMS, upgrades)
+    }
+
+    /// Only the node-reported pass, for tests that exercise it in isolation without the
+    /// mirror pass flagging every known upgrade the minimal input omits.
+    fn detect_node(upgrades: &[ReportedUpgrade]) -> Vec<Incompatibility> {
+        node_reported_incompatibilities(&PARAMS, upgrades)
     }
 
     #[test]
@@ -743,7 +786,7 @@ mod tests {
         let branch = BranchId::Nu5;
         let known = u32::from(branch);
         let height = expected_height(branch);
-        assert!(detect(&[upgrade(known, height, UpgradeStatus::Active)]).is_empty());
+        assert!(detect_node(&[upgrade(known, height, UpgradeStatus::Active)]).is_empty());
     }
 
     #[test]
@@ -751,7 +794,7 @@ mod tests {
         let branch = BranchId::Nu5;
         let known = u32::from(branch);
         let wrong = expected_height(branch) + 1;
-        let result = detect(&[upgrade(known, wrong, UpgradeStatus::Active)]);
+        let result = detect_node(&[upgrade(known, wrong, UpgradeStatus::Active)]);
         assert_eq!(result.len(), 1);
         assert!(matches!(
             result[0],
@@ -769,7 +812,7 @@ mod tests {
         // This build expects Nu5 to activate on mainnet, so a full node that reports it
         // disabled disagrees about whether its consensus rules apply at all.
         let known = u32::from(BranchId::Nu5);
-        let result = detect(&[upgrade(known, 0, UpgradeStatus::Disabled)]);
+        let result = detect_node(&[upgrade(known, 0, UpgradeStatus::Disabled)]);
         assert_eq!(result.len(), 1);
         assert!(matches!(
             result[0],
@@ -783,7 +826,7 @@ mod tests {
 
     #[test]
     fn unknown_active_upgrade_is_flagged() {
-        let result = detect(&[upgrade(UNKNOWN_BRANCH_ID, 1, UpgradeStatus::Active)]);
+        let result = detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 1, UpgradeStatus::Active)]);
         assert_eq!(result.len(), 1);
         assert!(matches!(
             result[0],
@@ -797,7 +840,7 @@ mod tests {
 
     #[test]
     fn unknown_pending_upgrade_is_flagged() {
-        let result = detect(&[upgrade(UNKNOWN_BRANCH_ID, 42, UpgradeStatus::Pending)]);
+        let result = detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 42, UpgradeStatus::Pending)]);
         assert_eq!(result.len(), 1);
         assert!(matches!(
             result[0],
@@ -810,12 +853,12 @@ mod tests {
 
     #[test]
     fn unknown_disabled_upgrade_is_ignored() {
-        assert!(detect(&[upgrade(UNKNOWN_BRANCH_ID, 1, UpgradeStatus::Disabled)]).is_empty());
+        assert!(detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 1, UpgradeStatus::Disabled)]).is_empty());
     }
 
     #[test]
     fn divergence_height_of_unknown_upgrade_is_its_activation_height() {
-        let result = detect(&[upgrade(UNKNOWN_BRANCH_ID, 555, UpgradeStatus::Pending)]);
+        let result = detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 555, UpgradeStatus::Pending)]);
         assert_eq!(result[0].divergence_height(), 555);
     }
 
@@ -826,7 +869,7 @@ mod tests {
         let branch = BranchId::Nu5;
         let ours = expected_height(branch);
         let later = ours + 100;
-        let result = detect(&[upgrade(u32::from(branch), later, UpgradeStatus::Pending)]);
+        let result = detect_node(&[upgrade(u32::from(branch), later, UpgradeStatus::Pending)]);
         assert_eq!(result[0].divergence_height(), ours);
     }
 
@@ -841,8 +884,8 @@ mod tests {
     #[test]
     fn classify_all_future_is_pending_at_earliest_divergence() {
         // Two pending unknown upgrades at different heights, both above the tip.
-        let earlier = detect(&[upgrade(UNKNOWN_BRANCH_ID, 200, UpgradeStatus::Pending)]);
-        let later = detect(&[upgrade(0xfeed_face, 300, UpgradeStatus::Pending)]);
+        let earlier = detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 200, UpgradeStatus::Pending)]);
+        let later = detect_node(&[upgrade(0xfeed_face, 300, UpgradeStatus::Pending)]);
         let both = earlier.into_iter().chain(later).collect();
         match classify(both, 100) {
             Decision::Pending { height, upgrades } => {
@@ -855,7 +898,8 @@ mod tests {
 
     #[test]
     fn classify_at_or_below_tip_is_diverged() {
-        let incompatibilities = detect(&[upgrade(UNKNOWN_BRANCH_ID, 100, UpgradeStatus::Active)]);
+        let incompatibilities =
+            detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 100, UpgradeStatus::Active)]);
         assert!(matches!(
             classify(incompatibilities, 100),
             Decision::Diverged(_)
@@ -864,13 +908,75 @@ mod tests {
 
     #[test]
     fn classify_mixed_active_and_pending_is_diverged() {
-        let active = detect(&[upgrade(UNKNOWN_BRANCH_ID, 100, UpgradeStatus::Active)]);
-        let pending = detect(&[upgrade(0xfeed_face, 300, UpgradeStatus::Pending)]);
+        let active = detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 100, UpgradeStatus::Active)]);
+        let pending = detect_node(&[upgrade(0xfeed_face, 300, UpgradeStatus::Pending)]);
         let both = active.into_iter().chain(pending).collect();
         match classify(both, 150) {
             // Only the already-diverged upgrade blocks startup.
             Decision::Diverged(active) => assert_eq!(active.len(), 1),
             _ => panic!("expected Diverged"),
         }
+    }
+
+    /// A node-reported set covering every upgrade this build schedules on mainnet except
+    /// `omit`, each at the height this build expects — so the only possible incompatibility
+    /// is the omission.
+    fn all_known_except(omit: BranchId) -> Vec<ReportedUpgrade> {
+        crate::network::NETWORK_UPGRADES
+            .iter()
+            .copied()
+            .filter(|&branch| branch != omit)
+            .filter_map(|branch| {
+                let height = u32::from(branch.height_bounds(&PARAMS)?.0);
+                Some(upgrade(u32::from(branch), height, UpgradeStatus::Active))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn upgrade_known_to_zallet_but_omitted_by_node_is_flagged() {
+        let omitted = BranchId::Nu6_2;
+        let result = detect(&all_known_except(omitted));
+        assert_eq!(result.len(), 1);
+        assert!(matches!(
+            result[0],
+            Incompatibility::ActivationHeightMismatch {
+                branch_id,
+                expected: Some(_),
+                node: None,
+                ..
+            } if branch_id == u32::from(omitted)
+        ));
+        assert_eq!(result[0].divergence_height(), expected_height(omitted));
+    }
+
+    #[test]
+    fn omitted_future_upgrade_defers_then_diverges() {
+        let omitted = BranchId::Nu6_2;
+        let height = expected_height(omitted);
+
+        // Tip below the omitted upgrade's height: warn and defer to it.
+        match classify(detect(&all_known_except(omitted)), height - 1) {
+            Decision::Pending { height: h, .. } => assert_eq!(h, height),
+            _ => panic!("expected Pending"),
+        }
+        // Tip at or above it: this build has already diverged.
+        assert!(matches!(
+            classify(detect(&all_known_except(omitted)), height),
+            Decision::Diverged(_)
+        ));
+    }
+
+    #[test]
+    fn fully_reported_upgrades_are_compatible() {
+        let reported: Vec<_> = crate::network::NETWORK_UPGRADES
+            .iter()
+            .copied()
+            .filter_map(|branch| {
+                let height = u32::from(branch.height_bounds(&PARAMS)?.0);
+                Some(upgrade(u32::from(branch), height, UpgradeStatus::Active))
+            })
+            .collect();
+        assert!(detect(&reported).is_empty());
     }
 }
