@@ -4,7 +4,7 @@
 //! (`zebra-state`, rocksdb), which would re-introduce the version coupling this backend
 //! exists to remove.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use jsonrpsee::core::{client::ClientT, params::ArrayParams};
@@ -12,10 +12,18 @@ use jsonrpsee_http_client::{HeaderMap, HeaderValue, HttpClient, HttpClientBuilde
 
 use crate::error::{Error, ErrorKind};
 
+enum Auth {
+    /// Static Basic auth credentials (pre-encoded, never change).
+    Basic(String),
+    /// Cookie file path — re-read on every request so a zebrad restart is handled transparently.
+    Cookie(PathBuf),
+}
+
 /// A JSON-RPC client for the backing validator.
 #[derive(Clone)]
 pub(crate) struct ValidatorRpcClient {
-    client: HttpClient,
+    url: String,
+    auth: std::sync::Arc<Auth>,
 }
 
 impl ValidatorRpcClient {
@@ -27,32 +35,50 @@ impl ValidatorRpcClient {
         password: &str,
         cookie_path: Option<&Path>,
     ) -> Result<Self, Error> {
-        let credentials = match cookie_path {
-            Some(path) => {
+        let auth = match cookie_path {
+            Some(path) => Auth::Cookie(path.to_path_buf()),
+            None => Auth::Basic(STANDARD.encode(format!("{user}:{password}"))),
+        };
+
+        Ok(Self {
+            url: format!("http://{address}"),
+            auth: std::sync::Arc::new(auth),
+        })
+    }
+
+    /// Builds a fresh `HttpClient` with current credentials.
+    ///
+    /// For cookie auth this re-reads the cookie file, so a zebrad restart that
+    /// rotates the cookie is handled transparently on the next request.
+    fn build_client(&self) -> Result<HttpClient, Error> {
+        let credentials = match self.auth.as_ref() {
+            Auth::Basic(encoded) => encoded.clone(),
+            Auth::Cookie(path) => {
                 let content = std::fs::read_to_string(path)
-                    .map_err(|e| ErrorKind::Init.context(format!("reading RPC cookie: {e}")))?;
+                    .map_err(|e| ErrorKind::Generic.context(format!("reading RPC cookie: {e}")))?;
                 let token = content
                     .trim()
                     .strip_prefix("__cookie__:")
                     .unwrap_or(content.trim());
                 STANDARD.encode(format!("__cookie__:{token}"))
             }
-            None => STANDARD.encode(format!("{user}:{password}")),
         };
 
         let mut headers = HeaderMap::new();
         headers.insert(
             "authorization",
             HeaderValue::from_str(&format!("Basic {credentials}"))
-                .map_err(|e| ErrorKind::Init.context(format!("invalid RPC auth header: {e}")))?,
+                .map_err(|e| ErrorKind::Generic.context(format!("invalid RPC auth header: {e}")))?,
         );
 
-        let client = HttpClientBuilder::default()
+        HttpClientBuilder::default()
             .set_headers(headers)
-            .build(format!("http://{address}"))
-            .map_err(|e| ErrorKind::Init.context(format!("building RPC client: {e}")))?;
-
-        Ok(Self { client })
+            .build(&self.url)
+            .map_err(|e| {
+                ErrorKind::Generic
+                    .context(format!("building RPC client: {e}"))
+                    .into()
+            })
     }
 
     /// `sendrawtransaction(hex)` — returns the txid hex string.
@@ -61,7 +87,7 @@ impl ValidatorRpcClient {
         params
             .insert(tx_hex)
             .map_err(|e| ErrorKind::Generic.context(e))?;
-        self.client
+        self.build_client()?
             .request("sendrawtransaction", params)
             .await
             .map_err(|e| ErrorKind::Generic.context(e).into())
@@ -69,7 +95,7 @@ impl ValidatorRpcClient {
 
     /// `getrawmempool()` — returns the mempool txid hex strings.
     pub(crate) async fn get_raw_mempool(&self) -> Result<Vec<String>, Error> {
-        self.client
+        self.build_client()?
             .request("getrawmempool", ArrayParams::new())
             .await
             .map_err(|e| ErrorKind::Generic.context(e).into())
@@ -84,7 +110,7 @@ impl ValidatorRpcClient {
         params
             .insert(0u8)
             .map_err(|e| ErrorKind::Generic.context(e))?;
-        self.client
+        self.build_client()?
             .request("getrawtransaction", params)
             .await
             .map_err(|e| ErrorKind::Generic.context(e).into())
