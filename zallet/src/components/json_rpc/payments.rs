@@ -203,37 +203,14 @@ pub(super) fn enforce_privacy_policy<FeeRuleT, NoteRef>(
     privacy_policy: PrivacyPolicy,
 ) -> Result<(), IncompatiblePrivacyPolicy> {
     for step in proposal.steps() {
-        // TODO: Break out this granularity from `Step::involves`
-        let input_in_pool = |pool_type: PoolType| match pool_type {
-            PoolType::Transparent => step.is_shielding() || !step.transparent_inputs().is_empty(),
-            PoolType::SAPLING => step.shielded_inputs().iter().any(|s_in| {
-                s_in.notes()
-                    .iter()
-                    .any(|note| matches!(note.note().protocol(), ShieldedProtocol::Sapling))
-            }),
-            PoolType::ORCHARD => step.shielded_inputs().iter().any(|s_in| {
-                s_in.notes()
-                    .iter()
-                    .any(|note| matches!(note.note().protocol(), ShieldedProtocol::Orchard))
-            }),
-        };
-        let output_in_pool =
-            |pool_type: PoolType| step.payment_pools().values().any(|pool| *pool == pool_type);
-        let change_in_pool = |pool_type: PoolType| {
-            step.balance()
-                .proposed_change()
-                .iter()
-                .any(|c| c.output_pool() == pool_type)
-        };
-
-        let has_transparent_recipient = output_in_pool(PoolType::Transparent);
-        let has_transparent_change = change_in_pool(PoolType::Transparent);
+        let has_transparent_recipient = step.output_in_pool(PoolType::Transparent);
+        let has_transparent_change = step.change_in_pool(PoolType::Transparent);
         let has_sapling_recipient =
-            output_in_pool(PoolType::SAPLING) || change_in_pool(PoolType::SAPLING);
+            step.output_in_pool(PoolType::SAPLING) || step.change_in_pool(PoolType::SAPLING);
         let has_orchard_recipient =
-            output_in_pool(PoolType::ORCHARD) || change_in_pool(PoolType::ORCHARD);
+            step.output_in_pool(PoolType::ORCHARD) || step.change_in_pool(PoolType::ORCHARD);
 
-        if input_in_pool(PoolType::Transparent) {
+        if step.input_in_pool(PoolType::Transparent) {
             let received_addrs = step
                 .transparent_inputs()
                 .iter()
@@ -263,7 +240,7 @@ pub(super) fn enforce_privacy_policy<FeeRuleT, NoteRef>(
             if !privacy_policy.allow_revealed_recipients() {
                 return Err(IncompatiblePrivacyPolicy::TransparentChange);
             }
-        } else if input_in_pool(PoolType::ORCHARD) && has_sapling_recipient {
+        } else if step.input_in_pool(PoolType::ORCHARD) && has_sapling_recipient {
             // TODO: This should only trigger when there is a non-fee valueBalance.
             if !privacy_policy.allow_revealed_amounts() {
                 // TODO: Determine whether this is due to the presence of an explicit
@@ -271,7 +248,7 @@ pub(super) fn enforce_privacy_policy<FeeRuleT, NoteRef>(
                 // within a single pool.
                 return Err(IncompatiblePrivacyPolicy::RevealingSaplingAmount);
             }
-        } else if input_in_pool(PoolType::SAPLING) && has_orchard_recipient {
+        } else if step.input_in_pool(PoolType::SAPLING) && has_orchard_recipient {
             // TODO: This should only trigger when there is a non-fee valueBalance.
             if !privacy_policy.allow_revealed_amounts() {
                 return Err(IncompatiblePrivacyPolicy::RevealingOrchardAmount);
