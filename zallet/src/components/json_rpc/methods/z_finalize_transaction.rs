@@ -25,7 +25,10 @@ use crate::components::{
     chain::Chain,
     database::DbHandle,
     json_rpc::{
-        payments::{SendResult, broadcast_transactions, parse_privacy_policy},
+        payments::{
+            SendResult, broadcast_transactions, cached_required_policy, parse_privacy_policy,
+            pczt_policy_key,
+        },
         server::LegacyCode,
         utils::parse_account_parameter,
     },
@@ -60,19 +63,23 @@ pub(crate) async fn call<C: Chain>(
     pczt: String,
     privacy_policy: String,
 ) -> Response {
-    // The caller acknowledges the transaction's privacy implications by supplying the policy
-    // that `z_proposetransaction` reported. Validate that it is a known policy.
-    //
-    // TODO: Enforce, rather than merely acknowledge, this policy. The PCZT's bundles can be
-    // inspected here (the `pczt` getters are public), but re-deriving the exact required
-    // policy from a PCZT is subtle (dummy shielded spends, change vs. recipient detection)
-    // and privacy-sensitive, and there is no funded-wallet test harness available to validate
-    // it. The robust approach is for `z_proposetransaction` to cache the policy it already
-    // computes from the proposal and have finalize look it up. Until then, the supplied policy
-    // is accepted as acknowledgement only. https://github.com/zcash/wallet/issues/217
-    let _privacy_policy = parse_privacy_policy(Some(&privacy_policy))?;
+    let privacy_policy = parse_privacy_policy(Some(&privacy_policy))?;
 
     let pczt = decode_pczt(&pczt)?;
+
+    // If this PCZT was proposed by this node, `z_proposetransaction` recorded the policy it
+    // requires (computed exactly from the proposal). Enforce that the caller acknowledged a
+    // sufficient policy. On a cache miss (eviction, restart, or a PCZT proposed elsewhere) we
+    // cannot re-derive the requirement reliably, so the supplied policy is accepted as
+    // acknowledgement only. https://github.com/zcash/wallet/issues/217
+    if let Some(required) = cached_required_policy(&pczt_policy_key(&pczt.serialize())) {
+        if !privacy_policy.is_compatible_with(required) {
+            return Err(LegacyCode::InvalidParameter.with_message(format!(
+                "The privacy policy {privacy_policy} does not permit this transaction, which \
+                 requires at least {required}."
+            )));
+        }
+    }
 
     let account_id = parse_account_parameter(wallet.as_ref(), &keystore, &account).await?;
 

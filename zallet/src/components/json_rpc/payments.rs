@@ -1,4 +1,8 @@
-use std::{collections::HashSet, fmt};
+use std::{
+    collections::{HashSet, VecDeque},
+    fmt,
+    sync::{LazyLock, Mutex},
+};
 
 use abscissa_core::Application;
 use documented::Documented;
@@ -6,6 +10,7 @@ use jsonrpsee::core::JsonValue;
 use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use zcash_client_backend::{data_api::WalletRead, proposal::Proposal};
 use zcash_client_sqlite::wallet::Account;
 use zcash_keys::address::Address;
@@ -245,6 +250,77 @@ pub(super) fn parse_privacy_policy(privacy_policy: Option<&str>) -> RpcResult<Pr
         }),
         None => Ok(PrivacyPolicy::FullPrivacy),
     }
+}
+
+/// Maximum number of proposal policies retained by [`RequiredPolicyCache`].
+const REQUIRED_POLICY_CACHE_CAPACITY: usize = 256;
+
+/// A bounded, insertion-ordered cache mapping a PCZT (by content hash) to the
+/// [`PrivacyPolicy`] required to execute it.
+///
+/// `z_proposetransaction` computes the required policy exactly from the proposal and records
+/// it here; `z_finalizetransaction` looks it up to enforce that the caller acknowledged a
+/// sufficient policy, without having to re-derive it from the (lossy) PCZT. Entries are
+/// evicted in insertion order once the capacity is exceeded; a cache miss (eviction, restart,
+/// or a PCZT proposed elsewhere) falls back to accepting the caller's policy.
+struct RequiredPolicyCache {
+    by_pczt: std::collections::HashMap<[u8; 32], PrivacyPolicy>,
+    order: VecDeque<[u8; 32]>,
+    capacity: usize,
+}
+
+impl RequiredPolicyCache {
+    fn new(capacity: usize) -> Self {
+        Self {
+            by_pczt: std::collections::HashMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn insert(&mut self, key: [u8; 32], policy: PrivacyPolicy) {
+        // Re-inserting an existing key just refreshes the policy without growing the cache.
+        if self.by_pczt.insert(key, policy).is_none() {
+            self.order.push_back(key);
+            while self.order.len() > self.capacity {
+                if let Some(evicted) = self.order.pop_front() {
+                    self.by_pczt.remove(&evicted);
+                }
+            }
+        }
+    }
+
+    fn get(&self, key: &[u8; 32]) -> Option<PrivacyPolicy> {
+        self.by_pczt.get(key).copied()
+    }
+}
+
+static REQUIRED_POLICY_CACHE: LazyLock<Mutex<RequiredPolicyCache>> =
+    LazyLock::new(|| Mutex::new(RequiredPolicyCache::new(REQUIRED_POLICY_CACHE_CAPACITY)));
+
+/// The cache key for a PCZT: the SHA-256 of its serialized bytes.
+///
+/// `z_proposetransaction` and `z_finalizetransaction` hash the same canonical serialization,
+/// so the policy recorded at proposal time is found again at finalize time.
+pub(super) fn pczt_policy_key(pczt_bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(pczt_bytes).into()
+}
+
+/// Records the privacy policy required to execute the PCZT identified by `key`.
+pub(super) fn record_required_policy(key: [u8; 32], policy: PrivacyPolicy) {
+    REQUIRED_POLICY_CACHE
+        .lock()
+        .expect("policy cache mutex is not poisoned")
+        .insert(key, policy);
+}
+
+/// Returns the previously-recorded required policy for the PCZT identified by `key`, if it is
+/// still cached.
+pub(super) fn cached_required_policy(key: &[u8; 32]) -> Option<PrivacyPolicy> {
+    REQUIRED_POLICY_CACHE
+        .lock()
+        .expect("policy cache mutex is not poisoned")
+        .get(key)
 }
 
 pub(super) fn enforce_privacy_policy<FeeRuleT, NoteRef>(
@@ -830,6 +906,95 @@ impl SendResult {
         Self {
             txid: (txids.len() == 1).then(|| txids.first().expect("present").clone()),
             txids,
+        }
+    }
+}
+
+#[cfg(test)]
+mod required_policy_cache_tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// Builds a distinct 32-byte key from an index.
+    fn key(i: usize) -> [u8; 32] {
+        let mut k = [0u8; 32];
+        k[..8].copy_from_slice(&(i as u64).to_le_bytes());
+        k
+    }
+
+    #[test]
+    fn insert_then_get_round_trips() {
+        let mut cache = RequiredPolicyCache::new(4);
+        cache.insert(key(1), PrivacyPolicy::AllowRevealedAmounts);
+        assert_eq!(
+            cache.get(&key(1)),
+            Some(PrivacyPolicy::AllowRevealedAmounts)
+        );
+        assert_eq!(cache.get(&key(2)), None);
+    }
+
+    #[test]
+    fn reinserting_a_key_updates_without_growing() {
+        let mut cache = RequiredPolicyCache::new(4);
+        cache.insert(key(1), PrivacyPolicy::FullPrivacy);
+        cache.insert(key(1), PrivacyPolicy::NoPrivacy);
+        assert_eq!(cache.by_pczt.len(), 1);
+        assert_eq!(cache.get(&key(1)), Some(PrivacyPolicy::NoPrivacy));
+    }
+
+    #[test]
+    fn pczt_policy_key_is_deterministic_and_collision_resistant() {
+        assert_eq!(
+            pczt_policy_key(b"pczt-bytes"),
+            pczt_policy_key(b"pczt-bytes")
+        );
+        assert_ne!(
+            pczt_policy_key(b"pczt-bytes"),
+            pczt_policy_key(b"other-bytes")
+        );
+    }
+
+    #[test]
+    fn global_cache_round_trips() {
+        // A key unique to this test so the shared global cache cannot interfere.
+        let k = pczt_policy_key(b"required_policy_cache_tests::global_cache_round_trips");
+        assert_eq!(cached_required_policy(&k), None);
+        record_required_policy(k, PrivacyPolicy::AllowRevealedSenders);
+        assert_eq!(
+            cached_required_policy(&k),
+            Some(PrivacyPolicy::AllowRevealedSenders),
+        );
+    }
+
+    #[test]
+    fn finalize_check_accepts_sufficient_and_rejects_insufficient() {
+        // This is exactly the check `z_finalizetransaction` performs:
+        // `supplied.is_compatible_with(required)`.
+        let required = PrivacyPolicy::AllowRevealedSenders;
+        assert!(PrivacyPolicy::NoPrivacy.is_compatible_with(required));
+        assert!(PrivacyPolicy::AllowRevealedSenders.is_compatible_with(required));
+        // FullPrivacy forbids revealing senders, so it is insufficient.
+        assert!(!PrivacyPolicy::FullPrivacy.is_compatible_with(required));
+    }
+
+    proptest! {
+        /// The cache never exceeds its capacity, and after inserting N distinct keys it
+        /// retains exactly the most recent `capacity` of them, evicting the rest in insertion
+        /// order.
+        #[test]
+        fn evicts_oldest_beyond_capacity(n in 0usize..64, capacity in 1usize..16) {
+            let mut cache = RequiredPolicyCache::new(capacity);
+            for i in 0..n {
+                cache.insert(key(i), PrivacyPolicy::FullPrivacy);
+            }
+
+            prop_assert_eq!(cache.by_pczt.len(), n.min(capacity));
+
+            let oldest_retained = n.saturating_sub(capacity);
+            for i in 0..n {
+                prop_assert_eq!(cache.get(&key(i)).is_some(), i >= oldest_retained);
+            }
         }
     }
 }

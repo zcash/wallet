@@ -25,7 +25,9 @@ use crate::{
         json_rpc::{
             fund_source::{FundSource, FundSourceFilter},
             methods::z_send_many::build_request,
-            payments::{AmountParameter, required_privacy_policy},
+            payments::{
+                AmountParameter, pczt_policy_key, record_required_policy, required_privacy_policy,
+            },
             server::LegacyCode,
             utils::parse_account_parameter,
         },
@@ -144,8 +146,13 @@ pub(crate) async fn call(
     )
     .map_err(|e| LegacyCode::Wallet.with_message(format!("Failed to create PCZT: {e}")))?;
 
+    // Record the required policy so `z_finalizetransaction` can enforce that the caller
+    // acknowledges a sufficient policy without re-deriving it from the PCZT.
+    let pczt_bytes = pczt.serialize();
+    record_required_policy(pczt_policy_key(&pczt_bytes), privacy_policy);
+
     Ok(ResultType {
-        pczt: hex::encode(pczt.serialize()),
+        pczt: hex::encode(pczt_bytes),
         privacy_policy: privacy_policy.to_string(),
     })
 }
