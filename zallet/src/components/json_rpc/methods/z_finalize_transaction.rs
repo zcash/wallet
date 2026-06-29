@@ -63,9 +63,13 @@ pub(crate) async fn call<C: Chain>(
     // The caller acknowledges the transaction's privacy implications by supplying the policy
     // that `z_proposetransaction` reported. Validate that it is a known policy.
     //
-    // TODO: Once the PCZT's inputs and outputs can be inspected outside the `pczt` crate,
-    // re-derive the required policy from the PCZT and reject a weaker acknowledgement here.
-    // https://github.com/zcash/wallet/issues/217
+    // TODO: Enforce, rather than merely acknowledge, this policy. The PCZT's bundles can be
+    // inspected here (the `pczt` getters are public), but re-deriving the exact required
+    // policy from a PCZT is subtle (dummy shielded spends, change vs. recipient detection)
+    // and privacy-sensitive, and there is no funded-wallet test harness available to validate
+    // it. The robust approach is for `z_proposetransaction` to cache the policy it already
+    // computes from the proposal and have finalize look it up. Until then, the supplied policy
+    // is accepted as acknowledgement only. https://github.com/zcash/wallet/issues/217
     let _privacy_policy = parse_privacy_policy(Some(&privacy_policy))?;
 
     let pczt = decode_pczt(&pczt)?;

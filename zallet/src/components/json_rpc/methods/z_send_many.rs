@@ -433,14 +433,27 @@ mod build_request_tests {
     // Transparent addresses reused from the `validate_address` / `fund_source` tests.
     const T_ADDR_1: &str = "t1VydNnkjBzfL1iAMyUbwGKJAF7PgvuCfMY";
     const T_ADDR_2: &str = "t3Vz22vK5z2LcKEdg16Yv4FFneEL1zg9ojd";
+    const SAPLING_ADDR: &str =
+        "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z";
+    // Unified addresses (carrying Orchard/Sapling/transparent receivers) from the
+    // librustzcash test vectors.
+    const UNIFIED_ADDR_1: &str = "u10j2s9sy4dmuakf57z58jc5t8yuswega82jpd2hk3q62l6fsphwyjxvmvfwy8skvvvea6dnkl8l9zpjf3m27qsav9y9nlj59hagmjf5xh0xxyqr8lymnmtjn6gzgrn04dr5s0k9k9wuxc2udzjh4llv47zm6jn6ff0j65s54h3m6p0n9ajswrqzpvy8eh4d5pvypyc6rp5m07uwmjp4sr0upca5hl7gr4pxg45m7vlnx5r7va4n6mfyr98twvjrhcyalwhddelnnjrkhcj0wcp5eyas2c2kcadrxyzw28vvv47q74";
+    const UNIFIED_ADDR_2: &str = "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx";
 
-    // A pool of distinct, valid recipient addresses (two transparent, one Sapling) used by
-    // the property tests below.
+    // A pool of distinct, valid recipient addresses spanning the transparent, Sapling, and
+    // unified (Orchard) protocols, used by the property tests below.
     const ADDR_POOL: &[&str] = &[
         T_ADDR_1,
         T_ADDR_2,
-        "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z",
+        SAPLING_ADDR,
+        UNIFIED_ADDR_1,
+        UNIFIED_ADDR_2,
     ];
+
+    /// Formats an integer number of zatoshis as a decimal ZEC string (8 fractional digits).
+    fn zec_str(zatoshis: u64) -> String {
+        format!("{}.{:08}", zatoshis / 100_000_000, zatoshis % 100_000_000)
+    }
 
     fn amount(address: &str, zec: &str) -> AmountParameter {
         serde_json::from_value(json!({ "address": address, "amount": zec }))
@@ -506,13 +519,27 @@ mod build_request_tests {
         assert_eq!(msg, "Cannot send memo to transparent recipient");
     }
 
+    #[test]
+    fn builds_batch_across_all_protocols_at_once() {
+        // An exchange paying out to recipients on different protocols (transparent, Sapling,
+        // and two unified/Orchard) in a single transaction.
+        let request = build_request(&[
+            amount(T_ADDR_1, "0.1"),
+            amount(SAPLING_ADDR, "0.2"),
+            amount(UNIFIED_ADDR_1, "0.3"),
+            amount(UNIFIED_ADDR_2, "0.4"),
+        ])
+        .expect("a mixed-protocol batch should build a request");
+        assert_eq!(request.payments().len(), 4);
+    }
+
     proptest! {
         /// For any non-empty list of recipients drawn from the address pool, `build_request`
         /// succeeds with one payment per recipient exactly when all addresses are distinct,
         /// and otherwise rejects the request as a duplicate.
         #[test]
         fn dedups_iff_all_recipients_distinct(
-            indices in prop::collection::vec(0..ADDR_POOL.len(), 1..6),
+            indices in prop::collection::vec(0..ADDR_POOL.len(), 1..8),
         ) {
             let amounts = indices
                 .iter()
@@ -529,6 +556,29 @@ mod build_request_tests {
                 let err = result.expect_err("duplicate recipients should be rejected");
                 prop_assert!(err.message().contains("duplicated recipient address"));
             }
+        }
+
+        /// An exchange-style batch withdrawal: any set of distinct recipients drawn from the
+        /// mixed-protocol pool, each with its own amount, builds a request with exactly that
+        /// many payments. Exercises N recipients spanning the transparent, Sapling, and
+        /// unified (Orchard) protocols simultaneously.
+        #[test]
+        fn builds_distinct_mixed_protocol_batches(
+            pool_indices in prop::sample::subsequence(
+                (0..ADDR_POOL.len()).collect::<Vec<_>>(),
+                1..=ADDR_POOL.len(),
+            ),
+            zatoshis in prop::collection::vec(1u64..=1_000_000_000, ADDR_POOL.len()),
+        ) {
+            let amounts = pool_indices
+                .iter()
+                .enumerate()
+                .map(|(i, &pool_idx)| amount(ADDR_POOL[pool_idx], &zec_str(zatoshis[i])))
+                .collect::<Vec<_>>();
+
+            let request = build_request(&amounts)
+                .expect("a batch of distinct mixed-protocol recipients should build a request");
+            prop_assert_eq!(request.payments().len(), pool_indices.len());
         }
     }
 }
