@@ -91,6 +91,7 @@ tower = "0.4"
 
 # Testing
 once_cell = "1.2"
+proptest = "1.9"
 regex = "1.4"
 tempfile = "3"
 trycmd = "0.15"
@@ -106,6 +107,7 @@ zcash_protocol = "0.9"
 
 # Zcash payment protocols
 orchard = "0.14"
+pczt = { version = "0.7", features = ["prover", "signer"] }
 sapling = { package = "sapling-crypto", version = "0.7" }
 transparent = { package = "zcash_transparent", version = "0.8" }
 zcash_encoding = "0.4"
@@ -168,6 +170,7 @@ tonic = "0.14"
 # merges the commit reference will remain valid.
 equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 f4jumble = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
+pczt = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 transparent = { package = "zcash_transparent", git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 zcash_client_backend = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }

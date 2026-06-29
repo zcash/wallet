@@ -611,6 +611,8 @@ mod parse_memo_tests {
 
 #[cfg(test)]
 mod privacy_policy_tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     const ALL_POLICIES: &[PrivacyPolicy] = &[
@@ -710,6 +712,41 @@ mod privacy_policy_tests {
         for &policy in ALL_POLICIES {
             assert!(policy.is_compatible_with(PrivacyPolicy::FullPrivacy));
             assert!(PrivacyPolicy::NoPrivacy.is_compatible_with(policy));
+        }
+    }
+
+    /// A proptest strategy yielding an arbitrary [`PrivacyPolicy`].
+    fn arb_policy() -> impl Strategy<Value = PrivacyPolicy> {
+        prop::sample::select(ALL_POLICIES.to_vec())
+    }
+
+    proptest! {
+        /// `meet` is the greatest-lower-bound of a lattice, so it must be idempotent,
+        /// commutative, and associative.
+        #[test]
+        fn meet_is_idempotent(a in arb_policy()) {
+            prop_assert_eq!(a.meet(a), a);
+        }
+
+        #[test]
+        fn meet_is_commutative_prop(a in arb_policy(), b in arb_policy()) {
+            prop_assert_eq!(a.meet(b), b.meet(a));
+        }
+
+        #[test]
+        fn meet_is_associative(a in arb_policy(), b in arb_policy(), c in arb_policy()) {
+            prop_assert_eq!(a.meet(b).meet(c), a.meet(b.meet(c)));
+        }
+
+        /// Any string that is neither a known policy name nor the rejected `"LegacyCompat"`
+        /// is reported as an unknown policy.
+        #[test]
+        fn parse_privacy_policy_rejects_arbitrary_unknown_strings(s in "[A-Za-z]{0,24}") {
+            prop_assume!(PrivacyPolicy::from_str(&s).is_none() && s != "LegacyCompat");
+            let err = parse_privacy_policy(Some(&s))
+                .expect_err("an unknown policy name should be rejected");
+            let expected = format!("Unknown privacy policy {s}");
+            prop_assert_eq!(err.message(), expected);
         }
     }
 }

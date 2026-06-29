@@ -62,6 +62,8 @@ mod validate_address;
 mod verify_message;
 mod view_transaction;
 #[cfg(zallet_build = "wallet")]
+mod z_finalize_transaction;
+#[cfg(zallet_build = "wallet")]
 mod z_get_total_balance;
 #[cfg(zallet_build = "wallet")]
 mod z_import_address;
@@ -574,6 +576,28 @@ pub(crate) trait WalletRpc {
         recipients: Vec<AmountParameter>,
         minconf: Option<u32>,
     ) -> z_propose_transaction::Response;
+
+    /// Finalizes a proposed transaction, signing and broadcasting it.
+    ///
+    /// Takes a PCZT produced by `z_proposetransaction`, applies this account's spend
+    /// authorizing signatures and proofs, extracts the resulting transaction, and broadcasts
+    /// it, returning the resulting txid.
+    ///
+    /// # Arguments
+    /// - `account`: The UUID of the account whose keys should sign the transaction.
+    /// - `pczt`: The hex-encoded PCZT to finalize, as returned by `z_proposetransaction`.
+    /// - `privacy_policy` (string, required): Policy for what information leakage is
+    ///   acceptable, supplied as acknowledgement of the transaction's privacy implications.
+    ///   See `z_sendmany` for the list of accepted values.
+    ///
+    /// Only fully-shielded (Sapling and Orchard) PCZTs are currently supported.
+    #[method(name = "z_finalizetransaction")]
+    async fn z_finalize_transaction(
+        &self,
+        account: JsonValue,
+        pczt: String,
+        privacy_policy: String,
+    ) -> z_finalize_transaction::Response;
 
     /// Sends funds from an account in a single operation, returning the resulting txids.
     ///
@@ -1089,6 +1113,23 @@ impl<C: Chain> WalletRpcServer for WalletRpcImpl<C> {
             fund_source,
             recipients,
             minconf,
+        )
+        .await
+    }
+
+    async fn z_finalize_transaction(
+        &self,
+        account: JsonValue,
+        pczt: String,
+        privacy_policy: String,
+    ) -> z_finalize_transaction::Response {
+        z_finalize_transaction::call(
+            self.wallet().await?,
+            self.keystore.clone(),
+            self.chain().await?,
+            account,
+            pczt,
+            privacy_policy,
         )
         .await
     }

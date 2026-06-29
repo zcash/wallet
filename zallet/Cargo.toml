@@ -116,6 +116,7 @@ jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 nix = { workspace = true, features = ["signal"] }
 orchard.workspace = true
+pczt.workspace = true
 phf.workspace = true
 rand.workspace = true
 rpassword.workspace = true
@@ -200,6 +201,7 @@ uuid.workspace = true
 [dev-dependencies]
 abscissa_core = { workspace = true, features = ["testing"] }
 once_cell.workspace = true
+proptest.workspace = true
 regex.workspace = true
 trycmd.workspace = true
 

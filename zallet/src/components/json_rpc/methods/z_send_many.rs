@@ -423,3 +423,112 @@ pub(super) async fn run<C: Chain>(
 
     broadcast_transactions(&wallet, chain, txids.into()).await
 }
+
+#[cfg(test)]
+mod build_request_tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    // Transparent addresses reused from the `validate_address` / `fund_source` tests.
+    const T_ADDR_1: &str = "t1VydNnkjBzfL1iAMyUbwGKJAF7PgvuCfMY";
+    const T_ADDR_2: &str = "t3Vz22vK5z2LcKEdg16Yv4FFneEL1zg9ojd";
+
+    // A pool of distinct, valid recipient addresses (two transparent, one Sapling) used by
+    // the property tests below.
+    const ADDR_POOL: &[&str] = &[
+        T_ADDR_1,
+        T_ADDR_2,
+        "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z",
+    ];
+
+    fn amount(address: &str, zec: &str) -> AmountParameter {
+        serde_json::from_value(json!({ "address": address, "amount": zec }))
+            .expect("valid AmountParameter")
+    }
+
+    fn amount_with_memo(address: &str, zec: &str, memo: &str) -> AmountParameter {
+        serde_json::from_value(json!({ "address": address, "amount": zec, "memo": memo }))
+            .expect("valid AmountParameter")
+    }
+
+    fn err_message(amounts: &[AmountParameter]) -> String {
+        build_request(amounts)
+            .expect_err("build_request should fail")
+            .message()
+            .to_string()
+    }
+
+    #[test]
+    fn rejects_empty_array() {
+        assert_eq!(
+            err_message(&[]),
+            "Invalid parameter, amounts array is empty.",
+        );
+    }
+
+    #[test]
+    fn builds_single_recipient() {
+        let request = build_request(&[amount(T_ADDR_1, "0.1")]).expect("valid request");
+        assert_eq!(request.payments().len(), 1);
+    }
+
+    #[test]
+    fn builds_multiple_distinct_recipients() {
+        let request = build_request(&[amount(T_ADDR_1, "0.1"), amount(T_ADDR_2, "0.2")])
+            .expect("valid request");
+        assert_eq!(request.payments().len(), 2);
+    }
+
+    #[test]
+    fn rejects_duplicate_recipient() {
+        let msg = err_message(&[amount(T_ADDR_1, "0.1"), amount(T_ADDR_1, "0.2")]);
+        assert_eq!(
+            msg,
+            format!("Invalid parameter, duplicated recipient address: {T_ADDR_1}"),
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_address_format() {
+        let msg = err_message(&[amount("not-an-address", "0.1")]);
+        assert_eq!(
+            msg,
+            "Invalid parameter, unknown address format: not-an-address",
+        );
+    }
+
+    #[test]
+    fn rejects_memo_to_transparent_recipient() {
+        // The memo is valid hex (so memo parsing succeeds), but transparent recipients
+        // cannot carry a memo.
+        let msg = err_message(&[amount_with_memo(T_ADDR_1, "0.1", "00")]);
+        assert_eq!(msg, "Cannot send memo to transparent recipient");
+    }
+
+    proptest! {
+        /// For any non-empty list of recipients drawn from the address pool, `build_request`
+        /// succeeds with one payment per recipient exactly when all addresses are distinct,
+        /// and otherwise rejects the request as a duplicate.
+        #[test]
+        fn dedups_iff_all_recipients_distinct(
+            indices in prop::collection::vec(0..ADDR_POOL.len(), 1..6),
+        ) {
+            let amounts = indices
+                .iter()
+                .map(|&i| amount(ADDR_POOL[i], "0.1"))
+                .collect::<Vec<_>>();
+
+            let unique = indices.iter().collect::<HashSet<_>>().len();
+            let result = build_request(&amounts);
+
+            if unique == indices.len() {
+                let request = result.expect("distinct recipients should build a request");
+                prop_assert_eq!(request.payments().len(), indices.len());
+            } else {
+                let err = result.expect_err("duplicate recipients should be rejected");
+                prop_assert!(err.message().contains("duplicated recipient address"));
+            }
+        }
+    }
+}

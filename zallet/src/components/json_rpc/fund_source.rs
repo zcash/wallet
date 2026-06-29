@@ -485,6 +485,7 @@ impl WalletRead for FundSourceFilter<'_> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
     use serde_json::json;
     use zcash_protocol::consensus;
 
@@ -632,5 +633,39 @@ mod tests {
         assert_eq!(parse_err(json!(true)), expected);
         assert_eq!(parse_err(json!({"pool": "orchard"})), expected);
         assert_eq!(parse_err(JsonValue::Null), expected);
+    }
+
+    proptest! {
+        /// Any string that is not one of the three recognised keywords is reported as an
+        /// unknown fund source naming the offending value.
+        #[test]
+        fn rejects_arbitrary_unknown_keyword(s in "[a-z_]{1,24}") {
+            prop_assume!(!matches!(s.as_str(), "orchard" | "sapling" | "any_transparent"));
+            let err = FundSource::parse(&json!(s), &mainnet())
+                .expect_err("unknown keyword should be rejected");
+            let needle = format!("got \"{s}\"");
+            prop_assert!(err.message().contains(&needle));
+        }
+
+        /// An array of transparent addresses parses into the deduplicated set of those
+        /// addresses, regardless of order or repetition.
+        #[test]
+        fn dedups_transparent_address_array(
+            indices in prop::collection::vec(0..2usize, 1..6),
+        ) {
+            let pool = [MAINNET_P2PKH, MAINNET_P2SH];
+            let entries = indices.iter().map(|&i| json!(pool[i])).collect::<Vec<_>>();
+            let unique = indices.iter().collect::<HashSet<_>>().len();
+
+            match FundSource::parse(&JsonValue::Array(entries), &mainnet()).unwrap() {
+                FundSource::Transparent(set) => {
+                    prop_assert_eq!(set.len(), unique);
+                    for &i in &indices {
+                        prop_assert!(set.contains(&taddr(pool[i])));
+                    }
+                }
+                other => prop_assert!(false, "expected Transparent, got {:?}", other),
+            }
+        }
     }
 }
