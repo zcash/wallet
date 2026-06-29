@@ -1,3 +1,6 @@
+use std::sync::LazyLock;
+
+use bip32::ChildNumber;
 use jsonrpsee::core::{JsonValue, RpcResult};
 use pczt::{
     Pczt,
@@ -8,12 +11,15 @@ use pczt::{
     },
 };
 use secrecy::ExposeSecret;
+use transparent::keys::{NonHardenedChildIndex, TransparentKeyScope};
 use zcash_client_backend::data_api::{
     Account, WalletRead, wallet::extract_and_store_transaction_from_pczt,
 };
 use zcash_client_sqlite::ReceivedNoteId;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_proofs::prover::LocalTxProver;
+use zcash_protocol::consensus::NetworkConstants;
+use zip32::fingerprint::SeedFingerprint;
 
 use crate::components::{
     chain::Chain,
@@ -25,6 +31,13 @@ use crate::components::{
     },
     keystore::KeyStore,
 };
+
+/// The Orchard proving and verifying keys are deterministic and expensive to build (each
+/// takes on the order of seconds), so build them once and reuse them across requests.
+static ORCHARD_PROVING_KEY: LazyLock<orchard::circuit::ProvingKey> =
+    LazyLock::new(orchard::circuit::ProvingKey::build);
+static ORCHARD_VERIFYING_KEY: LazyLock<orchard::circuit::VerifyingKey> =
+    LazyLock::new(orchard::circuit::VerifyingKey::build);
 
 /// Response to a `z_finalizetransaction` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -73,6 +86,12 @@ pub(crate) async fn call<C: Chain>(
             .with_static("Cannot sign for an account that has no spending key.")
     })?;
 
+    // The seed fingerprint and coin type identify which transparent inputs belong to this
+    // account, so that the correct key can be derived for each.
+    let seed_fp = *derivation.seed_fingerprint();
+    let coin_type = ChildNumber::new(wallet.params().coin_type(), true)
+        .map_err(|e| LegacyCode::Wallet.with_message(format!("Invalid coin type: {e}")))?;
+
     let seed = keystore
         .decrypt_seed(derivation.seed_fingerprint())
         .await
@@ -91,18 +110,17 @@ pub(crate) async fn call<C: Chain>(
 
     // Proving, signing, and proof verification are CPU-bound; run them on the blocking pool.
     let (wallet, txid) = crate::spawn_blocking!("z_finalizetransaction prover", move || {
-        let pczt = authorize_pczt(pczt, &usk)?;
+        let pczt = authorize_pczt(pczt, &usk, &seed_fp, coin_type)?;
 
         let prover = LocalTxProver::bundled();
         let (spend_vk, output_vk) = prover.verifying_keys();
-        let orchard_vk = orchard::circuit::VerifyingKey::build();
 
         let mut wallet = wallet;
         let txid = extract_and_store_transaction_from_pczt::<_, ReceivedNoteId>(
             wallet.as_mut(),
             pczt,
             Some((&spend_vk, &output_vk)),
-            Some(&orchard_vk),
+            Some(&ORCHARD_VERIFYING_KEY),
         )
         .map_err(|e| {
             LegacyCode::Wallet.with_message(format!("Failed to extract transaction from PCZT: {e}"))
@@ -130,18 +148,23 @@ fn decode_pczt(pczt: &str) -> RpcResult<Pczt> {
 /// Adds proof generation keys, creates proofs, and applies this account's spend authorizing
 /// signatures to a PCZT, returning the fully-authorized PCZT ready for extraction.
 ///
-/// This handles fully-shielded (Sapling and Orchard) PCZTs. The spend metadata does not say
-/// which spends belong to this account, so each candidate signature is attempted and
-/// wrong-key errors are ignored, matching the reference driver in `zcash_client_backend`.
-///
-/// PCZTs containing transparent inputs are not yet finalized here: the `pczt` crate does not
-/// expose the per-input derivation needed to derive the transparent signing keys. Such a PCZT
-/// fails at extraction rather than being broadcast unsigned.
-fn authorize_pczt(pczt: Pczt, usk: &UnifiedSpendingKey) -> RpcResult<Pczt> {
+/// Handles Sapling, Orchard, and transparent inputs. For the shielded pools the spend
+/// metadata does not say which spends belong to this account, so each candidate signature is
+/// attempted and wrong-key errors are ignored, matching the reference driver in
+/// `zcash_client_backend`. Transparent inputs are matched to this account by their BIP 44
+/// derivation (seed fingerprint and coin type), and the corresponding key is derived to sign.
+fn authorize_pczt(
+    pczt: Pczt,
+    usk: &UnifiedSpendingKey,
+    seed_fp: &SeedFingerprint,
+    coin_type: ChildNumber,
+) -> RpcResult<Pczt> {
     let sapling_extsk = usk.sapling();
 
-    // 1. Add Sapling proof generation keys to the account's (non-dummy) spends. Orchard has
-    //    no equivalent step.
+    // 1. Add Sapling proof generation keys to the account's (non-dummy) spends (Orchard has
+    //    no equivalent step), and identify the transparent inputs belonging to this account
+    //    by their BIP 44 derivation so they can be signed below.
+    let mut transparent_inputs: Vec<(usize, TransparentKeyScope, NonHardenedChildIndex)> = vec![];
     let pczt = Updater::new(pczt)
         .update_sapling_with(|mut updater| {
             let spends_without_pgk = updater
@@ -168,6 +191,22 @@ fn authorize_pczt(pczt: Pczt, usk: &UnifiedSpendingKey) -> RpcResult<Pczt> {
                 "Failed to update PCZT with proof generation keys: {e:?}"
             ))
         })?
+        .update_transparent_with(|updater| {
+            for (index, input) in updater.bundle().inputs().iter().enumerate() {
+                for derivation in input.bip32_derivation().values() {
+                    if let Some((_account, scope, address_index)) =
+                        derivation.extract_bip_44_fields(seed_fp, coin_type)
+                    {
+                        transparent_inputs.push((index, scope, address_index));
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        })
+        .map_err(|e| {
+            LegacyCode::Wallet.with_message(format!("Failed to read transparent inputs: {e:?}"))
+        })?
         .finish();
 
     // 2. Create proofs, building each (expensive) proving key only when the PCZT needs it.
@@ -183,16 +222,30 @@ fn authorize_pczt(pczt: Pczt, usk: &UnifiedSpendingKey) -> RpcResult<Pczt> {
         prover
     };
     let prover = if prover.requires_orchard_proof() {
-        let orchard_pk = orchard::circuit::ProvingKey::build();
-        prover.create_orchard_proof(&orchard_pk).map_err(|e| {
-            LegacyCode::Wallet.with_message(format!("Failed to create Orchard proof: {e:?}"))
-        })?
+        prover
+            .create_orchard_proof(&ORCHARD_PROVING_KEY)
+            .map_err(|e| {
+                LegacyCode::Wallet.with_message(format!("Failed to create Orchard proof: {e:?}"))
+            })?
     } else {
         prover
     };
     let pczt = prover.finish();
 
-    // 3. Apply spend authorizing signatures for both shielded pools.
+    // 3. Derive the signing key for each transparent input identified above.
+    let mut transparent_keys = vec![];
+    for (index, scope, address_index) in transparent_inputs {
+        let sk = usk
+            .transparent()
+            .derive_secret_key(scope, address_index)
+            .map_err(|e| {
+                LegacyCode::Wallet.with_message(format!("Failed to derive transparent key: {e}"))
+            })?;
+        transparent_keys.push((index, sk));
+    }
+
+    // 4. Apply spend authorizing signatures for both shielded pools and the transparent
+    //    inputs.
     let mut signer = Signer::new(pczt).map_err(|e| {
         LegacyCode::Wallet.with_message(format!("Failed to start PCZT signer: {e:?}"))
     })?;
@@ -225,6 +278,12 @@ fn authorize_pczt(pczt: Pczt, usk: &UnifiedSpendingKey) -> RpcResult<Pczt> {
                     .with_message(format!("Failed to apply Orchard signature: {e:?}")));
             }
         }
+    }
+
+    for (index, sk) in &transparent_keys {
+        signer.sign_transparent(*index, sk).map_err(|e| {
+            LegacyCode::Wallet.with_message(format!("Failed to apply transparent signature: {e:?}"))
+        })?;
     }
 
     Ok(signer.finish())

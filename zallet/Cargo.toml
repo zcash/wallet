@@ -97,6 +97,7 @@ age.workspace = true
 async-trait.workspace = true
 base64ct.workspace = true
 bip0039.workspace = true
+bip32.workspace = true
 clap = { workspace = true, features = ["string", "unstable-styles"] }
 deadpool.workspace = true
 deadpool-sqlite.workspace = true

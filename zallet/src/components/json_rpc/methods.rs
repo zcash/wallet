@@ -589,8 +589,6 @@ pub(crate) trait WalletRpc {
     /// - `privacy_policy` (string, required): Policy for what information leakage is
     ///   acceptable, supplied as acknowledgement of the transaction's privacy implications.
     ///   See `z_sendmany` for the list of accepted values.
-    ///
-    /// Only fully-shielded (Sapling and Orchard) PCZTs are currently supported.
     #[method(name = "z_finalizetransaction")]
     async fn z_finalize_transaction(
         &self,

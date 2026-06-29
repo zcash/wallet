@@ -7409,6 +7409,7 @@ dependencies = [
  "base64 0.22.1",
  "base64ct",
  "bip0039",
+ "bip32",
  "clap",
  "clap_complete",
  "clap_mangen",
