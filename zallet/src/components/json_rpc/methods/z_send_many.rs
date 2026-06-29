@@ -36,9 +36,8 @@ use crate::{
         json_rpc::{
             asyncop::{ContextInfo, OperationId},
             payments::{
-                AmountParameter, IncompatiblePrivacyPolicy, PrivacyPolicy, SendResult,
-                broadcast_transactions, enforce_privacy_policy, get_account_for_address,
-                parse_memo,
+                AmountParameter, IncompatiblePrivacyPolicy, SendResult, broadcast_transactions,
+                enforce_privacy_policy, get_account_for_address, parse_memo, parse_privacy_policy,
             },
             server::LegacyCode,
             utils::zatoshis_from_value,
@@ -98,7 +97,7 @@ pub(super) fn build_request(amounts: &[AmountParameter]) -> RpcResult<Transactio
         }
 
         let memo = amount.memo().as_deref().map(parse_memo).transpose()?;
-        let value = zatoshis_from_value(&amount.amount())?;
+        let value = zatoshis_from_value(amount.amount())?;
 
         let payment = Payment::new(addr, Some(value), memo, None, None, vec![]).map_err(|e| {
             LegacyCode::InvalidParameter.with_static(match e {
@@ -163,14 +162,7 @@ pub(crate) async fn call<C: Chain>(
         }
     }?;
 
-    let privacy_policy = match privacy_policy.as_deref() {
-        Some("LegacyCompat") => Err(LegacyCode::InvalidParameter
-            .with_static("LegacyCompat privacy policy is unsupported in Zallet")),
-        Some(s) => PrivacyPolicy::from_str(s).ok_or_else(|| {
-            LegacyCode::InvalidParameter.with_message(format!("Unknown privacy policy {s}"))
-        }),
-        None => Ok(PrivacyPolicy::FullPrivacy),
-    }?;
+    let privacy_policy = parse_privacy_policy(privacy_policy.as_deref())?;
 
     // Sanity check for transaction size
     // TODO: https://github.com/zcash/wallet/issues/255
@@ -285,48 +277,7 @@ pub(crate) async fn call<C: Chain>(
 
     enforce_privacy_policy(&proposal, privacy_policy)?;
 
-    let orchard_actions_limit = APP.config().builder.limits.orchard_actions().into();
-    for step in proposal.steps() {
-        let orchard_spends = step
-            .shielded_inputs()
-            .iter()
-            .flat_map(|inputs| inputs.notes())
-            .filter(|note| note.note().protocol() == ShieldedProtocol::Orchard)
-            .count();
-
-        let orchard_outputs = step
-            .payment_pools()
-            .values()
-            .filter(|pool| pool == &&PoolType::ORCHARD)
-            .count()
-            + step
-                .balance()
-                .proposed_change()
-                .iter()
-                .filter(|change| change.output_pool() == PoolType::ORCHARD)
-                .count();
-
-        let orchard_actions = orchard_spends.max(orchard_outputs);
-
-        if orchard_actions > orchard_actions_limit {
-            let (count, kind) = if orchard_outputs <= orchard_actions_limit {
-                (orchard_spends, "inputs")
-            } else if orchard_spends <= orchard_actions_limit {
-                (orchard_outputs, "outputs")
-            } else {
-                (orchard_actions, "actions")
-            };
-
-            return Err(LegacyCode::Misc.with_message(fl!(
-                "err-excess-orchard-actions",
-                count = count,
-                kind = kind,
-                limit = orchard_actions_limit,
-                config = "-orchardactionlimit=N",
-                bound = format!("N >= %u"),
-            )));
-        }
-    }
+    check_orchard_actions_limit(&proposal)?;
 
     let derivation = account.source().key_derivation().ok_or_else(|| {
         LegacyCode::InvalidAddressOrKey
@@ -380,8 +331,64 @@ pub(crate) async fn call<C: Chain>(
     ))
 }
 
+/// Rejects a proposal whose Orchard action count exceeds the configured limit.
+///
+/// Shared by `z_sendmany` and `z_sendfromaccount`, both of which build and execute a
+/// proposal through `create_proposed_transactions`.
+pub(super) fn check_orchard_actions_limit(
+    proposal: &Proposal<StandardFeeRule, ReceivedNoteId>,
+) -> RpcResult<()> {
+    let orchard_actions_limit = APP.config().builder.limits.orchard_actions().into();
+    for step in proposal.steps() {
+        let orchard_spends = step
+            .shielded_inputs()
+            .iter()
+            .flat_map(|inputs| inputs.notes())
+            .filter(|note| note.note().protocol() == ShieldedProtocol::Orchard)
+            .count();
+
+        let orchard_outputs = step
+            .payment_pools()
+            .values()
+            .filter(|pool| pool == &&PoolType::ORCHARD)
+            .count()
+            + step
+                .balance()
+                .proposed_change()
+                .iter()
+                .filter(|change| change.output_pool() == PoolType::ORCHARD)
+                .count();
+
+        let orchard_actions = orchard_spends.max(orchard_outputs);
+
+        if orchard_actions > orchard_actions_limit {
+            let (count, kind) = if orchard_outputs <= orchard_actions_limit {
+                (orchard_spends, "inputs")
+            } else if orchard_spends <= orchard_actions_limit {
+                (orchard_outputs, "outputs")
+            } else {
+                (orchard_actions, "actions")
+            };
+
+            return Err(LegacyCode::Misc.with_message(fl!(
+                "err-excess-orchard-actions",
+                count = count,
+                kind = kind,
+                limit = orchard_actions_limit,
+                config = "-orchardactionlimit=N",
+                bound = format!("N >= %u"),
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 /// Construct and send the transaction, returning the resulting txid.
 /// Errors in transaction construction will throw.
+///
+/// Shared by `z_sendmany` (via the background async-op system) and `z_sendfromaccount`
+/// (which awaits it directly for one-shot execution).
 ///
 /// Notes:
 /// 1. #1159 Currently there is no limit set on the number of elements, which could
@@ -389,7 +396,7 @@ pub(crate) async fn call<C: Chain>(
 /// 2. #1360 Note selection is not optimal.
 /// 3. #1277 Spendable notes are not locked, so an operation running in parallel
 ///    could also try to use them.
-async fn run<C: Chain>(
+pub(super) async fn run<C: Chain>(
     mut wallet: DbHandle,
     chain: C,
     proposal: Proposal<StandardFeeRule, ReceivedNoteId>,

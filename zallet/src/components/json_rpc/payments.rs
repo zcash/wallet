@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fmt};
 
 use abscissa_core::Application;
+use documented::Documented;
 use jsonrpsee::core::JsonValue;
 use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
 use schemars::JsonSchema;
@@ -226,6 +227,23 @@ impl PrivacyPolicy {
 
     pub(super) fn allow_no_privacy(&self) -> bool {
         self.is_compatible_with(PrivacyPolicy::NoPrivacy)
+    }
+}
+
+/// Parses the `privacy_policy` RPC argument, defaulting to [`PrivacyPolicy::FullPrivacy`]
+/// when absent.
+///
+/// Shared by `z_sendmany` (where the argument is optional) and `z_sendfromaccount` (where it
+/// is required and supplied as `Some`). The `"LegacyCompat"` policy that `zcashd` accepted is
+/// explicitly rejected.
+pub(super) fn parse_privacy_policy(privacy_policy: Option<&str>) -> RpcResult<PrivacyPolicy> {
+    match privacy_policy {
+        Some("LegacyCompat") => Err(LegacyCode::InvalidParameter
+            .with_static("LegacyCompat privacy policy is unsupported in Zallet")),
+        Some(s) => PrivacyPolicy::from_str(s).ok_or_else(|| {
+            LegacyCode::InvalidParameter.with_message(format!("Unknown privacy policy {s}"))
+        }),
+        None => Ok(PrivacyPolicy::FullPrivacy),
     }
 }
 
@@ -591,6 +609,111 @@ mod parse_memo_tests {
     }
 }
 
+#[cfg(test)]
+mod privacy_policy_tests {
+    use super::*;
+
+    const ALL_POLICIES: &[PrivacyPolicy] = &[
+        PrivacyPolicy::FullPrivacy,
+        PrivacyPolicy::AllowRevealedAmounts,
+        PrivacyPolicy::AllowRevealedRecipients,
+        PrivacyPolicy::AllowRevealedSenders,
+        PrivacyPolicy::AllowFullyTransparent,
+        PrivacyPolicy::AllowLinkingAccountAddresses,
+        PrivacyPolicy::NoPrivacy,
+    ];
+
+    #[test]
+    fn parse_privacy_policy_defaults_to_full_privacy_when_absent() {
+        assert_eq!(
+            parse_privacy_policy(None).unwrap(),
+            PrivacyPolicy::FullPrivacy,
+        );
+    }
+
+    #[test]
+    fn parse_privacy_policy_accepts_every_known_policy() {
+        // Every policy round-trips through its string name.
+        for &policy in ALL_POLICIES {
+            let name: &'static str = policy.into();
+            assert_eq!(parse_privacy_policy(Some(name)).unwrap(), policy);
+        }
+    }
+
+    #[test]
+    fn parse_privacy_policy_rejects_legacy_compat() {
+        let err = parse_privacy_policy(Some("LegacyCompat"))
+            .expect_err("LegacyCompat should be rejected");
+        assert_eq!(
+            err.message(),
+            "LegacyCompat privacy policy is unsupported in Zallet",
+        );
+    }
+
+    #[test]
+    fn parse_privacy_policy_rejects_unknown_policy() {
+        let err =
+            parse_privacy_policy(Some("Whatever")).expect_err("unknown policy should be rejected");
+        assert_eq!(err.message(), "Unknown privacy policy Whatever");
+    }
+
+    #[test]
+    fn meet_with_full_privacy_is_identity() {
+        // `FullPrivacy` is the lattice top: meeting it with any policy yields that policy.
+        for &policy in ALL_POLICIES {
+            assert_eq!(PrivacyPolicy::FullPrivacy.meet(policy), policy);
+            assert_eq!(policy.meet(PrivacyPolicy::FullPrivacy), policy);
+        }
+    }
+
+    #[test]
+    fn meet_with_no_privacy_is_no_privacy() {
+        // `NoPrivacy` is the lattice bottom: meeting it with any policy yields `NoPrivacy`.
+        for &policy in ALL_POLICIES {
+            assert_eq!(
+                PrivacyPolicy::NoPrivacy.meet(policy),
+                PrivacyPolicy::NoPrivacy,
+            );
+            assert_eq!(
+                policy.meet(PrivacyPolicy::NoPrivacy),
+                PrivacyPolicy::NoPrivacy,
+            );
+        }
+    }
+
+    #[test]
+    fn meet_is_commutative() {
+        for &a in ALL_POLICIES {
+            for &b in ALL_POLICIES {
+                assert_eq!(
+                    a.meet(b),
+                    b.meet(a),
+                    "meet should be commutative: {a} vs {b}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn meet_combines_transparent_sender_and_recipient() {
+        // Revealing both senders and recipients requires the fully-transparent policy.
+        assert_eq!(
+            PrivacyPolicy::AllowRevealedSenders.meet(PrivacyPolicy::AllowRevealedRecipients),
+            PrivacyPolicy::AllowFullyTransparent,
+        );
+    }
+
+    #[test]
+    fn a_policy_is_compatible_with_itself_and_stricter_ones() {
+        // A caller-supplied policy must permit everything a required policy needs. Any policy
+        // satisfies `FullPrivacy`, and `NoPrivacy` satisfies any required policy.
+        for &policy in ALL_POLICIES {
+            assert!(policy.is_compatible_with(PrivacyPolicy::FullPrivacy));
+            assert!(PrivacyPolicy::NoPrivacy.is_compatible_with(policy));
+        }
+    }
+}
+
 pub(super) fn get_account_for_address(
     wallet: &DbConnection,
     address: &Address,
@@ -647,7 +770,7 @@ pub(super) async fn broadcast_transactions<C: Chain>(
 }
 
 /// The result of sending a payment.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Documented, JsonSchema)]
 pub(crate) struct SendResult {
     /// The ID of the resulting transaction, if the payment only produced one.
     ///

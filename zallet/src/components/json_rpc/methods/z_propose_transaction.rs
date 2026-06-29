@@ -61,8 +61,6 @@ pub(super) const PARAM_RECIPIENTS_DESC: &str =
     "An array of JSON objects representing the amounts to send.";
 pub(super) const PARAM_RECIPIENTS_REQUIRED: bool = true;
 pub(super) const PARAM_MINCONF_DESC: &str = "Only use funds confirmed at least this many times.";
-pub(super) const PARAM_PRIVACY_POLICY_DESC: &str =
-    "Policy for what information leakage is acceptable.";
 
 pub(crate) async fn call(
     mut wallet: DbHandle,
@@ -71,7 +69,6 @@ pub(crate) async fn call(
     fund_source: JsonValue,
     recipients: Vec<AmountParameter>,
     minconf: Option<u32>,
-    privacy_policy: Option<String>,
 ) -> Response {
     let request = build_request(&recipients)?;
 

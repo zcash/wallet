@@ -68,6 +68,8 @@ mod z_import_address;
 #[cfg(zallet_build = "wallet")]
 mod z_propose_transaction;
 #[cfg(zallet_build = "wallet")]
+mod z_send_from_account;
+#[cfg(zallet_build = "wallet")]
 mod z_send_many;
 #[cfg(zallet_build = "wallet")]
 mod z_shieldcoinbase;
@@ -561,8 +563,9 @@ pub(crate) trait WalletRpc {
     /// - `recipients`: An array of JSON objects representing the amounts to send, with the
     ///   same shape as `z_sendmany`'s `amounts`.
     /// - `minconf` (numeric, optional): Only use funds confirmed at least this many times.
-    /// - `privacy_policy` (string, optional, default=`"FullPrivacy"`) Policy for what
-    ///   information leakage is acceptable.
+    ///
+    /// The privacy policy required to execute the proposal is computed from the resulting
+    /// transaction and returned alongside the PCZT; the caller does not supply one.
     #[method(name = "z_proposetransaction")]
     async fn z_propose_transaction(
         &self,
@@ -570,8 +573,36 @@ pub(crate) trait WalletRpc {
         fund_source: JsonValue,
         recipients: Vec<AmountParameter>,
         minconf: Option<u32>,
-        privacy_policy: Option<String>,
     ) -> z_propose_transaction::Response;
+
+    /// Sends funds from an account in a single operation, returning the resulting txids.
+    ///
+    /// This is the one-shot counterpart to `z_proposetransaction` + `z_finalizetransaction`:
+    /// it proposes, signs, proves, and broadcasts the transaction synchronously, and unlike
+    /// `z_sendmany` it does not use the background async-operation system.
+    ///
+    /// Like `z_proposetransaction`, the source of funds is an account UUID together with an
+    /// explicit fund source, rather than an address.
+    ///
+    /// # Arguments
+    /// - `account`: The UUID of the account to send the funds from.
+    /// - `fund_source`: Where funds may be drawn from. One of the strings `"orchard"`,
+    ///   `"sapling"`, `"any_transparent"`, or an array of transparent address strings.
+    /// - `recipients`: An array of JSON objects representing the amounts to send, with the
+    ///   same shape as `z_sendmany`'s `amounts`.
+    /// - `minconf` (numeric, optional): Only use funds confirmed at least this many times.
+    /// - `privacy_policy` (string, required): Policy for what information leakage is
+    ///   acceptable, supplied as acknowledgement of the transaction's privacy implications.
+    ///   See `z_sendmany` for the list of accepted values.
+    #[method(name = "z_sendfromaccount")]
+    async fn z_send_from_account(
+        &self,
+        account: JsonValue,
+        fund_source: JsonValue,
+        recipients: Vec<AmountParameter>,
+        minconf: Option<u32>,
+        privacy_policy: String,
+    ) -> z_send_from_account::Response;
 
     /// Send a transaction with multiple recipients.
     ///
@@ -1050,11 +1081,30 @@ impl<C: Chain> WalletRpcServer for WalletRpcImpl<C> {
         fund_source: JsonValue,
         recipients: Vec<AmountParameter>,
         minconf: Option<u32>,
-        privacy_policy: Option<String>,
     ) -> z_propose_transaction::Response {
         z_propose_transaction::call(
             self.wallet().await?,
             self.keystore.clone(),
+            account,
+            fund_source,
+            recipients,
+            minconf,
+        )
+        .await
+    }
+
+    async fn z_send_from_account(
+        &self,
+        account: JsonValue,
+        fund_source: JsonValue,
+        recipients: Vec<AmountParameter>,
+        minconf: Option<u32>,
+        privacy_policy: String,
+    ) -> z_send_from_account::Response {
+        z_send_from_account::call(
+            self.wallet().await?,
+            self.keystore.clone(),
+            self.chain().await?,
             account,
             fund_source,
             recipients,
