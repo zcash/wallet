@@ -7,13 +7,12 @@ use jsonrpsee::{
 use crate::components::{
     chain::Chain,
     database::{Database, DbHandle},
-    json_rpc::payments::AmountParameter,
 };
 
 #[cfg(zallet_build = "wallet")]
 use {
     super::asyncop::{AsyncOperation, ContextInfo, OperationId},
-    crate::components::keystore::KeyStore,
+    crate::components::{json_rpc::payments::AmountParameter, keystore::KeyStore},
     serde::Serialize,
     tokio::sync::RwLock,
 };
