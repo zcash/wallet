@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 During the alpha period, no Semantic Versioning is followed; all releases should
 be considered breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- JSON-RPC methods for working with PCZTs (Partially Created Zcash
+  Transactions), the robust replacements for `createrawtransaction`,
+  `fundrawtransaction`, and `signrawtransaction`. A transaction is assembled by
+  threading a PCZT through these roles:
+  - `pczt_create` — build a PCZT from a payment request (select inputs and
+    compute change), the replacement for `createrawtransaction` +
+    `fundrawtransaction`.
+  - `pczt_combine` — merge the contributions of several parties into one PCZT.
+  - `pczt_prove` — add the Sapling and/or Orchard zero-knowledge proofs.
+  - `pczt_sign` — add signatures using the wallet's keys.
+  - `pczt_extract` — verify the PCZT and extract the final, network-ready
+    transaction.
+
 ## [0.1.0-alpha.4] - 2026-06-25
 
 ### Added
