@@ -8,6 +8,7 @@ use std::future::Future;
 use std::ops::Range;
 
 use futures::stream::BoxStream;
+use nonempty::NonEmpty;
 use tracing::{error, info, warn};
 #[cfg(not(feature = "spend-index"))]
 use transparent::address::TransparentAddress;
@@ -301,10 +302,10 @@ fn unreported_scheduled_incompatibilities<P: consensus::Parameters>(
 }
 
 /// What [`check_consensus_compatibility`] should do about the detected incompatibilities,
-/// given the node’s current tip.
+/// given the node’s current tip. There is no “compatible” variant: [`classify`] is only
+/// reached once at least one incompatibility exists, so compatibility is handled by its
+/// caller before classification.
 enum Decision {
-    /// No incompatibilities, or none that have taken effect or ever will.
-    Compatible,
     /// At least one incompatibility has already taken effect (its divergence height is at or
     /// below the current tip), so this build cannot be trusted: refuse to start.
     Diverged(Vec<Incompatibility>),
@@ -317,12 +318,9 @@ enum Decision {
 }
 
 /// Classifies `incompatibilities` against the node’s current `tip` height. An incompatibility
-/// whose divergence height is at or below the tip has already taken effect.
-fn classify(incompatibilities: Vec<Incompatibility>, tip: u32) -> Decision {
-    if incompatibilities.is_empty() {
-        return Decision::Compatible;
-    }
-
+/// whose divergence height is at or below the tip has already taken effect. The input is
+/// [`NonEmpty`] because there is nothing to classify when no incompatibilities were detected.
+fn classify(incompatibilities: NonEmpty<Incompatibility>, tip: u32) -> Decision {
     let (active, pending): (Vec<_>, Vec<_>) = incompatibilities
         .into_iter()
         .partition(|i| i.divergence_height() <= tip);
@@ -354,11 +352,12 @@ pub(crate) async fn check_consensus_compatibility(
     chain: &impl Chain,
 ) -> Result<Option<BlockHeight>, Error> {
     let upgrades = chain.reported_upgrades().await?;
-    let incompatibilities = detect_incompatibilities(chain.params(), &upgrades);
-    if incompatibilities.is_empty() {
+    let Some(incompatibilities) =
+        NonEmpty::from_vec(detect_incompatibilities(chain.params(), &upgrades))
+    else {
         info!("Backing full node consensus rules are compatible with this Zallet build");
         return Ok(None);
-    }
+    };
 
     // Classify against the node’s current tip: anything at or below it has already diverged.
     let tip = u32::from(chain.snapshot().await?.tip().await?.height);
@@ -371,7 +370,6 @@ pub(crate) async fn check_consensus_compatibility(
     };
 
     match classify(incompatibilities, tip) {
-        Decision::Compatible => Ok(None),
         Decision::Diverged(active) => {
             let upgrades = describe(&active);
             error!("Backing full node follows incompatible consensus rules: {upgrades}");
@@ -587,7 +585,7 @@ mod tests {
     use super::SpendStatus;
     use super::{
         BlockLocator, ChainBlock, ChainError, ChainTx, ChainView, Decision, Incompatibility,
-        ReportedUpgrade, UpgradeStatus, classify, detect_incompatibilities,
+        NonEmpty, ReportedUpgrade, UpgradeStatus, classify, detect_incompatibilities,
         node_reported_incompatibilities,
     };
     #[cfg(not(feature = "spend-index"))]
@@ -873,12 +871,14 @@ mod tests {
         assert_eq!(result[0].divergence_height(), ours);
     }
 
-    #[test]
-    fn classify_empty_is_compatible() {
-        assert!(matches!(
-            classify(Vec::new(), 1_000_000),
-            Decision::Compatible
-        ));
+    /// Wraps [`classify`] (which takes a [`NonEmpty`]) for the tests below, every one of
+    /// which feeds it a non-empty set. The empty case has no classification to make and is
+    /// handled by `check_consensus_compatibility`, not `classify`, so it is tested there.
+    fn decide(incompatibilities: Vec<Incompatibility>, tip: u32) -> Decision {
+        classify(
+            NonEmpty::from_vec(incompatibilities).expect("test input is non-empty"),
+            tip,
+        )
     }
 
     #[test]
@@ -887,7 +887,7 @@ mod tests {
         let earlier = detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 200, UpgradeStatus::Pending)]);
         let later = detect_node(&[upgrade(0xfeed_face, 300, UpgradeStatus::Pending)]);
         let both = earlier.into_iter().chain(later).collect();
-        match classify(both, 100) {
+        match decide(both, 100) {
             Decision::Pending { height, upgrades } => {
                 assert_eq!(height, 200);
                 assert_eq!(upgrades.len(), 2);
@@ -901,7 +901,7 @@ mod tests {
         let incompatibilities =
             detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 100, UpgradeStatus::Active)]);
         assert!(matches!(
-            classify(incompatibilities, 100),
+            decide(incompatibilities, 100),
             Decision::Diverged(_)
         ));
     }
@@ -911,7 +911,7 @@ mod tests {
         let active = detect_node(&[upgrade(UNKNOWN_BRANCH_ID, 100, UpgradeStatus::Active)]);
         let pending = detect_node(&[upgrade(0xfeed_face, 300, UpgradeStatus::Pending)]);
         let both = active.into_iter().chain(pending).collect();
-        match classify(both, 150) {
+        match decide(both, 150) {
             // Only the already-diverged upgrade blocks startup.
             Decision::Diverged(active) => assert_eq!(active.len(), 1),
             _ => panic!("expected Diverged"),
@@ -956,13 +956,13 @@ mod tests {
         let height = expected_height(omitted);
 
         // Tip below the omitted upgrade's height: warn and defer to it.
-        match classify(detect(&all_known_except(omitted)), height - 1) {
+        match decide(detect(&all_known_except(omitted)), height - 1) {
             Decision::Pending { height: h, .. } => assert_eq!(h, height),
             _ => panic!("expected Pending"),
         }
         // Tip at or above it: this build has already diverged.
         assert!(matches!(
-            classify(detect(&all_known_except(omitted)), height),
+            decide(detect(&all_known_except(omitted)), height),
             Decision::Diverged(_)
         ));
     }
