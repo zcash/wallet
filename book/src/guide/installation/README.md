@@ -61,3 +61,35 @@ directly from the main branch of its code repository:
 ```
 cargo install --locked --git https://github.com/zcash/wallet.git
 ```
+
+### Choosing a chain backend
+
+Zallet supports two chain backends, selected at compile time:
+
+| Backend | Default | Platform | Requires |
+|---------|---------|----------|---------|
+| `zebra-state` | Yes | Linux only | co-located `zebrad` with `indexer` feature + `[indexer.read_state_service]` config |
+| `zaino` | No | Linux, macOS, Windows | co-located `zebrad` JSON-RPC endpoint |
+
+The **`zebra-state` backend** is the default. It reads finalized chain state directly from
+a co-located `zebrad`'s state database and is the recommended choice for production
+mainnet use on Linux.
+
+The **`zaino` backend** fetches chain data over JSON-RPC (and optionally reads state
+directly when `[indexer.read_state_service]` is configured). It is the only backend that
+supports regtest and runs on non-Linux platforms.
+
+To build or install with the `zaino` backend, pass `--no-default-features --features zaino`
+(along with any other features you need):
+
+```
+# Install from crates.io with the zaino backend
+cargo install --locked --no-default-features --features zaino,rpc-cli zallet
+
+# Install the latest development version with the zaino backend
+cargo install --locked --git https://github.com/zcash/wallet.git \
+  --no-default-features --features zaino,rpc-cli
+```
+
+> Note: the two backends are mutually exclusive. Adding `--features zaino` without
+> `--no-default-features` will activate both at once and produce a compile error.

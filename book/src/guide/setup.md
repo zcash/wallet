@@ -55,6 +55,11 @@ section are:
 
 ### Reading chain state from a local zebrad
 
+Zallet supports two chain backends that determine how it reads chain state: the default
+`zebra-state` backend and the `zaino` backend. The backend is selected at compile time;
+see [Choosing a chain backend](installation/README.md#choosing-a-chain-backend) for how
+to build with each one.
+
 Zallet can read finalized chain state directly from a co-located `zebrad`'s state
 database (opened read-only), rather than fetching every block over JSON-RPC. This is
 enabled by the `[indexer.read_state_service]` section.
