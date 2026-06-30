@@ -70,24 +70,18 @@ pub(crate) async fn call(
 ) -> Response {
     let account_id = parse_account_parameter(wallet, keystore, &account).await?;
 
-    let confirmations_policy = match minconf {
-        Some(minconf) => match NonZeroU32::new(minconf) {
-            Some(c) => ConfirmationsPolicy::new_symmetrical(c, false),
-            // `minconf = 0` currently cannot be represented accurately with
-            // `ConfirmationsPolicy` (in particular it cannot represent zero-conf
-            // fully-transparent spends), so for now we use "minimum possible".
-            None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::MIN, true),
-        },
-        None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::MIN, false),
+    let confirmations_policy = match minconf.and_then(NonZeroU32::new) {
+        Some(c) => ConfirmationsPolicy::new_symmetrical(c, false),
+        // `minconf = 0` currently cannot be represented accurately with
+        // `ConfirmationsPolicy` (in particular it cannot represent zero-conf
+        // fully-transparent spends), so for now we use "minimum possible".
+        None => ConfirmationsPolicy::new_symmetrical(NonZeroU32::MIN, true),
     };
 
-    let summary = match wallet
+    let summary = wallet
         .get_wallet_summary(confirmations_policy)
         .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
-    {
-        Some(summary) => summary,
-        None => return Err(LegacyCode::InWarmup.with_static("Wallet sync required")),
-    };
+        .ok_or_else(|| LegacyCode::InWarmup.with_static("Wallet sync required"))?;
 
     let account_balance = summary.account_balances().get(&account_id).ok_or_else(|| {
         LegacyCode::InvalidParameter.with_message(format!(
