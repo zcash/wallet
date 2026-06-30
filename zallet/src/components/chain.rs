@@ -9,6 +9,7 @@ use std::ops::Range;
 
 use futures::stream::BoxStream;
 use nonempty::NonEmpty;
+use serde::Deserialize;
 use tracing::{error, info, warn};
 #[cfg(not(feature = "spend-index"))]
 use transparent::address::TransparentAddress;
@@ -100,7 +101,14 @@ pub(crate) trait Chain: Clone + Send + Sync + 'static {
 }
 
 /// The status of a network upgrade as reported by a backing full node.
-enum UpgradeStatus {
+///
+/// This is the single neutral representation both backends produce. The `zebra` backend
+/// deserializes the node’s `getblockchaininfo` status string directly into it; the `zaino`
+/// backend converts its connector’s status enum via [`From`]. The `Deserialize` encoding is
+/// the lowercase status string the node reports (`"active"`, `"pending"`, `"disabled"`).
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum UpgradeStatus {
     /// The upgrade has activated on the node’s chain.
     Active,
     /// The upgrade is scheduled but has not yet activated.

@@ -31,9 +31,7 @@ use zebra_state::ReadStateService;
 #[cfg(feature = "spend-index")]
 use super::SpendStatus;
 use super::read_state::{AbortOnDrop, init_read_state_service};
-use super::{
-    BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView, ReportedUpgrade, UpgradeStatus,
-};
+use super::{BlockLocator, Chain, ChainBlock, ChainError, ChainTx, ChainView, ReportedUpgrade};
 use crate::{
     components::TaskHandle,
     config::ZalletConfig,
@@ -142,11 +140,7 @@ impl Chain for ZebraChain {
                     branch_id,
                     name: upgrade.name,
                     activation_height: upgrade.activation_height,
-                    status: match upgrade.status {
-                        rpc::NetworkUpgradeStatus::Active => UpgradeStatus::Active,
-                        rpc::NetworkUpgradeStatus::Pending => UpgradeStatus::Pending,
-                        rpc::NetworkUpgradeStatus::Disabled => UpgradeStatus::Disabled,
-                    },
+                    status: upgrade.status,
                 })
             })
             .collect()

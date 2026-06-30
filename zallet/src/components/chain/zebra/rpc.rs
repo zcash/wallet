@@ -12,6 +12,7 @@ use jsonrpsee::core::{client::ClientT, params::ArrayParams};
 use jsonrpsee_http_client::{HeaderMap, HeaderValue, HttpClient, HttpClientBuilder};
 use serde::Deserialize;
 
+use crate::components::chain::UpgradeStatus;
 use crate::error::{Error, ErrorKind};
 
 /// The subset of `getblockchaininfo` we consume: the network-upgrade table, keyed by
@@ -29,17 +30,9 @@ pub(crate) struct NetworkUpgradeInfo {
     /// The activation height the node reports for the upgrade.
     #[serde(rename = "activationheight")]
     pub(crate) activation_height: u32,
-    /// Whether the node treats the upgrade as active, pending, or disabled.
-    pub(crate) status: NetworkUpgradeStatus,
-}
-
-/// The status of a network upgrade in the `getblockchaininfo` `upgrades` table.
-#[derive(Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum NetworkUpgradeStatus {
-    Active,
-    Pending,
-    Disabled,
+    /// Whether the node treats the upgrade as active, pending, or disabled. Deserialized
+    /// straight into the backend-neutral [`UpgradeStatus`].
+    pub(crate) status: UpgradeStatus,
 }
 
 enum Auth {

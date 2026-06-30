@@ -255,6 +255,19 @@ impl ZainoChain {
     }
 }
 
+/// The single place the Zaino connector’s status enum is mapped onto the backend-neutral
+/// [`UpgradeStatus`]. The `zebra` backend deserializes into `UpgradeStatus` directly, so this
+/// is the only status conversion in the tree.
+impl From<NetworkUpgradeStatus> for UpgradeStatus {
+    fn from(status: NetworkUpgradeStatus) -> Self {
+        match status {
+            NetworkUpgradeStatus::Active => UpgradeStatus::Active,
+            NetworkUpgradeStatus::Pending => UpgradeStatus::Pending,
+            NetworkUpgradeStatus::Disabled => UpgradeStatus::Disabled,
+        }
+    }
+}
+
 impl Chain for ZainoChain {
     type View = ZainoChainView;
 
@@ -278,11 +291,7 @@ impl Chain for ZainoChain {
                     branch_id: branch.inner(),
                     name: format!("{name:?}"),
                     activation_height: activation_height.0,
-                    status: match status {
-                        NetworkUpgradeStatus::Active => UpgradeStatus::Active,
-                        NetworkUpgradeStatus::Pending => UpgradeStatus::Pending,
-                        NetworkUpgradeStatus::Disabled => UpgradeStatus::Disabled,
-                    },
+                    status: status.into(),
                 }
             })
             .collect())
