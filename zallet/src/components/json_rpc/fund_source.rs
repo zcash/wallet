@@ -14,24 +14,40 @@
 //!
 //! [`GreedyInputSelector`]: zcash_client_backend::data_api::wallet::input_selection::GreedyInputSelector
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use jsonrpsee::core::{JsonValue, RpcResult};
-use transparent::{address::TransparentAddress, bundle::OutPoint};
+use transparent::{
+    address::TransparentAddress,
+    bundle::{OutPoint, TxOut},
+};
 use zcash_client_backend::{
     data_api::{
         AccountMeta, InputSource, NoteFilter, ReceivedNotes, TargetValue, TransparentOutputFilter,
         WalletRead,
         wallet::{ConfirmationsPolicy, TargetHeight},
     },
+    fees::{StandardFeeRule, TransactionBalance},
+    proposal::Proposal,
     wallet::{Note, ReceivedNote, WalletTransparentOutput},
+    zip321::{Payment, TransactionRequest},
 };
+use zcash_client_sqlite::{AccountUuid, ReceivedNoteId};
 use zcash_keys::address::Address;
-use zcash_protocol::{ShieldedProtocol, TxId, consensus::BlockHeight};
+use zcash_primitives::transaction::fees::{
+    FeeRule,
+    transparent::{InputSize, InputView, OutputView},
+    zip317::P2PKH_STANDARD_OUTPUT_SIZE,
+};
+use zcash_protocol::{PoolType, ShieldedProtocol, TxId, consensus::BlockHeight, value::Zatoshis};
 
 use crate::{components::database::DbConnection, network::Network};
 
 use super::server::LegacyCode;
+
+/// Change below this value is folded into the fee rather than creating a separate transparent
+/// change output (creating one would cost roughly this much in fee to later spend).
+const TRANSPARENT_DUST_THRESHOLD: Zatoshis = Zatoshis::const_from_u64(5_000);
 
 /// Where an account's funds may be drawn from when constructing a transaction.
 #[derive(Clone, Debug)]
@@ -112,6 +128,268 @@ impl FundSource {
             Self::Transparent(set) => set.contains(address),
         }
     }
+}
+
+/// Builds a single-step proposal that spends the account's transparent UTXOs (restricted to
+/// `source`) to the recipients in `request`, with transparent change.
+///
+/// `zcash_client_backend`'s `propose_transfer` selects only shielded notes; its transparent
+/// input handling lives exclusively in the shielding path (which sweeps to the account's own
+/// shielded pool). To spend transparent funds to arbitrary transparent recipients without
+/// shielding, this constructs the proposal directly: it gathers spendable UTXOs, greedily
+/// selects enough to cover the payments plus the ZIP 317 fee, and returns any change to the
+/// account as an ordinary transparent output (single-step proposals cannot carry an ephemeral
+/// change output). The resulting proposal flows through the same `create_pczt_from_proposal` /
+/// `create_proposed_transactions` path as shielded proposals, and `z_finalizetransaction`
+/// already signs transparent inputs.
+///
+/// Only transparent recipients are supported here; a shielded recipient on a transparent fund
+/// source is rejected, because it would reveal the transparent senders and is better expressed
+/// as a shielding operation.
+pub(super) fn propose_transparent_spend(
+    wallet: &DbConnection,
+    account_id: AccountUuid,
+    source: &FundSource,
+    request: TransactionRequest,
+    confirmations_policy: ConfirmationsPolicy,
+) -> RpcResult<Proposal<StandardFeeRule, ReceivedNoteId>> {
+    let params = *wallet.params();
+    let overflow = || LegacyCode::InvalidParameter.with_static("Transaction value overflow");
+
+    let (target_height, _anchor_height) = wallet
+        .get_target_and_anchor_heights(confirmations_policy.trusted())
+        .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+        .ok_or_else(|| LegacyCode::InWarmup.with_static("Wallet sync required"))?;
+
+    // Resolve the payments to transparent outputs, recording the pool of each (always
+    // transparent) and collecting `TxOut`s for fee sizing.
+    let mut payment_outputs: Vec<TxOut> = vec![];
+    let mut total_payments = Zatoshis::ZERO;
+    for payment in request.payments().values() {
+        let amount = payment.amount().ok_or_else(|| {
+            LegacyCode::InvalidParameter.with_static("Payment is missing an amount")
+        })?;
+        let address = Address::try_from_zcash_address(&params, payment.recipient_address().clone())
+            .map_err(|e| LegacyCode::InvalidAddressOrKey.with_message(e.to_string()))?;
+        let ta = match address {
+            Address::Transparent(ta) => ta,
+            _ => {
+                return Err(LegacyCode::InvalidParameter.with_static(
+                    "A transparent fund source supports only transparent recipients; \
+                     use a shielded fund source to send to shielded addresses.",
+                ));
+            }
+        };
+        payment_outputs.push(TxOut::new(amount, ta.script().into()));
+        total_payments = (total_payments + amount).ok_or_else(overflow)?;
+    }
+    let payment_output_sizes: Vec<usize> = payment_outputs
+        .iter()
+        .map(OutputView::serialized_size)
+        .collect();
+
+    // Gather the candidate UTXOs from the addresses the fund source permits.
+    let addresses: Vec<TransparentAddress> = match source {
+        FundSource::Transparent(set) => set.iter().copied().collect(),
+        FundSource::AnyTransparent => wallet
+            .get_transparent_receivers(account_id, true, true)
+            .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?
+            .into_keys()
+            .collect(),
+        FundSource::Orchard | FundSource::Sapling => {
+            return Err(LegacyCode::Wallet
+                .with_static("propose_transparent_spend called with a shielded fund source"));
+        }
+    };
+    let mut utxos: Vec<WalletTransparentOutput<AccountUuid>> = vec![];
+    for address in addresses {
+        utxos.extend(
+            wallet
+                .get_spendable_transparent_outputs(
+                    &address,
+                    target_height,
+                    confirmations_policy,
+                    TransparentOutputFilter::All,
+                )
+                .map_err(|e| LegacyCode::Database.with_message(e.to_string()))?,
+        );
+    }
+    // Greedily prefer larger UTXOs to minimize the input count (and thus the fee).
+    utxos.sort_by_key(|u| core::cmp::Reverse(u.value()));
+
+    // Select inputs to cover the payments plus the ZIP 317 fee, with transparent change.
+    let utxo_values: Vec<(Zatoshis, InputSize)> = utxos
+        .iter()
+        .map(|u| (u.value(), u.serialized_size()))
+        .collect();
+    let plan = plan_transparent_spend(&params, &utxo_values, &payment_output_sizes, total_payments)
+        .map_err(|e| match e {
+            SpendPlanError::Insufficient { have, need } => {
+                LegacyCode::Wallet.with_message(format!(
+                    "Failed to propose transaction: Insufficient balance (have {}, need {} \
+                 including fee)",
+                    u64::from(have),
+                    u64::from(need),
+                ))
+            }
+            SpendPlanError::Overflow => overflow(),
+            SpendPlanError::Fee(msg) => {
+                LegacyCode::Wallet.with_message(format!("Fee calculation failed: {msg}"))
+            }
+        })?;
+
+    // Build the final output set: the requested payments plus, if there is change, a real
+    // transparent change output back to the account. Single-step proposals cannot carry an
+    // ephemeral change output, so change is an ordinary output rather than a `ChangeValue`.
+    let mut payments: Vec<Payment> = request.payments().values().cloned().collect();
+    if let Some(&change) = plan.change.first() {
+        let change_address = *utxos
+            .first()
+            .expect("a non-zero change implies at least one selected input")
+            .recipient_address();
+        payments.push(
+            Payment::new(
+                Address::Transparent(change_address).to_zcash_address(&params),
+                Some(change),
+                None,
+                None,
+                None,
+                vec![],
+            )
+            .map_err(|_| LegacyCode::Wallet.with_static("Failed to construct change output"))?,
+        );
+    }
+    let payment_pools: BTreeMap<usize, PoolType> = (0..payments.len())
+        .map(|i| (i, PoolType::TRANSPARENT))
+        .collect();
+    let request = TransactionRequest::new(payments).map_err(|e| {
+        LegacyCode::Wallet.with_message(format!("Invalid transaction request: {e}"))
+    })?;
+    let balance = TransactionBalance::new(vec![], plan.fee).map_err(|e| {
+        LegacyCode::Wallet.with_message(format!("Invalid transaction balance: {e:?}"))
+    })?;
+
+    // Drop the account id; the proposal is account-agnostic.
+    let transparent_inputs: Vec<WalletTransparentOutput<()>> = utxos[..plan.n_selected]
+        .iter()
+        .map(|u| {
+            WalletTransparentOutput::from_parts(
+                u.outpoint().clone(),
+                u.txout().clone(),
+                u.mined_height(),
+                u.recipient_account().map(|_| ()),
+                u.recipient_key_scope(),
+                None,
+            )
+            .expect("a spendable wallet UTXO reconstructs into a valid transparent input")
+        })
+        .collect();
+
+    Proposal::single_step(
+        request,
+        payment_pools,
+        transparent_inputs,
+        None,
+        balance,
+        StandardFeeRule::Zip317,
+        target_height,
+        false,
+    )
+    .map_err(|e| {
+        LegacyCode::Wallet.with_message(format!("Failed to build transparent proposal: {e:?}"))
+    })
+}
+
+/// The result of [`plan_transparent_spend`]: how many of the (largest-first) UTXOs to select,
+/// the fee, and the transparent change outputs to add.
+struct TransparentSpendPlan {
+    n_selected: usize,
+    fee: Zatoshis,
+    change: Vec<Zatoshis>,
+}
+
+/// Why a transparent spend could not be planned.
+#[derive(Debug)]
+enum SpendPlanError {
+    /// The available UTXOs cannot cover the payments plus the fee.
+    Insufficient { have: Zatoshis, need: Zatoshis },
+    /// The ZIP 317 fee calculation failed.
+    Fee(String),
+    /// A value computation overflowed.
+    Overflow,
+}
+
+/// Greedily selects transparent inputs from `utxos` (which must be sorted largest-first) to
+/// cover `total_payments` plus the ZIP 317 fee for `payment_output_sizes`, deciding whether the
+/// remainder is worth a transparent change output.
+///
+/// Pure (depends only on values and ZIP 317 output sizing; `params` and the height do not affect
+/// the ZIP 317 fee), so it is unit-testable without a wallet. The returned `(fee, change)`
+/// always satisfies `Σselected = total_payments + Σchange + fee` exactly, as
+/// [`Proposal::single_step`] requires.
+fn plan_transparent_spend<P: zcash_protocol::consensus::Parameters>(
+    params: &P,
+    utxos: &[(Zatoshis, InputSize)],
+    payment_output_sizes: &[usize],
+    total_payments: Zatoshis,
+) -> Result<TransparentSpendPlan, SpendPlanError> {
+    let fee_rule = StandardFeeRule::Zip317;
+    // ZIP 317 ignores the height; any value works.
+    let height = BlockHeight::from_u32(0);
+    let fee_for = |input_sizes: &[InputSize], output_sizes: &[usize]| {
+        fee_rule
+            .fee_required(
+                params,
+                height,
+                input_sizes.iter().cloned(),
+                output_sizes.iter().copied(),
+                0,
+                0,
+                0,
+            )
+            .map_err(|e| SpendPlanError::Fee(format!("{e:?}")))
+    };
+
+    let mut input_total = Zatoshis::ZERO;
+    let mut last_required = total_payments;
+
+    for n in 0..utxos.len() {
+        input_total = (input_total + utxos[n].0).ok_or(SpendPlanError::Overflow)?;
+        let input_sizes: Vec<InputSize> = utxos[..=n].iter().map(|(_, s)| s.clone()).collect();
+
+        let fee_no_change = fee_for(&input_sizes, payment_output_sizes)?;
+        last_required = (total_payments + fee_no_change).ok_or(SpendPlanError::Overflow)?;
+        if input_total < last_required {
+            continue;
+        }
+
+        // We can cover the change-free transaction. A change output is only worth creating if
+        // what remains after paying the (higher) fee for it clears the dust threshold.
+        let mut out_sizes = payment_output_sizes.to_vec();
+        out_sizes.push(P2PKH_STANDARD_OUTPUT_SIZE);
+        let fee_with_change = fee_for(&input_sizes, &out_sizes)?;
+
+        let change = (total_payments + fee_with_change).and_then(|need| input_total - need);
+        return Ok(match change {
+            Some(change) if change >= TRANSPARENT_DUST_THRESHOLD => TransparentSpendPlan {
+                n_selected: n + 1,
+                fee: fee_with_change,
+                change: vec![change],
+            },
+            // Change is dust (or a change output is unaffordable): omit it and fold the surplus
+            // into the fee. `input_total >= total_payments` holds here.
+            _ => TransparentSpendPlan {
+                n_selected: n + 1,
+                fee: (input_total - total_payments).expect("input_total covers the payments"),
+                change: vec![],
+            },
+        });
+    }
+
+    Err(SpendPlanError::Insufficient {
+        have: input_total,
+        need: last_required,
+    })
 }
 
 /// A [`DbConnection`] view that restricts input selection to a [`FundSource`].
@@ -665,6 +943,152 @@ mod tests {
                     }
                 }
                 other => prop_assert!(false, "expected Transparent, got {:?}", other),
+            }
+        }
+    }
+
+    // --- Transparent spend planning (the pure selection/fee/change logic) ---
+
+    /// Builds largest-first P2PKH UTXOs from raw zatoshi values.
+    fn p2pkh_utxos(values: &[u64]) -> Vec<(Zatoshis, InputSize)> {
+        let mut utxos: Vec<(Zatoshis, InputSize)> = values
+            .iter()
+            .map(|&v| (Zatoshis::const_from_u64(v), InputSize::STANDARD_P2PKH))
+            .collect();
+        utxos.sort_by(|a, b| b.0.cmp(&a.0));
+        utxos
+    }
+
+    /// The ZIP 317 fee for the given count of P2PKH inputs and outputs.
+    fn p2pkh_fee(n_inputs: usize, n_outputs: usize) -> u64 {
+        let fee = StandardFeeRule::Zip317
+            .fee_required(
+                &mainnet(),
+                BlockHeight::from_u32(0),
+                std::iter::repeat_n(InputSize::STANDARD_P2PKH, n_inputs),
+                std::iter::repeat_n(P2PKH_STANDARD_OUTPUT_SIZE, n_outputs),
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+        u64::from(fee)
+    }
+
+    /// With no UTXOs, planning fails reporting `have 0` — the unit-level reproduction of the
+    /// transparent fund-source bug (where `propose_transfer` selected nothing and reported
+    /// `have 0`).
+    #[test]
+    fn transparent_plan_no_utxos_is_insufficient_with_zero() {
+        match plan_transparent_spend(
+            &mainnet(),
+            &[],
+            &[P2PKH_STANDARD_OUTPUT_SIZE],
+            Zatoshis::const_from_u64(100_000),
+        ) {
+            Err(SpendPlanError::Insufficient { have, need }) => {
+                assert_eq!(u64::from(have), 0);
+                assert!(u64::from(need) >= 100_000);
+            }
+            _ => panic!("expected Insufficient"),
+        }
+    }
+
+    /// A single large UTXO funds a small payment and leaves transparent change, exactly.
+    #[test]
+    fn transparent_plan_emits_change() {
+        let utxos = p2pkh_utxos(&[1_000_000]);
+        let plan = plan_transparent_spend(
+            &mainnet(),
+            &utxos,
+            &[P2PKH_STANDARD_OUTPUT_SIZE],
+            Zatoshis::const_from_u64(200_000),
+        )
+        .expect("sufficient funds");
+        assert_eq!(plan.n_selected, 1);
+        assert_eq!(plan.change.len(), 1);
+        let change = u64::from(plan.change[0]);
+        assert_eq!(1_000_000, 200_000 + change + u64::from(plan.fee));
+        assert!(plan.change[0] >= TRANSPARENT_DUST_THRESHOLD);
+    }
+
+    /// A remainder below the dust threshold is folded into the fee rather than creating a
+    /// change output.
+    #[test]
+    fn transparent_plan_folds_dust_into_fee() {
+        let payment = 100_000u64;
+        let fee_no_change = p2pkh_fee(1, 1);
+        // Just 1_000 over the change-free requirement; below the 5_000 dust threshold.
+        let input = payment + fee_no_change + 1_000;
+        let utxos = p2pkh_utxos(&[input]);
+        let plan = plan_transparent_spend(
+            &mainnet(),
+            &utxos,
+            &[P2PKH_STANDARD_OUTPUT_SIZE],
+            Zatoshis::const_from_u64(payment),
+        )
+        .expect("sufficient funds");
+        assert!(
+            plan.change.is_empty(),
+            "dust change must be folded into the fee"
+        );
+        assert_eq!(u64::from(plan.fee), input - payment);
+        assert_eq!(input, payment + u64::from(plan.fee));
+    }
+
+    /// Selects multiple inputs when no single one covers the payment.
+    #[test]
+    fn transparent_plan_selects_multiple_inputs() {
+        let utxos = p2pkh_utxos(&[60_000, 60_000, 60_000]);
+        let plan = plan_transparent_spend(
+            &mainnet(),
+            &utxos,
+            &[P2PKH_STANDARD_OUTPUT_SIZE],
+            Zatoshis::const_from_u64(100_000),
+        )
+        .expect("sufficient funds across multiple inputs");
+        assert!(plan.n_selected >= 2);
+        let selected: u64 = utxos[..plan.n_selected]
+            .iter()
+            .map(|(v, _)| u64::from(*v))
+            .sum();
+        let change: u64 = plan.change.iter().map(|c| u64::from(*c)).sum();
+        assert_eq!(selected, 100_000 + change + u64::from(plan.fee));
+    }
+
+    proptest! {
+        /// For any set of UTXOs and payment total, planning either satisfies the exact balance
+        /// equation `Σselected = payments + Σchange + fee` that `Proposal::single_step`
+        /// validates, or reports insufficiency consistent with the total available.
+        #[test]
+        fn transparent_plan_balance_is_exact(
+            values in prop::collection::vec(1u64..1_000_000_000u64, 0..12),
+            n_payments in 1usize..4,
+            payment_total in 1u64..2_000_000_000u64,
+        ) {
+            let utxos = p2pkh_utxos(&values);
+            let payment_sizes = vec![P2PKH_STANDARD_OUTPUT_SIZE; n_payments];
+            let total = Zatoshis::const_from_u64(payment_total);
+
+            match plan_transparent_spend(&mainnet(), &utxos, &payment_sizes, total) {
+                Ok(plan) => {
+                    let selected: u64 =
+                        utxos[..plan.n_selected].iter().map(|(v, _)| u64::from(*v)).sum();
+                    let change: u64 = plan.change.iter().map(|c| u64::from(*c)).sum();
+                    // The invariant `single_step` requires.
+                    prop_assert_eq!(selected, payment_total + change + u64::from(plan.fee));
+                    prop_assert!(selected >= payment_total + u64::from(plan.fee));
+                    prop_assert!(plan.change.len() <= 1);
+                    if let Some(c) = plan.change.first() {
+                        prop_assert!(*c >= TRANSPARENT_DUST_THRESHOLD);
+                    }
+                }
+                Err(SpendPlanError::Insufficient { have, need }) => {
+                    let available: u64 = values.iter().sum();
+                    prop_assert_eq!(u64::from(have), available);
+                    prop_assert!(u64::from(have) < u64::from(need));
+                }
+                Err(_) => prop_assert!(false, "unexpected fee/overflow error"),
             }
         }
     }

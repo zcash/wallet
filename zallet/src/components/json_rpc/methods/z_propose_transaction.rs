@@ -23,7 +23,7 @@ use crate::{
     components::{
         database::DbHandle,
         json_rpc::{
-            fund_source::{FundSource, FundSourceFilter},
+            fund_source::{FundSource, FundSourceFilter, propose_transparent_spend},
             methods::z_send_many::build_request,
             payments::{
                 AmountParameter, pczt_policy_key, record_required_policy, required_privacy_policy,
@@ -104,10 +104,24 @@ pub(crate) async fn call(
 
     let params = *wallet.params();
 
-    // Propose the transfer with inputs restricted to the requested fund source. The filter
-    // borrows the connection immutably; scope it so that borrow is released before we take
-    // a mutable borrow to build the PCZT.
-    let proposal = {
+    // Propose the transfer with inputs restricted to the requested fund source. Each branch
+    // borrows the connection immutably; scope it so that borrow is released before we take a
+    // mutable borrow to build the PCZT.
+    let spends_transparent = matches!(
+        fund_source,
+        FundSource::AnyTransparent | FundSource::Transparent(_)
+    );
+    let proposal = if spends_transparent {
+        // `propose_transfer` only selects shielded notes, so spend the account's transparent
+        // UTXOs via a directly-constructed proposal.
+        propose_transparent_spend(
+            wallet.as_ref(),
+            account_id,
+            &fund_source,
+            request,
+            confirmations_policy,
+        )?
+    } else {
         let change_strategy = MultiOutputChangeStrategy::new(
             StandardFeeRule::Zip317,
             None,
