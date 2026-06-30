@@ -107,6 +107,15 @@ zcash_protocol = "0.9"
 
 # Zcash payment protocols
 orchard = "0.14"
+pczt = { version = "0.7", features = [
+    "orchard",
+    "sapling",
+    "transparent",
+    "prover",
+    "signer",
+    "spend-finalizer",
+    "tx-extractor",
+] }
 sapling = { package = "sapling-crypto", version = "0.7" }
 transparent = { package = "zcash_transparent", version = "0.8" }
 zcash_encoding = "0.4"
@@ -176,6 +185,7 @@ zcash_client_sqlite = { git = "https://github.com/zcash/librustzcash.git", rev =
 zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 zcash_keys = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
+pczt = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }
 zcash_protocol = { git = "https://github.com/zcash/librustzcash.git", rev = "4cdba554f5545050da784fc9e1eb073ae958d819" }

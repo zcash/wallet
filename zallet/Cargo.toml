@@ -129,6 +129,7 @@ jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 nix = { workspace = true, features = ["signal"] }
 orchard.workspace = true
+pczt.workspace = true
 phf.workspace = true
 rand.workspace = true
 rpassword.workspace = true
@@ -167,11 +168,15 @@ zcash_address.workspace = true
 zcash_client_backend = { workspace = true, features = [
     "lightwalletd-tonic-tls-webpki-roots",
     "orchard",
+    "pczt",
     "sync-decryptor",
     "transparent-inputs",
 ] }
 zcash_client_sqlite = { workspace = true, features = [
     "orchard",
+    # `create_pczt_from_proposal` requires `DbT::AccountId: Serialize`, i.e. an
+    # `AccountUuid` that implements `serde::Serialize`.
+    "serde",
     "transparent-inputs",
 ] }
 zcash_encoding.workspace = true
