@@ -198,6 +198,7 @@ uuid.workspace = true
 [dev-dependencies]
 abscissa_core = { workspace = true, features = ["testing"] }
 once_cell.workspace = true
+proptest.workspace = true
 regex.workspace = true
 trycmd.workspace = true
 
