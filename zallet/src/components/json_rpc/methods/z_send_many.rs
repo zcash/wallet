@@ -1,14 +1,11 @@
-use std::collections::HashSet;
 use std::convert::Infallible;
 use std::num::NonZeroU32;
 
 use abscissa_core::Application;
 use jsonrpsee::core::{JsonValue, RpcResult};
-use schemars::JsonSchema;
 use secrecy::ExposeSecret;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
-use zcash_address::{ZcashAddress, unified};
+use zcash_address::unified;
 use zcash_client_backend::data_api::wallet::SpendingKeys;
 use zcash_client_backend::proposal::Proposal;
 use zcash_client_backend::{
@@ -21,7 +18,6 @@ use zcash_client_backend::{
     },
     fees::{DustOutputPolicy, StandardFeeRule, standard::MultiOutputChangeStrategy},
     wallet::OvkPolicy,
-    zip321::{Payment, TransactionRequest},
 };
 use zcash_client_sqlite::ReceivedNoteId;
 use zcash_keys::{address::Address, keys::UnifiedSpendingKey};
@@ -38,11 +34,11 @@ use crate::{
         json_rpc::{
             asyncop::{ContextInfo, OperationId},
             payments::{
-                IncompatiblePrivacyPolicy, PrivacyPolicy, SendResult, broadcast_transactions,
-                enforce_privacy_policy, get_account_for_address, parse_memo,
+                AmountParameter, IncompatiblePrivacyPolicy, PrivacyPolicy, SendResult,
+                broadcast_transactions, build_request, enforce_privacy_policy,
+                get_account_for_address,
             },
             server::LegacyCode,
-            utils::zatoshis_from_value,
         },
         keystore::KeyStore,
     },
@@ -52,21 +48,6 @@ use crate::{
 
 #[cfg(feature = "zcashd-import")]
 use crate::components::json_rpc::utils::collect_standalone_transparent_keys;
-
-#[derive(Serialize, Deserialize, JsonSchema)]
-pub(crate) struct AmountParameter {
-    /// A taddr, zaddr, or Unified Address.
-    address: String,
-
-    /// The numeric amount in ZEC.
-    amount: JsonValue,
-
-    /// If the address is a zaddr, raw data represented in hexadecimal string format. If
-    /// the output is being sent to a transparent address, it’s an error to include this
-    /// field.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    memo: Option<String>,
-}
 
 /// Response to a `z_sendmany` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -99,63 +80,12 @@ pub(crate) async fn call<C: Chain>(
     // TODO: Check that Sapling is active, by inspecting height of `chain` snapshot.
     //       https://github.com/zcash/wallet/issues/237
 
-    if amounts.is_empty() {
-        return Err(
-            LegacyCode::InvalidParameter.with_static("Invalid parameter, amounts array is empty.")
-        );
-    }
-
     if fee.is_some() {
         return Err(LegacyCode::InvalidParameter
             .with_static("Zallet always calculates fees internally; the fee field must be null."));
     }
 
-    let mut recipient_addrs = HashSet::new();
-    let mut payments = vec![];
-    let mut total_out = Zatoshis::ZERO;
-
-    for amount in &amounts {
-        let addr: ZcashAddress = amount.address.parse().map_err(|_| {
-            LegacyCode::InvalidParameter.with_message(format!(
-                "Invalid parameter, unknown address format: {}",
-                amount.address,
-            ))
-        })?;
-
-        if !recipient_addrs.insert(addr.clone()) {
-            return Err(LegacyCode::InvalidParameter.with_message(format!(
-                "Invalid parameter, duplicated recipient address: {}",
-                amount.address,
-            )));
-        }
-
-        let memo = amount.memo.as_deref().map(parse_memo).transpose()?;
-        let value = zatoshis_from_value(&amount.amount)?;
-
-        let payment = Payment::new(addr, Some(value), memo, None, None, vec![]).map_err(|e| {
-            LegacyCode::InvalidParameter.with_static(match e {
-                zcash_client_backend::zip321::PaymentError::TransparentMemo => {
-                    "Cannot send memo to transparent recipient"
-                }
-                zcash_client_backend::zip321::PaymentError::ZeroValuedTransparentOutput => {
-                    "Cannot send zero-valued output to transparent recipient"
-                }
-            })
-        })?;
-
-        payments.push(payment);
-        total_out = (total_out + value)
-            .ok_or_else(|| LegacyCode::InvalidParameter.with_static("Value too large"))?;
-    }
-
-    if payments.is_empty() {
-        return Err(LegacyCode::InvalidParameter.with_static("No recipients"));
-    }
-
-    let request = TransactionRequest::new(payments).map_err(|e| {
-        // TODO: Map errors to `zcashd` shape.
-        LegacyCode::InvalidParameter.with_message(format!("Invalid payment request: {e}"))
-    })?;
+    let request = build_request(&amounts)?;
 
     let account = match fromaddress.as_str() {
         // Select from the legacy transparent address pool.

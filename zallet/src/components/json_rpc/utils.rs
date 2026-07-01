@@ -578,6 +578,15 @@ fn parse_fixed_point(mut val: &str, decimals: i64) -> Option<i64> {
     Some(mantissa)
 }
 
+/// Formats an integer number of zatoshis as a decimal ZEC string (8 fractional digits).
+///
+/// The formatting inverse of [`zatoshis_from_value`], for constructing amount fixtures in
+/// tests.
+#[cfg(test)]
+pub(crate) fn zec_str(zatoshis: u64) -> String {
+    format!("{}.{:08}", zatoshis / 100_000_000, zatoshis % 100_000_000)
+}
+
 #[cfg(test)]
 mod tests {
     use zcash_protocol::value::{COIN, ZatBalance};

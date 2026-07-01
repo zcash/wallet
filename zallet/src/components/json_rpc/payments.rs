@@ -1,12 +1,19 @@
 use std::{collections::HashSet, fmt};
 
 use abscissa_core::Application;
+use jsonrpsee::core::JsonValue;
 use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
-use serde::Serialize;
-use zcash_client_backend::{data_api::WalletRead, proposal::Proposal};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use zcash_address::ZcashAddress;
+use zcash_client_backend::{
+    data_api::WalletRead,
+    proposal::Proposal,
+    zip321::{Payment, TransactionRequest},
+};
 use zcash_client_sqlite::wallet::Account;
 use zcash_keys::address::Address;
-use zcash_protocol::{PoolType, ShieldedProtocol, TxId, memo::MemoBytes};
+use zcash_protocol::{PoolType, ShieldedProtocol, TxId, memo::MemoBytes, value::Zatoshis};
 
 use crate::{
     components::{chain::Chain, database::DbConnection},
@@ -14,7 +21,91 @@ use crate::{
     prelude::APP,
 };
 
-use super::server::LegacyCode;
+use super::{server::LegacyCode, utils::zatoshis_from_value};
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub(crate) struct AmountParameter {
+    /// A taddr, zaddr, or Unified Address.
+    address: String,
+
+    /// The numeric amount in ZEC.
+    amount: JsonValue,
+
+    /// If the address is a zaddr, raw data represented in hexadecimal string format. If
+    /// the output is being sent to a transparent address, it’s an error to include this
+    /// field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    memo: Option<String>,
+}
+
+impl AmountParameter {
+    pub fn address(&self) -> &String {
+        &self.address
+    }
+
+    pub fn amount(&self) -> &JsonValue {
+        &self.amount
+    }
+
+    pub fn memo(&self) -> &Option<String> {
+        &self.memo
+    }
+}
+
+/// Parses an array of output amounts into a ZIP 321 transaction request.
+///
+/// Rejects an empty array, duplicate recipient addresses, malformed addresses, and total
+/// output value overflow.
+pub(super) fn build_request(amounts: &[AmountParameter]) -> RpcResult<TransactionRequest> {
+    if amounts.is_empty() {
+        return Err(
+            LegacyCode::InvalidParameter.with_static("Invalid parameter, amounts array is empty.")
+        );
+    }
+
+    let mut recipient_addrs = HashSet::new();
+    let mut payments = vec![];
+    let mut total_out = Zatoshis::ZERO;
+
+    for amount in amounts {
+        let addr: ZcashAddress = amount.address().parse().map_err(|_| {
+            LegacyCode::InvalidParameter.with_message(format!(
+                "Invalid parameter, unknown address format: {}",
+                amount.address(),
+            ))
+        })?;
+
+        if !recipient_addrs.insert(addr.clone()) {
+            return Err(LegacyCode::InvalidParameter.with_message(format!(
+                "Invalid parameter, duplicated recipient address: {}",
+                amount.address(),
+            )));
+        }
+
+        let memo = amount.memo().as_deref().map(parse_memo).transpose()?;
+        let value = zatoshis_from_value(amount.amount())?;
+
+        let payment = Payment::new(addr, Some(value), memo, None, None, vec![]).map_err(|e| {
+            LegacyCode::InvalidParameter.with_static(match e {
+                zcash_client_backend::zip321::PaymentError::TransparentMemo => {
+                    "Cannot send memo to transparent recipient"
+                }
+                zcash_client_backend::zip321::PaymentError::ZeroValuedTransparentOutput => {
+                    "Cannot send zero-valued output to transparent recipient"
+                }
+            })
+        })?;
+
+        payments.push(payment);
+        total_out = (total_out + value)
+            .ok_or_else(|| LegacyCode::InvalidParameter.with_static("Value too large"))?;
+    }
+
+    TransactionRequest::new(payments).map_err(|e| {
+        // TODO: Map errors to `zcashd` shape.
+        LegacyCode::InvalidParameter.with_message(format!("Invalid payment request: {e}"))
+    })
+}
 
 /// A strategy to use for managing privacy when constructing a transaction.
 ///
@@ -549,6 +640,175 @@ impl SendResult {
         Self {
             txid: (txids.len() == 1).then(|| txids.first().expect("present").clone()),
             txids,
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod arb {
+    //! Reusable test constructors for [`AmountParameter`], shared across the send-path RPC
+    //! method tests (`z_sendmany` and, later, the account-based send methods).
+    use serde_json::json;
+
+    use super::AmountParameter;
+
+    // Transparent addresses reused from the `validate_address` / `fund_source` tests.
+    pub(crate) const T_ADDR_1: &str = "t1VydNnkjBzfL1iAMyUbwGKJAF7PgvuCfMY";
+    pub(crate) const T_ADDR_2: &str = "t3Vz22vK5z2LcKEdg16Yv4FFneEL1zg9ojd";
+    pub(crate) const SAPLING_ADDR: &str =
+        "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z";
+    // Unified addresses (carrying Orchard/Sapling/transparent receivers) from the
+    // librustzcash test vectors.
+    pub(crate) const UNIFIED_ADDR_1: &str = "u10j2s9sy4dmuakf57z58jc5t8yuswega82jpd2hk3q62l6fsphwyjxvmvfwy8skvvvea6dnkl8l9zpjf3m27qsav9y9nlj59hagmjf5xh0xxyqr8lymnmtjn6gzgrn04dr5s0k9k9wuxc2udzjh4llv47zm6jn6ff0j65s54h3m6p0n9ajswrqzpvy8eh4d5pvypyc6rp5m07uwmjp4sr0upca5hl7gr4pxg45m7vlnx5r7va4n6mfyr98twvjrhcyalwhddelnnjrkhcj0wcp5eyas2c2kcadrxyzw28vvv47q74";
+    pub(crate) const UNIFIED_ADDR_2: &str = "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx";
+
+    // A pool of distinct, valid recipient addresses spanning the transparent, Sapling, and
+    // unified (Orchard) protocols.
+    pub(crate) const ADDR_POOL: &[&str] = &[
+        T_ADDR_1,
+        T_ADDR_2,
+        SAPLING_ADDR,
+        UNIFIED_ADDR_1,
+        UNIFIED_ADDR_2,
+    ];
+
+    /// Constructs an [`AmountParameter`] paying `zec` (a decimal ZEC string) to `address`.
+    pub(crate) fn amount(address: &str, zec: &str) -> AmountParameter {
+        serde_json::from_value(json!({ "address": address, "amount": zec }))
+            .expect("valid AmountParameter")
+    }
+
+    /// Constructs an [`AmountParameter`] paying `zec` to `address` carrying a hex `memo`.
+    pub(crate) fn amount_with_memo(address: &str, zec: &str, memo: &str) -> AmountParameter {
+        serde_json::from_value(json!({ "address": address, "amount": zec, "memo": memo }))
+            .expect("valid AmountParameter")
+    }
+}
+
+#[cfg(test)]
+mod build_request_tests {
+    use std::collections::HashSet;
+
+    use proptest::prelude::*;
+
+    use super::arb::*;
+    use super::*;
+    use crate::components::json_rpc::utils::zec_str;
+
+    fn err_message(amounts: &[AmountParameter]) -> String {
+        build_request(amounts)
+            .expect_err("build_request should fail")
+            .message()
+            .to_string()
+    }
+
+    #[test]
+    fn rejects_empty_array() {
+        assert_eq!(
+            err_message(&[]),
+            "Invalid parameter, amounts array is empty.",
+        );
+    }
+
+    #[test]
+    fn builds_single_recipient() {
+        let request = build_request(&[amount(T_ADDR_1, "0.1")]).expect("valid request");
+        assert_eq!(request.payments().len(), 1);
+    }
+
+    #[test]
+    fn builds_multiple_distinct_recipients() {
+        let request = build_request(&[amount(T_ADDR_1, "0.1"), amount(T_ADDR_2, "0.2")])
+            .expect("valid request");
+        assert_eq!(request.payments().len(), 2);
+    }
+
+    #[test]
+    fn rejects_duplicate_recipient() {
+        let msg = err_message(&[amount(T_ADDR_1, "0.1"), amount(T_ADDR_1, "0.2")]);
+        assert_eq!(
+            msg,
+            format!("Invalid parameter, duplicated recipient address: {T_ADDR_1}"),
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_address_format() {
+        let msg = err_message(&[amount("not-an-address", "0.1")]);
+        assert_eq!(
+            msg,
+            "Invalid parameter, unknown address format: not-an-address",
+        );
+    }
+
+    #[test]
+    fn rejects_memo_to_transparent_recipient() {
+        // The memo is valid hex (so memo parsing succeeds), but transparent recipients
+        // cannot carry a memo.
+        let msg = err_message(&[amount_with_memo(T_ADDR_1, "0.1", "00")]);
+        assert_eq!(msg, "Cannot send memo to transparent recipient");
+    }
+
+    #[test]
+    fn builds_batch_across_all_protocols_at_once() {
+        // An exchange paying out to recipients on different protocols (transparent, Sapling,
+        // and two unified/Orchard) in a single transaction.
+        let request = build_request(&[
+            amount(T_ADDR_1, "0.1"),
+            amount(SAPLING_ADDR, "0.2"),
+            amount(UNIFIED_ADDR_1, "0.3"),
+            amount(UNIFIED_ADDR_2, "0.4"),
+        ])
+        .expect("a mixed-protocol batch should build a request");
+        assert_eq!(request.payments().len(), 4);
+    }
+
+    proptest! {
+        /// For any non-empty list of recipients drawn from the address pool, `build_request`
+        /// succeeds with one payment per recipient exactly when all addresses are distinct,
+        /// and otherwise rejects the request as a duplicate.
+        #[test]
+        fn dedups_iff_all_recipients_distinct(
+            indices in prop::collection::vec(0..ADDR_POOL.len(), 1..8),
+        ) {
+            let amounts = indices
+                .iter()
+                .map(|&i| amount(ADDR_POOL[i], "0.1"))
+                .collect::<Vec<_>>();
+
+            let unique = indices.iter().collect::<HashSet<_>>().len();
+            let result = build_request(&amounts);
+
+            if unique == indices.len() {
+                let request = result.expect("distinct recipients should build a request");
+                prop_assert_eq!(request.payments().len(), indices.len());
+            } else {
+                let err = result.expect_err("duplicate recipients should be rejected");
+                prop_assert!(err.message().contains("duplicated recipient address"));
+            }
+        }
+
+        /// An exchange-style batch withdrawal: any set of distinct recipients drawn from the
+        /// mixed-protocol pool, each with its own amount, builds a request with exactly that
+        /// many payments. Exercises N recipients spanning the transparent, Sapling, and
+        /// unified (Orchard) protocols simultaneously.
+        #[test]
+        fn builds_distinct_mixed_protocol_batches(
+            pool_indices in prop::sample::subsequence(
+                (0..ADDR_POOL.len()).collect::<Vec<_>>(),
+                1..=ADDR_POOL.len(),
+            ),
+            zatoshis in prop::collection::vec(1u64..=1_000_000_000, ADDR_POOL.len()),
+        ) {
+            let amounts = pool_indices
+                .iter()
+                .enumerate()
+                .map(|(i, &pool_idx)| amount(ADDR_POOL[pool_idx], &zec_str(zatoshis[i])))
+                .collect::<Vec<_>>();
+
+            let request = build_request(&amounts)
+                .expect("a batch of distinct mixed-protocol recipients should build a request");
+            prop_assert_eq!(request.payments().len(), pool_indices.len());
         }
     }
 }

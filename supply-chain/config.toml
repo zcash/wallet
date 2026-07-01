@@ -1246,6 +1246,10 @@ criteria = "safe-to-deploy"
 version = "1.0.103"
 criteria = "safe-to-deploy"
 
+[[exemptions.proptest]]
+version = "1.11.0"
+criteria = "safe-to-run"
+
 [[exemptions.prost]]
 version = "0.13.4"
 criteria = "safe-to-deploy"
@@ -1453,6 +1457,10 @@ criteria = "safe-to-deploy"
 [[exemptions.rustls-webpki]]
 version = "0.103.1"
 criteria = "safe-to-deploy"
+
+[[exemptions.rusty-fork]]
+version = "0.3.1"
+criteria = "safe-to-run"
 
 [[exemptions.ryu]]
 version = "1.0.18"
