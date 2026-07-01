@@ -346,6 +346,7 @@ fn plan_transparent_spend<P: zcash_protocol::consensus::Parameters>(
                 0,
                 0,
                 0,
+                0,
             )
             .map_err(|e| SpendPlanError::Fee(format!("{e:?}")))
     };
@@ -967,6 +968,7 @@ mod tests {
                 BlockHeight::from_u32(0),
                 std::iter::repeat_n(InputSize::STANDARD_P2PKH, n_inputs),
                 std::iter::repeat_n(P2PKH_STANDARD_OUTPUT_SIZE, n_outputs),
+                0,
                 0,
                 0,
                 0,

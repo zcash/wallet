@@ -162,7 +162,9 @@ pub(crate) async fn call(
 
     // Record the required policy so `z_finalizetransaction` can enforce that the caller
     // acknowledges a sufficient policy without re-deriving it from the PCZT.
-    let pczt_bytes = pczt.serialize();
+    let pczt_bytes = pczt
+        .serialize()
+        .map_err(|e| LegacyCode::Wallet.with_message(format!("Failed to serialize PCZT: {e:?}")))?;
     record_required_policy(pczt_policy_key(&pczt_bytes), privacy_policy);
 
     Ok(ResultType {

@@ -37,10 +37,12 @@ use crate::components::{
 
 /// The Orchard proving and verifying keys are deterministic and expensive to build (each
 /// takes on the order of seconds), so build them once and reuse them across requests.
-static ORCHARD_PROVING_KEY: LazyLock<orchard::circuit::ProvingKey> =
-    LazyLock::new(orchard::circuit::ProvingKey::build);
-static ORCHARD_VERIFYING_KEY: LazyLock<orchard::circuit::VerifyingKey> =
-    LazyLock::new(orchard::circuit::VerifyingKey::build);
+static ORCHARD_PROVING_KEY: LazyLock<orchard::circuit::ProvingKey> = LazyLock::new(|| {
+    orchard::circuit::ProvingKey::build(orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2)
+});
+static ORCHARD_VERIFYING_KEY: LazyLock<orchard::circuit::VerifyingKey> = LazyLock::new(|| {
+    orchard::circuit::VerifyingKey::build(orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2)
+});
 
 /// Response to a `z_finalizetransaction` RPC request.
 pub(crate) type Response = RpcResult<ResultType>;
@@ -72,7 +74,11 @@ pub(crate) async fn call<C: Chain>(
     // sufficient policy. On a cache miss (eviction, restart, or a PCZT proposed elsewhere) we
     // cannot re-derive the requirement reliably, so the supplied policy is accepted as
     // acknowledgement only. https://github.com/zcash/wallet/issues/217
-    if let Some(required) = cached_required_policy(&pczt_policy_key(&pczt.serialize())) {
+    let pczt_bytes = pczt
+        .clone()
+        .serialize()
+        .map_err(|e| LegacyCode::Wallet.with_message(format!("Failed to serialize PCZT: {e:?}")))?;
+    if let Some(required) = cached_required_policy(&pczt_policy_key(&pczt_bytes)) {
         if !privacy_policy.is_compatible_with(required) {
             return Err(LegacyCode::InvalidParameter.with_message(format!(
                 "The privacy policy {privacy_policy} does not permit this transaction, which \
