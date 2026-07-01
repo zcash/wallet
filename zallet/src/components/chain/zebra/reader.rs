@@ -210,21 +210,34 @@ impl ChainReader for ReadStateChainReader {
         &self,
         locator: &BlockLocator,
     ) -> Result<Option<ChainBlock>, ChainError> {
-        let known_blocks = locator
-            .hashes()
-            .iter()
-            .map(convert::to_zebra_hash)
-            .collect();
-        match self
-            .call(ReadRequest::FindForkPoint { known_blocks })
-            .await?
-        {
-            ReadResponse::ForkPoint(opt) => Ok(opt.map(|(h, hash)| ChainBlock {
-                height: convert::height(h),
-                hash: convert::block_hash(hash),
-            })),
-            other => unreachable!("unexpected response to FindForkPoint: {other:?}"),
+        // `zebra-state` no longer exposes a dedicated fork-point request, so reconstruct it:
+        // find the most recent locator hash that is on the best chain (locator hashes are
+        // ordered tip-first), deriving its height from the tip height and the block's depth
+        // below the tip.
+        let tip_height = match self.call(ReadRequest::Tip).await? {
+            ReadResponse::Tip(Some((height, _))) => height,
+            ReadResponse::Tip(None) => return Ok(None),
+            other => unreachable!("unexpected response to Tip: {other:?}"),
+        };
+
+        for hash in locator.hashes() {
+            match self
+                .call(ReadRequest::Depth(convert::to_zebra_hash(hash)))
+                .await?
+            {
+                ReadResponse::Depth(Some(depth)) => {
+                    let height = zebra_chain::block::Height(tip_height.0.saturating_sub(depth));
+                    return Ok(Some(ChainBlock {
+                        height: convert::height(height),
+                        hash: *hash,
+                    }));
+                }
+                ReadResponse::Depth(None) => {}
+                other => unreachable!("unexpected response to Depth: {other:?}"),
+            }
         }
+
+        Ok(None)
     }
 
     async fn transaction(

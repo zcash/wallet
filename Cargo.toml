@@ -187,9 +187,14 @@ age = { git = "https://github.com/str4d/rage.git", rev = "92f437bc2a061312fa6633
 zewif = { git = "https://github.com/zcash/zewif.git", rev = "798d7b3554ebada05bea63b67ee66f9c2558a21a" }
 zewif-zcashd = { git = "https://github.com/zcash/zewif-zcashd.git", rev = "22f8219bb2cb741b72683cbee170b6667c7da7b0" }
 
-zebra-chain = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "9a27f886a5bfb143f65d1712e912cef252426800" }
-zebra-rpc = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "9a27f886a5bfb143f65d1712e912cef252426800" }
-zebra-state = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "9a27f886a5bfb143f65d1712e912cef252426800" }
+# TEMPORARY: pin the zebra crates to ZcashFoundation/zebra `nu63-ironwood`
+# (currently fd3e9e32120afbe698522db1f62400b08e8a7444), the branch that updates
+# zebra for the NU6.3 / ironwood librustzcash line. Keep this pin tracking
+# `nu63-ironwood`: bump the rev here (this is a dedicated commit) as that branch
+# advances, and repoint it at upstream once the NU6.3 work lands on zebra main.
+zebra-chain = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "fd3e9e32120afbe698522db1f62400b08e8a7444" }
+zebra-rpc = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "fd3e9e32120afbe698522db1f62400b08e8a7444" }
+zebra-state = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "fd3e9e32120afbe698522db1f62400b08e8a7444" }
 
 zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "ed5df1a60ad69731d4d2fab515972c5ccf172326" }
 zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "ed5df1a60ad69731d4d2fab515972c5ccf172326" }
