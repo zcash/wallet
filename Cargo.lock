@@ -1804,7 +1804,7 @@ dependencies = [
 [[package]]
 name = "equihash"
 version = "0.3.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "blake2b_simd",
  "corez",
@@ -1840,7 +1840,7 @@ dependencies = [
 [[package]]
 name = "f4jumble"
 version = "0.1.1"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "blake2b_simd",
 ]
@@ -3726,6 +3726,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "orchard"
+version = "0.15.0-pre.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8e277dd4b46f5d06deae3ffb8af1a951e8622368f028c2a4d6fe59339566403"
+dependencies = [
+ "aes",
+ "bitvec",
+ "blake2b_simd",
+ "corez",
+ "ff",
+ "fpe",
+ "getset",
+ "group",
+ "halo2_gadgets",
+ "halo2_poseidon",
+ "halo2_proofs",
+ "hex",
+ "incrementalmerkletree",
+ "lazy_static",
+ "memuse",
+ "nonempty",
+ "pasta_curves",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "reddsa",
+ "serde",
+ "sinsemilla",
+ "subtle",
+ "tracing",
+ "visibility",
+ "zcash_note_encryption",
+ "zcash_spec",
+ "zip32",
+]
+
+[[package]]
 name = "ordered-map"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3895,7 +3931,7 @@ dependencies = [
 [[package]]
 name = "pczt"
 version = "0.7.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "blake2b_simd",
  "bls12_381",
@@ -3904,7 +3940,7 @@ dependencies = [
  "getset",
  "jubjub",
  "nonempty",
- "orchard",
+ "orchard 0.15.0-pre.1",
  "pasta_curves",
  "postcard",
  "rand_core 0.6.4",
@@ -3914,10 +3950,10 @@ dependencies = [
  "serde",
  "serde_with",
  "zcash_note_encryption",
- "zcash_primitives",
- "zcash_protocol",
+ "zcash_primitives 0.29.0-pre.0",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
- "zcash_transparent",
+ "zcash_transparent 0.9.0-pre.0",
 ]
 
 [[package]]
@@ -6288,7 +6324,7 @@ dependencies = [
 [[package]]
 name = "tower-batch-control"
 version = "1.0.1"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "futures",
  "futures-core",
@@ -6304,7 +6340,7 @@ dependencies = [
 [[package]]
 name = "tower-fallback"
 version = "0.2.41"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "futures-core",
  "pin-project",
@@ -7387,11 +7423,11 @@ dependencies = [
  "zaino-common",
  "zaino-fetch",
  "zaino-proto",
- "zcash_address",
- "zcash_keys",
- "zcash_primitives",
- "zcash_protocol",
- "zcash_transparent",
+ "zcash_address 0.12.0",
+ "zcash_keys 0.14.0",
+ "zcash_primitives 0.28.0",
+ "zcash_protocol 0.9.0",
+ "zcash_transparent 0.8.0",
  "zebra-chain",
  "zebra-rpc",
  "zebra-state",
@@ -7435,7 +7471,7 @@ dependencies = [
  "known-folders",
  "nix 0.29.0",
  "once_cell",
- "orchard",
+ "orchard 0.15.0-pre.1",
  "pczt",
  "phf 0.12.1",
  "proptest",
@@ -7476,17 +7512,17 @@ dependencies = [
  "zaino-common",
  "zaino-fetch",
  "zaino-state",
- "zcash_address",
+ "zcash_address 0.13.0-pre.0",
  "zcash_client_backend",
  "zcash_client_sqlite",
  "zcash_encoding",
- "zcash_keys",
+ "zcash_keys 0.15.0-pre.0",
  "zcash_note_encryption",
- "zcash_primitives",
+ "zcash_primitives 0.29.0-pre.0",
  "zcash_proofs",
- "zcash_protocol",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
- "zcash_transparent",
+ "zcash_transparent 0.9.0-pre.0",
  "zebra-chain",
  "zebra-rpc",
  "zebra-state",
@@ -7498,20 +7534,34 @@ dependencies = [
 [[package]]
 name = "zcash_address"
 version = "0.12.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58342d0aaa8e2fa98849636f52800ac4bf020574c944c974742fc933db58cac2"
 dependencies = [
  "bech32 0.11.0",
  "bs58",
  "corez",
  "f4jumble",
  "zcash_encoding",
- "zcash_protocol",
+ "zcash_protocol 0.9.0",
+]
+
+[[package]]
+name = "zcash_address"
+version = "0.13.0-pre.0"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
+dependencies = [
+ "bech32 0.11.0",
+ "bs58",
+ "corez",
+ "f4jumble",
+ "zcash_encoding",
+ "zcash_protocol 0.10.0-pre.0",
 ]
 
 [[package]]
 name = "zcash_client_backend"
 version = "0.23.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "base64 0.22.1",
  "bech32 0.11.0",
@@ -7528,7 +7578,7 @@ dependencies = [
  "incrementalmerkletree",
  "memuse",
  "nonempty",
- "orchard",
+ "orchard 0.15.0-pre.1",
  "pasta_curves",
  "pczt",
  "percent-encoding",
@@ -7550,14 +7600,14 @@ dependencies = [
  "tonic-prost-build",
  "tracing",
  "which 8.0.0",
- "zcash_address",
+ "zcash_address 0.13.0-pre.0",
  "zcash_encoding",
- "zcash_keys",
+ "zcash_keys 0.15.0-pre.0",
  "zcash_note_encryption",
- "zcash_primitives",
- "zcash_protocol",
+ "zcash_primitives 0.29.0-pre.0",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
- "zcash_transparent",
+ "zcash_transparent 0.9.0-pre.0",
  "zip32",
  "zip321",
 ]
@@ -7565,7 +7615,7 @@ dependencies = [
 [[package]]
 name = "zcash_client_sqlite"
 version = "0.21.1"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "bip32",
  "bitflags 2.10.0",
@@ -7578,7 +7628,7 @@ dependencies = [
  "jubjub",
  "maybe-rayon",
  "nonempty",
- "orchard",
+ "orchard 0.15.0-pre.1",
  "prost",
  "rand 0.8.5",
  "rand_core 0.6.4",
@@ -7597,21 +7647,21 @@ dependencies = [
  "time",
  "tracing",
  "uuid",
- "zcash_address",
+ "zcash_address 0.13.0-pre.0",
  "zcash_client_backend",
  "zcash_encoding",
- "zcash_keys",
- "zcash_primitives",
- "zcash_protocol",
+ "zcash_keys 0.15.0-pre.0",
+ "zcash_primitives 0.29.0-pre.0",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
- "zcash_transparent",
+ "zcash_transparent 0.9.0-pre.0",
  "zip32",
 ]
 
 [[package]]
 name = "zcash_encoding"
 version = "0.4.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "corez",
  "hex",
@@ -7620,8 +7670,8 @@ dependencies = [
 
 [[package]]
 name = "zcash_history"
-version = "0.4.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+version = "0.5.0-pre.0"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -7631,7 +7681,36 @@ dependencies = [
 [[package]]
 name = "zcash_keys"
 version = "0.14.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fbcdfbb5c8edb247439d72a397abaae9b7dd14a1c070e7e4fc3536924f9065f"
+dependencies = [
+ "bech32 0.11.0",
+ "bip32",
+ "blake2b_simd",
+ "bls12_381",
+ "bs58",
+ "corez",
+ "document-features",
+ "group",
+ "memuse",
+ "nonempty",
+ "orchard 0.14.0",
+ "rand_core 0.6.4",
+ "sapling-crypto",
+ "secrecy 0.8.0",
+ "subtle",
+ "tracing",
+ "zcash_address 0.12.0",
+ "zcash_encoding",
+ "zcash_protocol 0.9.0",
+ "zcash_transparent 0.8.0",
+ "zip32",
+]
+
+[[package]]
+name = "zcash_keys"
+version = "0.15.0-pre.0"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "bech32 0.11.0",
  "bip0039",
@@ -7645,7 +7724,7 @@ dependencies = [
  "group",
  "memuse",
  "nonempty",
- "orchard",
+ "orchard 0.15.0-pre.1",
  "rand_core 0.6.4",
  "regex",
  "sapling-crypto",
@@ -7653,10 +7732,10 @@ dependencies = [
  "secrecy 0.8.0",
  "subtle",
  "tracing",
- "zcash_address",
+ "zcash_address 0.13.0-pre.0",
  "zcash_encoding",
- "zcash_protocol",
- "zcash_transparent",
+ "zcash_protocol 0.10.0-pre.0",
+ "zcash_transparent 0.9.0-pre.0",
  "zeroize",
  "zip32",
 ]
@@ -7677,7 +7756,8 @@ dependencies = [
 [[package]]
 name = "zcash_primitives"
 version = "0.28.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c69e07f5eb3f682a6467b4b08ee4956f1acd1e886d70b21c4766953b3a1beba2"
 dependencies = [
  "blake2b_simd",
  "block-buffer 0.11.0-rc.3",
@@ -7691,7 +7771,36 @@ dependencies = [
  "jubjub",
  "memuse",
  "nonempty",
- "orchard",
+ "orchard 0.14.0",
+ "rand_core 0.6.4",
+ "redjubjub",
+ "sapling-crypto",
+ "sha2 0.10.9",
+ "zcash_encoding",
+ "zcash_note_encryption",
+ "zcash_protocol 0.9.0",
+ "zcash_script",
+ "zcash_transparent 0.8.0",
+]
+
+[[package]]
+name = "zcash_primitives"
+version = "0.29.0-pre.0"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
+dependencies = [
+ "blake2b_simd",
+ "block-buffer 0.11.0-rc.3",
+ "corez",
+ "crypto-common 0.2.0-rc.1",
+ "document-features",
+ "equihash",
+ "ff",
+ "hex",
+ "incrementalmerkletree",
+ "jubjub",
+ "memuse",
+ "nonempty",
+ "orchard 0.15.0-pre.1",
  "rand_core 0.6.4",
  "redjubjub",
  "sapling-crypto",
@@ -7699,15 +7808,15 @@ dependencies = [
  "sha2 0.10.9",
  "zcash_encoding",
  "zcash_note_encryption",
- "zcash_protocol",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
- "zcash_transparent",
+ "zcash_transparent 0.9.0-pre.0",
 ]
 
 [[package]]
 name = "zcash_proofs"
-version = "0.28.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+version = "0.29.0-pre.0"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -7723,13 +7832,26 @@ dependencies = [
  "tracing",
  "wagyu-zcash-parameters",
  "xdg 3.0.0",
- "zcash_primitives",
+ "zcash_primitives 0.29.0-pre.0",
 ]
 
 [[package]]
 name = "zcash_protocol"
 version = "0.9.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5bec496a0bd62dae98c4b26f51c5dab112d0c5350bbc2ccfdfd05bb3454f714d"
+dependencies = [
+ "corez",
+ "document-features",
+ "hex",
+ "memuse",
+ "zcash_encoding",
+]
+
+[[package]]
+name = "zcash_protocol"
+version = "0.10.0-pre.0"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "corez",
  "document-features",
@@ -7767,7 +7889,8 @@ dependencies = [
 [[package]]
 name = "zcash_transparent"
 version = "0.8.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15df1908b428d4edeb7c7caae5692e05e2e92e5c38007a40b20ac098efdffd96"
 dependencies = [
  "bip32",
  "bs58",
@@ -7780,9 +7903,33 @@ dependencies = [
  "secp256k1 0.29.1",
  "sha2 0.10.9",
  "subtle",
- "zcash_address",
+ "zcash_address 0.12.0",
  "zcash_encoding",
- "zcash_protocol",
+ "zcash_protocol 0.9.0",
+ "zcash_script",
+ "zcash_spec",
+ "zip32",
+]
+
+[[package]]
+name = "zcash_transparent"
+version = "0.9.0-pre.0"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
+dependencies = [
+ "bip32",
+ "bs58",
+ "corez",
+ "document-features",
+ "getset",
+ "hex",
+ "nonempty",
+ "ripemd 0.1.3",
+ "secp256k1 0.29.1",
+ "sha2 0.10.9",
+ "subtle",
+ "zcash_address 0.13.0-pre.0",
+ "zcash_encoding",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
  "zcash_spec",
  "zip32",
@@ -7791,7 +7938,7 @@ dependencies = [
 [[package]]
 name = "zebra-chain"
 version = "10.1.0"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "bech32 0.11.0",
  "bitflags 2.10.0",
@@ -7817,7 +7964,7 @@ dependencies = [
  "jubjub",
  "lazy_static",
  "num-integer",
- "orchard",
+ "orchard 0.15.0-pre.1",
  "primitive-types 0.12.2",
  "rand_core 0.6.4",
  "rayon",
@@ -7841,20 +7988,20 @@ dependencies = [
  "tracing",
  "uint 0.10.0",
  "x25519-dalek",
- "zcash_address",
+ "zcash_address 0.13.0-pre.0",
  "zcash_encoding",
  "zcash_history",
  "zcash_note_encryption",
- "zcash_primitives",
- "zcash_protocol",
+ "zcash_primitives 0.29.0-pre.0",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
- "zcash_transparent",
+ "zcash_transparent 0.9.0-pre.0",
 ]
 
 [[package]]
 name = "zebra-consensus"
 version = "9.0.1"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -7870,7 +8017,7 @@ dependencies = [
  "metrics",
  "mset",
  "once_cell",
- "orchard",
+ "orchard 0.15.0-pre.1",
  "rand 0.8.5",
  "rayon",
  "sapling-crypto",
@@ -7882,11 +8029,11 @@ dependencies = [
  "tower-fallback",
  "tracing",
  "tracing-futures",
- "zcash_primitives",
+ "zcash_primitives 0.29.0-pre.0",
  "zcash_proofs",
- "zcash_protocol",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
- "zcash_transparent",
+ "zcash_transparent 0.9.0-pre.0",
  "zebra-chain",
  "zebra-node-services",
  "zebra-script",
@@ -7896,7 +8043,7 @@ dependencies = [
 [[package]]
 name = "zebra-network"
 version = "9.0.0"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "bitflags 2.10.0",
  "byteorder",
@@ -7933,7 +8080,7 @@ dependencies = [
 [[package]]
 name = "zebra-node-services"
 version = "8.0.0"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "color-eyre",
  "jsonrpsee-types",
@@ -7948,7 +8095,7 @@ dependencies = [
 [[package]]
 name = "zebra-rpc"
 version = "10.0.1"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -7967,7 +8114,7 @@ dependencies = [
  "metrics",
  "nix 0.30.1",
  "openrpsee",
- "orchard",
+ "orchard 0.15.0-pre.1",
  "phf 0.12.1",
  "prost",
  "rand 0.8.5",
@@ -7989,13 +8136,13 @@ dependencies = [
  "tower 0.4.13",
  "tracing",
  "which 8.0.0",
- "zcash_address",
- "zcash_keys",
- "zcash_primitives",
+ "zcash_address 0.13.0-pre.0",
+ "zcash_keys 0.15.0-pre.0",
+ "zcash_primitives 0.29.0-pre.0",
  "zcash_proofs",
- "zcash_protocol",
+ "zcash_protocol 0.10.0-pre.0",
  "zcash_script",
- "zcash_transparent",
+ "zcash_transparent 0.9.0-pre.0",
  "zebra-chain",
  "zebra-consensus",
  "zebra-network",
@@ -8007,12 +8154,12 @@ dependencies = [
 [[package]]
 name = "zebra-script"
 version = "9.0.0"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "libzcash_script",
  "rand 0.8.5",
  "thiserror 2.0.12",
- "zcash_primitives",
+ "zcash_primitives 0.29.0-pre.0",
  "zcash_script",
  "zebra-chain",
 ]
@@ -8020,7 +8167,7 @@ dependencies = [
 [[package]]
 name = "zebra-state"
 version = "9.0.1"
-source = "git+https://github.com/nuttycom/zebra.git?rev=9f2fcf29ecb7dab6ebde532eb66187a484b9a371#9f2fcf29ecb7dab6ebde532eb66187a484b9a371"
+source = "git+https://github.com/nuttycom/zebra.git?rev=6ac219f12375d82210472eb46bb37c55bae87504#6ac219f12375d82210472eb46bb37c55bae87504"
 dependencies = [
  "bincode",
  "chrono",
@@ -8193,18 +8340,18 @@ dependencies = [
  "chrono",
  "hex",
  "incrementalmerkletree",
- "orchard",
+ "orchard 0.14.0",
  "ripemd 0.1.3",
  "sapling-crypto",
  "secp256k1 0.29.1",
  "sha2 0.10.9",
  "uuid",
- "zcash_address",
+ "zcash_address 0.12.0",
  "zcash_encoding",
- "zcash_keys",
- "zcash_primitives",
- "zcash_protocol",
- "zcash_transparent",
+ "zcash_keys 0.14.0",
+ "zcash_primitives 0.28.0",
+ "zcash_protocol 0.9.0",
+ "zcash_transparent 0.8.0",
  "zewif",
  "zip32",
 ]
@@ -8234,11 +8381,11 @@ dependencies = [
 [[package]]
 name = "zip321"
 version = "0.8.0"
-source = "git+https://github.com/zcash/librustzcash.git?rev=4367ba26ed57624544e2350f055a5df89079474a#4367ba26ed57624544e2350f055a5df89079474a"
+source = "git+https://github.com/zcash/librustzcash.git?rev=782b1da70de932dbb2bf89c442f032c474a52978#782b1da70de932dbb2bf89c442f032c474a52978"
 dependencies = [
  "base64 0.22.1",
  "nom",
  "percent-encoding",
- "zcash_address",
- "zcash_protocol",
+ "zcash_address 0.13.0-pre.0",
+ "zcash_protocol 0.10.0-pre.0",
 ]
