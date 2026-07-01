@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use zcash_address::ZcashAddress;
 use zcash_client_backend::{
     data_api::WalletRead,
-    proposal::Proposal,
+    proposal::{Proposal, Step},
     zip321::{Payment, TransactionRequest},
 };
 use zcash_client_sqlite::wallet::Account;
@@ -374,6 +374,48 @@ pub(super) fn enforce_privacy_policy<FeeRuleT, NoteRef>(
     // policy.
     assert!(privacy_policy.is_compatible_with(PrivacyPolicy::FullPrivacy));
     Ok(())
+}
+
+/// TEMPORARY: pool-membership helpers on a proposal [`Step`].
+///
+/// Newer `zcash_client_backend` exposes `input_in_pool`/`output_in_pool`/`change_in_pool`
+/// directly on `Step`. The librustzcash revision this workspace currently pins predates
+/// those, so this extension trait provides them. Remove this trait once the pinned
+/// librustzcash provides the methods natively (`required_privacy_policy` will then resolve
+/// to them unchanged).
+trait StepPoolExt {
+    fn input_in_pool(&self, pool_type: PoolType) -> bool;
+    fn output_in_pool(&self, pool_type: PoolType) -> bool;
+    fn change_in_pool(&self, pool_type: PoolType) -> bool;
+}
+
+impl<NoteRef> StepPoolExt for Step<NoteRef> {
+    fn input_in_pool(&self, pool_type: PoolType) -> bool {
+        match pool_type {
+            PoolType::Transparent => self.is_shielding() || !self.transparent_inputs().is_empty(),
+            PoolType::SAPLING => self.shielded_inputs().iter().any(|s_in| {
+                s_in.notes()
+                    .iter()
+                    .any(|note| matches!(note.note().protocol(), ShieldedProtocol::Sapling))
+            }),
+            PoolType::ORCHARD => self.shielded_inputs().iter().any(|s_in| {
+                s_in.notes()
+                    .iter()
+                    .any(|note| matches!(note.note().protocol(), ShieldedProtocol::Orchard))
+            }),
+        }
+    }
+
+    fn output_in_pool(&self, pool_type: PoolType) -> bool {
+        self.payment_pools().values().any(|pool| *pool == pool_type)
+    }
+
+    fn change_in_pool(&self, pool_type: PoolType) -> bool {
+        self.balance()
+            .proposed_change()
+            .iter()
+            .any(|c| c.output_pool() == pool_type)
+    }
 }
 
 pub(super) enum IncompatiblePrivacyPolicy {
