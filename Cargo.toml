@@ -124,8 +124,8 @@ secp256k1 = { version = "0.29", features = ["recovery"] }
 
 # Zcash chain state
 zaino-common = "0.2"
-zaino-fetch = "0.2"
-zaino-state = "0.3"
+zaino-fetch = "0.2.1"
+zaino-state = "0.3.1"
 zebra-chain = "10"
 zebra-rpc = "10"
 zebra-state = "9"
@@ -196,9 +196,14 @@ zebra-chain = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "fd3
 zebra-rpc = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "fd3e9e32120afbe698522db1f62400b08e8a7444" }
 zebra-state = { git = "https://github.com/ZcashFoundation/zebra.git", rev = "fd3e9e32120afbe698522db1f62400b08e8a7444" }
 
-zaino-common = { git = "https://github.com/zingolabs/zaino.git", rev = "ed5df1a60ad69731d4d2fab515972c5ccf172326" }
-zaino-fetch = { git = "https://github.com/zingolabs/zaino.git", rev = "ed5df1a60ad69731d4d2fab515972c5ccf172326" }
-zaino-state = { git = "https://github.com/zingolabs/zaino.git", rev = "ed5df1a60ad69731d4d2fab515972c5ccf172326" }
+# TEMPORARY: pin the zaino crates to dannywillems/zaino `feat/nu63-compat`
+# (currently 872a7622ac00dd81369cc8b2779df14efd743b47), which updates zaino for
+# the NU6.3 / ironwood librustzcash and zebra lines. This is a dedicated commit
+# to be fixed up as that branch advances; repoint at upstream zaino once the
+# NU6.3 work lands there.
+zaino-common = { git = "https://github.com/dannywillems/zaino.git", rev = "872a7622ac00dd81369cc8b2779df14efd743b47" }
+zaino-fetch = { git = "https://github.com/dannywillems/zaino.git", rev = "872a7622ac00dd81369cc8b2779df14efd743b47" }
+zaino-state = { git = "https://github.com/dannywillems/zaino.git", rev = "872a7622ac00dd81369cc8b2779df14efd743b47" }
 
 [profile.release]
 debug = "line-tables-only"
