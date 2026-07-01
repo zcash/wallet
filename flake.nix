@@ -41,10 +41,18 @@
         #     static-musl link.
         # This mirrors how StageX's pre-integrated clang+libc++ pallet works on amd64.
         clangCC = pkgs.pkgsMusl.clangStdenv.cc;
-        zallet = craneLib.buildPackage ({
+        # Build the zallet binary with a given chain-data backend. `zaino` and
+        # `zebra-state` are mutually exclusive Cargo features fixed at compile
+        # time, so we produce one binary per backend. `binName` renames the
+        # installed binary (zebra-state keeps `zallet`; zaino becomes
+        # `zallet-zaino`) so one image/deb can ship both side by side. The
+        # generated share tree (completions/manpages) is always the `zallet`
+        # command's — it is only produced/collected for the default binary.
+        mkZallet = { backend, binName, collectShare }: craneLib.buildPackage ({
           inherit src;
+          pname = binName;
           strictDeps = true;
-          cargoExtraArgs = "--locked --bin zallet --features rpc-cli,zcashd-import";
+          cargoExtraArgs = "--locked --bin zallet --no-default-features --features ${backend},rpc-cli,zcashd-import";
           CARGO_BUILD_TARGET = muslTarget;
           # Static musl; use the musl clang as the linker so libc++ + crt resolve
           # coherently (a generic cc-wrapper mis-targets gnu vs musl here).
@@ -57,8 +65,13 @@
           # manpages and debian-copyright into target/<triple>/release/{completions,
           # manpages} + debian-copyright. crane installs only the binary, so copy
           # those generated assets into $out/share/zallet — the deb matrix +
-          # the StageX export layout expect them there.
+          # the StageX export layout expect them there. Only the default
+          # (zebra-state) binary carries the share tree + keeps the `zallet` name.
           postInstall = ''
+            if [ "${binName}" != "zallet" ]; then
+              mv "$out/bin/zallet" "$out/bin/${binName}"
+            fi
+          '' + pkgs.lib.optionalString collectShare ''
             # build.rs writes completions/ + manpages/ into the cargo target dir
             # (derived from OUT_DIR's 4th ancestor → <target>/<triple>/release).
             # crane's CARGO_TARGET_DIR isn't necessarily ./target, so SEARCH for
@@ -81,5 +94,14 @@
           "CC_${targetEnvSuffix}" = "${clangCC}/bin/cc";
           "CXX_${targetEnvSuffix}" = "${clangCC}/bin/c++";
         });
-      in { packages.default = zallet; packages.zallet = zallet; });
+        # Default backend (zebra-state): keeps the `zallet` binary name + owns the
+        # completions/manpages share tree that the deb + StageX export consume.
+        zallet = mkZallet { backend = "zebra-state"; binName = "zallet"; collectShare = true; };
+        # zaino backend: additive second binary `zallet-zaino`, no share tree.
+        zallet-zaino = mkZallet { backend = "zaino"; binName = "zallet-zaino"; collectShare = false; };
+      in {
+        packages.default = zallet;
+        packages.zallet = zallet;
+        packages.zallet-zaino = zallet-zaino;
+      });
 }
