@@ -117,9 +117,11 @@ jobs:
           DEST="build/runtime/${SUFFIX}"
           SHARE="${DEST}/usr/local/share/zallet"
           mkdir -p "${SHARE}"
-          # Both backend binaries, side by side (matches Dockerfile.stagex export).
+          # Both backend binaries, side by side (matches Dockerfile.stagex export),
+          # plus the zebra-state alias symlink.
           install -m0755 /tmp/zallet-bins/zallet       "${DEST}/zallet"
           install -m0755 /tmp/zallet-bins/zallet-zaino "${DEST}/zallet-zaino"
+          ln -sf zallet "${DEST}/zallet-zebra-state"
           # share tree comes from the default (zebra-state) build only.
           if [ -d /tmp/zallet-share ]; then
             cp -aL /tmp/zallet-share/. "${SHARE}/"
