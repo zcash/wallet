@@ -154,11 +154,13 @@ zcash_address.workspace = true
 zcash_client_backend = { workspace = true, features = [
     "lightwalletd-tonic-tls-webpki-roots",
     "orchard",
+    "pczt",
     "sync-decryptor",
     "transparent-inputs",
 ] }
 zcash_client_sqlite = { workspace = true, features = [
     "orchard",
+    "serde",
     "transparent-inputs",
 ] }
 zcash_encoding.workspace = true
