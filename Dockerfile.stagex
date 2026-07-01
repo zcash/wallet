@@ -82,14 +82,18 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
         --no-default-features \
         --features zaino,rpc-cli,zcashd-import \
         --root /usr/local/zaino \
-    && install -D -m0755 /usr/local/zaino/bin/zallet /usr/local/cargo/bin/zallet-zaino
+    && install -D -m0755 /usr/local/zaino/bin/zallet /usr/local/cargo/bin/zallet-zaino \
+    # Explicit alias for the default (zebra-state) binary, so the backend is
+    # nameable both ways: `zallet` (default) and `zallet-zebra-state`.
+    && ln -sf zallet /usr/local/cargo/bin/zallet-zebra-state
 
 # --- Stage 2: layer for local binary extraction ---
 FROM scratch AS export
 
-# Both binaries at the root for easy extraction.
+# All three names at the root: the two real binaries + the zebra-state alias.
 COPY --from=builder /usr/local/cargo/bin/zallet /zallet
 COPY --from=builder /usr/local/cargo/bin/zallet-zaino /zallet-zaino
+COPY --from=builder /usr/local/cargo/bin/zallet-zebra-state /zallet-zebra-state
 
 # Export the whole zallet share tree (completions, manpages, metadata, etc.)
 COPY --from=builder /usr/local/share/zallet /usr/local/share/zallet
@@ -97,9 +101,12 @@ COPY --from=builder /usr/local/share/zallet /usr/local/share/zallet
 # --- Stage 3: Minimal runtime with stagex ---
 FROM scratch AS runtime
 USER 1000:1000
-# Ship both backends; default entrypoint is the zebra-state `zallet`. Consumers
-# that need the zaino backend (e.g. z3) set their command to `zallet-zaino`.
+# Ship both backends. Default entrypoint is the zebra-state `zallet`, also
+# nameable as `zallet-zebra-state` (a symlink). Consumers that need the zaino
+# backend (e.g. z3, or anyone whose zebrad is NOT built with the `indexer`
+# feature) run `zallet-zaino`.
 COPY --from=export /zallet /usr/local/bin/zallet
 COPY --from=export /zallet-zaino /usr/local/bin/zallet-zaino
+COPY --from=export /zallet-zebra-state /usr/local/bin/zallet-zebra-state
 WORKDIR /var/lib/zallet
 ENTRYPOINT ["zallet"]

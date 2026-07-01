@@ -20,14 +20,18 @@ side, so you pick a backend by which binary you run:
 
 | Binary | Backend (Cargo feature) | How it reaches the chain | Regtest |
 |--------|-------------------------|--------------------------|---------|
-| `zallet` | `zebra-state` (default) | Reads finalized state directly from a co-located `zebrad`'s `ReadStateService`. Requires a shared state directory and a `zebrad` built with the `indexer` feature. | No |
+| `zallet` | `zebra-state` (default) | Reads finalized state directly from a co-located `zebrad`'s `ReadStateService`. **Requires a `zebrad` built with the `indexer` feature** and a shared state directory. | No |
+| `zallet-zebra-state` | `zebra-state` | Symlink alias of `zallet` — same binary, explicit name for the default backend. | No |
 | `zallet-zaino` | `zaino` | Talks to Zebra over JSON-RPC; Zebra and Zallet can run as separate services/containers. | Yes |
 
-If you are unsure, use `zallet` (the default). Use `zallet-zaino` when Zallet and Zebra
-run in separate containers and communicate over JSON-RPC (for example, the
-[z3](https://github.com/ZcashFoundation/z3) stack), or when you need regtest support. The
-two binaries share the same CLI surface, config format, and subcommands; only the
-chain-data backend differs.
+**Which one?** `zallet` (the default) is the `zebra-state` backend and **only works
+against a `zebrad` that was built with the non-default `indexer` feature** (plus a shared
+state directory). If your `zebrad` is **not** built with `indexer` — including the stock
+`zfnd/zebra` images and the [z3](https://github.com/ZcashFoundation/z3) stack, or any
+setup where Zebra and Zallet run as separate containers talking over JSON-RPC, or when you
+need regtest — use **`zallet-zaino`** instead. `zallet-zebra-state` is just an explicit
+alias of `zallet` for when you want the backend named. All three share the same CLI
+surface, config format, and subcommands; only the chain-data backend differs.
 
 The pre-compiled standalone binaries on the GitHub Releases page follow the same split:
 `zallet-<version>-linux-<arch>` (zebra-state) and `zallet-<version>-linux-<arch>-zaino`
