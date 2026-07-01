@@ -12,30 +12,58 @@ the simplest options:
 > ALPHA software, and is rapidly changing. If you create a Zallet package before the 1.0.0
 > production release, please ensure you mark it as alpha software and regularly update it.
 
-## Chain-data backends (`zallet` vs `zallet-zaino`)
+## Choosing a chain backend
 
-Zallet reads chain data through one of two **mutually exclusive** backends, selected at
-compile time. The official Docker image and Debian package ship **both** binaries side by
-side, so you pick a backend by which binary you run:
+Zallet supports two **mutually exclusive** chain backends, selected at compile time:
 
-| Binary | Backend (Cargo feature) | How it reaches the chain | Regtest |
-|--------|-------------------------|--------------------------|---------|
-| `zallet` | `zebra-state` (default) | Reads finalized state directly from a co-located `zebrad`'s `ReadStateService`. **Requires a `zebrad` built with the `indexer` feature** and a shared state directory. | No |
-| `zallet-zebra-state` | `zebra-state` | Symlink alias of `zallet` — same binary, explicit name for the default backend. | No |
-| `zallet-zaino` | `zaino` | Talks to Zebra over JSON-RPC; Zebra and Zallet can run as separate services/containers. | Yes |
+| Backend | Default | Platform | Reaches the chain via | Requires | Regtest |
+|---------|:-------:|----------|-----------------------|----------|:-------:|
+| `zebra-state` | Yes | Linux only | co-located `zebrad`'s state database (`ReadStateService`) | `zebrad` built with the `indexer` feature + `[indexer.read_state_service]` config + shared state dir | No |
+| `zaino` | No | Linux, macOS, Windows | co-located `zebrad`'s JSON-RPC endpoint (optionally reads state directly when `[indexer.read_state_service]` is set) | co-located `zebrad` JSON-RPC endpoint | Yes |
 
-**Which one?** `zallet` (the default) is the `zebra-state` backend and **only works
-against a `zebrad` that was built with the non-default `indexer` feature** (plus a shared
-state directory). If your `zebrad` is **not** built with `indexer` — including the stock
-`zfnd/zebra` images and the [z3](https://github.com/ZcashFoundation/z3) stack, or any
-setup where Zebra and Zallet run as separate containers talking over JSON-RPC, or when you
-need regtest — use **`zallet-zaino`** instead. `zallet-zebra-state` is just an explicit
-alias of `zallet` for when you want the backend named. All three share the same CLI
-surface, config format, and subcommands; only the chain-data backend differs.
+The **`zebra-state` backend** is the default. It reads finalized chain state directly from
+a co-located `zebrad`'s state database and is the recommended choice for production
+mainnet use on Linux. It **only works against a `zebrad` built with the non-default
+`indexer` feature**.
 
-The pre-compiled standalone binaries on the GitHub Releases page follow the same split:
-`zallet-<version>-linux-<arch>` (zebra-state) and `zallet-<version>-linux-<arch>-zaino`
-(zaino).
+The **`zaino` backend** fetches chain data over JSON-RPC. It is the only backend that
+supports regtest and non-Linux platforms, and it does **not** require the `zebrad`
+`indexer` feature — so it is the right choice when Zebra and Zallet run as separate
+services/containers over JSON-RPC (for example, the stock `zfnd/zebra` images or the
+[z3](https://github.com/ZcashFoundation/z3) stack), or when you need regtest.
+
+### Pre-compiled artifacts (Docker image / Debian package)
+
+The official Docker image and Debian package ship **both** backends as separate binaries,
+so you pick one by which binary you run:
+
+| Binary | Backend | Notes |
+|--------|---------|-------|
+| `zallet` | `zebra-state` (default) | the default command / image `ENTRYPOINT` |
+| `zallet-zebra-state` | `zebra-state` | symlink alias of `zallet` — same binary, explicit name |
+| `zallet-zaino` | `zaino` | additive second binary |
+
+All three share the same CLI surface, config format, and subcommands; only the chain-data
+backend differs. The pre-compiled standalone binaries on the GitHub Releases page follow
+the same split: `zallet-<version>-linux-<arch>` (zebra-state) and
+`zallet-<version>-linux-<arch>-zaino` (zaino).
+
+### Building from source with a chosen backend
+
+To build or install with the `zaino` backend, pass `--no-default-features --features zaino`
+(along with any other features you need):
+
+```
+# Install from crates.io with the zaino backend
+cargo install --locked --no-default-features --features zaino,rpc-cli zallet
+
+# Install the latest development version with the zaino backend
+cargo install --locked --git https://github.com/zcash/wallet.git \
+  --no-default-features --features zaino,rpc-cli
+```
+
+> Note: the two backends are mutually exclusive. Adding `--features zaino` without
+> `--no-default-features` activates both at once and produces a compile error.
 
 ## Pre-compiled binaries
 
