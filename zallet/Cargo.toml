@@ -97,6 +97,7 @@ age.workspace = true
 async-trait.workspace = true
 base64ct.workspace = true
 bip0039.workspace = true
+bip32.workspace = true
 clap = { workspace = true, features = ["string", "unstable-styles"] }
 deadpool.workspace = true
 deadpool-sqlite.workspace = true
@@ -116,6 +117,7 @@ jsonrpsee = { workspace = true, features = ["macros", "server"] }
 known-folders.workspace = true
 nix = { workspace = true, features = ["signal"] }
 orchard.workspace = true
+pczt.workspace = true
 phf.workspace = true
 rand.workspace = true
 rpassword.workspace = true
@@ -154,11 +156,13 @@ zcash_address.workspace = true
 zcash_client_backend = { workspace = true, features = [
     "lightwalletd-tonic-tls-webpki-roots",
     "orchard",
+    "pczt",
     "sync-decryptor",
     "transparent-inputs",
 ] }
 zcash_client_sqlite = { workspace = true, features = [
     "orchard",
+    "serde",
     "transparent-inputs",
 ] }
 zcash_encoding.workspace = true
@@ -198,6 +202,7 @@ uuid.workspace = true
 [dev-dependencies]
 abscissa_core = { workspace = true, features = ["testing"] }
 once_cell.workspace = true
+proptest.workspace = true
 regex.workspace = true
 trycmd.workspace = true
 
