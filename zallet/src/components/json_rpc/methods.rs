@@ -12,7 +12,7 @@ use crate::components::{
 #[cfg(zallet_build = "wallet")]
 use {
     super::asyncop::{AsyncOperation, ContextInfo, OperationId},
-    crate::components::keystore::KeyStore,
+    crate::components::{json_rpc::payments::AmountParameter, keystore::KeyStore},
     serde::Serialize,
     tokio::sync::RwLock,
 };
@@ -172,7 +172,7 @@ pub(crate) trait Rpc {
     /// - `offset`: An optional number of transactions to skip over before a page of results is
     ///   returned. Defaults to zero.
     /// - `limit`: An optional upper bound on the number of results that should be returned in a
-    ///   page.  
+    ///   page.
     ///
     /// WARNING: This is currently an experimental feature; arguments and result data may change at
     /// any time.
@@ -606,7 +606,7 @@ pub(crate) trait WalletRpc {
     async fn z_send_many(
         &self,
         fromaddress: String,
-        amounts: Vec<z_send_many::AmountParameter>,
+        amounts: Vec<AmountParameter>,
         minconf: Option<u32>,
         fee: Option<JsonValue>,
         privacy_policy: Option<String>,
@@ -1017,7 +1017,7 @@ impl<C: Chain> WalletRpcServer for WalletRpcImpl<C> {
     async fn z_send_many(
         &self,
         fromaddress: String,
-        amounts: Vec<z_send_many::AmountParameter>,
+        amounts: Vec<AmountParameter>,
         minconf: Option<u32>,
         fee: Option<JsonValue>,
         privacy_policy: Option<String>,

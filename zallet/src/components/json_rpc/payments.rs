@@ -1,12 +1,19 @@
 use std::{collections::HashSet, fmt};
 
 use abscissa_core::Application;
+use jsonrpsee::core::JsonValue;
 use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
-use serde::Serialize;
-use zcash_client_backend::{data_api::WalletRead, proposal::Proposal};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use zcash_address::ZcashAddress;
+use zcash_client_backend::{
+    data_api::WalletRead,
+    proposal::Proposal,
+    zip321::{Payment, TransactionRequest},
+};
 use zcash_client_sqlite::wallet::Account;
 use zcash_keys::address::Address;
-use zcash_protocol::{PoolType, ShieldedProtocol, TxId, memo::MemoBytes};
+use zcash_protocol::{PoolType, ShieldedProtocol, TxId, memo::MemoBytes, value::Zatoshis};
 
 use crate::{
     components::{chain::Chain, database::DbConnection},
@@ -14,7 +21,91 @@ use crate::{
     prelude::APP,
 };
 
-use super::server::LegacyCode;
+use super::{server::LegacyCode, utils::zatoshis_from_value};
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub(crate) struct AmountParameter {
+    /// A taddr, zaddr, or Unified Address.
+    address: String,
+
+    /// The numeric amount in ZEC.
+    amount: JsonValue,
+
+    /// If the address is a zaddr, raw data represented in hexadecimal string format. If
+    /// the output is being sent to a transparent address, it’s an error to include this
+    /// field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    memo: Option<String>,
+}
+
+impl AmountParameter {
+    pub fn address(&self) -> &String {
+        &self.address
+    }
+
+    pub fn amount(&self) -> &JsonValue {
+        &self.amount
+    }
+
+    pub fn memo(&self) -> &Option<String> {
+        &self.memo
+    }
+}
+
+/// Parses an array of output amounts into a ZIP 321 transaction request.
+///
+/// Rejects an empty array, duplicate recipient addresses, malformed addresses, and total
+/// output value overflow.
+pub(super) fn build_request(amounts: &[AmountParameter]) -> RpcResult<TransactionRequest> {
+    if amounts.is_empty() {
+        return Err(
+            LegacyCode::InvalidParameter.with_static("Invalid parameter, amounts array is empty.")
+        );
+    }
+
+    let mut recipient_addrs = HashSet::new();
+    let mut payments = vec![];
+    let mut total_out = Zatoshis::ZERO;
+
+    for amount in amounts {
+        let addr: ZcashAddress = amount.address().parse().map_err(|_| {
+            LegacyCode::InvalidParameter.with_message(format!(
+                "Invalid parameter, unknown address format: {}",
+                amount.address(),
+            ))
+        })?;
+
+        if !recipient_addrs.insert(addr.clone()) {
+            return Err(LegacyCode::InvalidParameter.with_message(format!(
+                "Invalid parameter, duplicated recipient address: {}",
+                amount.address(),
+            )));
+        }
+
+        let memo = amount.memo().as_deref().map(parse_memo).transpose()?;
+        let value = zatoshis_from_value(amount.amount())?;
+
+        let payment = Payment::new(addr, Some(value), memo, None, None, vec![]).map_err(|e| {
+            LegacyCode::InvalidParameter.with_static(match e {
+                zcash_client_backend::zip321::PaymentError::TransparentMemo => {
+                    "Cannot send memo to transparent recipient"
+                }
+                zcash_client_backend::zip321::PaymentError::ZeroValuedTransparentOutput => {
+                    "Cannot send zero-valued output to transparent recipient"
+                }
+            })
+        })?;
+
+        payments.push(payment);
+        total_out = (total_out + value)
+            .ok_or_else(|| LegacyCode::InvalidParameter.with_static("Value too large"))?;
+    }
+
+    TransactionRequest::new(payments).map_err(|e| {
+        // TODO: Map errors to `zcashd` shape.
+        LegacyCode::InvalidParameter.with_message(format!("Invalid payment request: {e}"))
+    })
+}
 
 /// A strategy to use for managing privacy when constructing a transaction.
 ///
