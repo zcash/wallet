@@ -1,8 +1,10 @@
 use std::{collections::HashSet, fmt};
 
 use abscissa_core::Application;
+use jsonrpsee::core::JsonValue;
 use jsonrpsee::{core::RpcResult, types::ErrorObjectOwned};
-use serde::Serialize;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use zcash_client_backend::{data_api::WalletRead, proposal::Proposal};
 use zcash_client_sqlite::wallet::Account;
 use zcash_keys::address::Address;
@@ -15,6 +17,35 @@ use crate::{
 };
 
 use super::server::LegacyCode;
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub(crate) struct AmountParameter {
+    /// A taddr, zaddr, or Unified Address.
+    address: String,
+
+    /// The numeric amount in ZEC.
+    amount: JsonValue,
+
+    /// If the address is a zaddr, raw data represented in hexadecimal string format. If
+    /// the output is being sent to a transparent address, it’s an error to include this
+    /// field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    memo: Option<String>,
+}
+
+impl AmountParameter {
+    pub fn address(&self) -> &String {
+        &self.address
+    }
+
+    pub fn amount(&self) -> &JsonValue {
+        &self.amount
+    }
+
+    pub fn memo(&self) -> &Option<String> {
+        &self.memo
+    }
+}
 
 /// A strategy to use for managing privacy when constructing a transaction.
 ///
