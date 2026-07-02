@@ -289,7 +289,7 @@ impl Chain for ZainoChain {
                 let (name, activation_height, status) = (*info).into_parts();
                 ReportedUpgrade {
                     branch_id: branch.inner(),
-                    name: format!("{name:?}"),
+                    name: name.to_string(),
                     activation_height: activation_height.0,
                     status: status.into(),
                 }
