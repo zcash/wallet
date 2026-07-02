@@ -160,3 +160,123 @@ pub(super) fn account_details<T>(
 
     Ok(f(name, seedfp, account, addresses))
 }
+
+#[cfg(test)]
+mod tests {
+    mod integration {
+        use zcash_protocol::consensus;
+
+        use crate::{components::testing::TestWallet, network::Network};
+
+        use super::super::*;
+
+        /// Test z_listaccounts returns empty list for a wallet with no accounts.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        async fn list_accounts_empty_wallet() {
+            let network = Network::Consensus(consensus::Network::MainNetwork);
+            let wallet = TestWallet::new(network).await.unwrap();
+
+            let handle = wallet.handle().await.unwrap();
+
+            let result = call(handle.as_ref(), Some(true));
+
+            assert!(result.is_ok());
+            let accounts = result.unwrap();
+            assert!(accounts.0.is_empty(), "Expected empty account list");
+        }
+
+        /// Test z_listaccounts returns a single account correctly.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        async fn list_accounts_single_account() {
+            let network = Network::Consensus(consensus::Network::MainNetwork);
+            let wallet = TestWallet::new(network).await.unwrap();
+
+            let account = wallet
+                .account_builder()
+                .with_name("my_account")
+                .build()
+                .await
+                .unwrap();
+
+            let handle = wallet.handle().await.unwrap();
+
+            let result = call(handle.as_ref(), Some(true));
+
+            assert!(result.is_ok());
+            let accounts = result.unwrap();
+            assert_eq!(accounts.0.len(), 1, "Expected exactly one account");
+
+            let listed = &accounts.0[0];
+            assert_eq!(
+                listed.account_uuid,
+                account.account_id.expose_uuid().to_string()
+            );
+            assert_eq!(listed.name.as_deref(), Some("my_account"));
+            assert!(listed.seedfp.is_some(), "Should have seed fingerprint");
+        }
+
+        /// Test z_listaccounts returns multiple accounts correctly.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        async fn list_accounts_multiple_accounts() {
+            let network = Network::Consensus(consensus::Network::MainNetwork);
+            let wallet = TestWallet::new(network).await.unwrap();
+
+            let account1 = wallet
+                .account_builder()
+                .with_name("first_account")
+                .build()
+                .await
+                .unwrap();
+
+            let account2 = wallet
+                .account_builder()
+                .with_name("second_account")
+                .build()
+                .await
+                .unwrap();
+
+            let handle = wallet.handle().await.unwrap();
+
+            let result = call(handle.as_ref(), Some(true));
+
+            assert!(result.is_ok());
+            let accounts = result.unwrap();
+            assert_eq!(accounts.0.len(), 2, "Expected exactly two accounts");
+
+            // Verify both accounts are present (order may vary)
+            let uuids: Vec<_> = accounts.0.iter().map(|a| a.account_uuid.as_str()).collect();
+            assert!(uuids.contains(&account1.account_id.expose_uuid().to_string().as_str()));
+            assert!(uuids.contains(&account2.account_id.expose_uuid().to_string().as_str()));
+
+            // Verify names are present
+            let names: Vec<_> = accounts
+                .0
+                .iter()
+                .filter_map(|a| a.name.as_deref())
+                .collect();
+            assert!(names.contains(&"first_account"));
+            assert!(names.contains(&"second_account"));
+        }
+
+        /// Test z_listaccounts with include_addresses=false omits addresses.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        async fn list_accounts_without_addresses() {
+            let network = Network::Consensus(consensus::Network::MainNetwork);
+            let wallet = TestWallet::new(network).await.unwrap();
+
+            let _account = wallet.account_builder().build().await.unwrap();
+
+            let handle = wallet.handle().await.unwrap();
+
+            let result = call(handle.as_ref(), Some(false));
+
+            assert!(result.is_ok());
+            let accounts = result.unwrap();
+            assert_eq!(accounts.0.len(), 1);
+            assert!(
+                accounts.0[0].addresses.is_none(),
+                "Addresses should be omitted when include_addresses is false"
+            );
+        }
+    }
+}
