@@ -159,6 +159,7 @@ tracing-subscriber.workspace = true
 transparent.workspace = true
 uuid.workspace = true
 which = { workspace = true, optional = true }
+x25519-dalek.workspace = true
 xdg.workspace = true
 zaino-common = { workspace = true, optional = true }
 zaino-fetch = { workspace = true, optional = true }

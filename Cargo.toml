@@ -41,6 +41,7 @@ sha2 = "0.10"
 
 # Key storage
 age = { version = "0.11", features = ["armor", "cli-common", "plugin"] }
+x25519-dalek = { version = "2", features = ["static_secrets", "zeroize"] }
 bip0039 = "0.12"
 
 # Localization
