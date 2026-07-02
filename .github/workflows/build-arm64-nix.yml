@@ -81,7 +81,7 @@ jobs:
             extra-trusted-public-keys = ${{ env.NIX_CACHE_PUBKEY }}
             accept-flake-config = true
 
-      - name: Build static aarch64-musl zallet (reproducible)
+      - name: Build static aarch64-musl zallet (reproducible, zebra-state default)
         run: |
           nix build .#zallet --print-build-logs
           test -x ./result/bin/zallet
@@ -89,6 +89,18 @@ jobs:
           grep -q "aarch64" /tmp/zallet-file.txt
           grep -q "statically linked" /tmp/zallet-file.txt
           echo "arm64 zallet sha256: $(sha256sum ./result/bin/zallet)"
+          # Keep the default binary before the next `nix build` overwrites ./result.
+          install -D -m0755 ./result/bin/zallet /tmp/zallet-bins/zallet
+          cp -aL ./result/share/zallet /tmp/zallet-share 2>/dev/null || true
+
+      - name: Build static aarch64-musl zallet-zaino (reproducible, zaino backend)
+        run: |
+          nix build .#zallet-zaino --print-build-logs --out-link ./result-zaino
+          test -x ./result-zaino/bin/zallet-zaino
+          file ./result-zaino/bin/zallet-zaino | grep -q "aarch64"
+          file ./result-zaino/bin/zallet-zaino | grep -q "statically linked"
+          echo "arm64 zallet-zaino sha256: $(sha256sum ./result-zaino/bin/zallet-zaino)"
+          install -D -m0755 ./result-zaino/bin/zallet-zaino /tmp/zallet-bins/zallet-zaino
 
       - name: Stage the runtime artifact (export layout, linux-arm64)
         run: |
@@ -105,10 +117,14 @@ jobs:
           DEST="build/runtime/${SUFFIX}"
           SHARE="${DEST}/usr/local/share/zallet"
           mkdir -p "${SHARE}"
-          install -m0755 ./result/bin/zallet "${DEST}/zallet"
-          # result/share/zallet holds {completions,manpages,debian-copyright}
-          if [ -d ./result/share/zallet ]; then
-            cp -aL ./result/share/zallet/. "${SHARE}/"
+          # Both backend binaries, side by side (matches Dockerfile.stagex export),
+          # plus the zebra-state alias symlink.
+          install -m0755 /tmp/zallet-bins/zallet       "${DEST}/zallet"
+          install -m0755 /tmp/zallet-bins/zallet-zaino "${DEST}/zallet-zaino"
+          ln -sf zallet "${DEST}/zallet-zebra-state"
+          # share tree comes from the default (zebra-state) build only.
+          if [ -d /tmp/zallet-share ]; then
+            cp -aL /tmp/zallet-share/. "${SHARE}/"
           fi
           # Fallback for debian-copyright if the build didn't emit it into share.
           [ -f "${SHARE}/debian-copyright" ] || cp -f ./zallet/contrib/debian-copyright "${SHARE}/debian-copyright" 2>/dev/null || true

@@ -299,7 +299,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p standalone
-          cp "build/${PLATFORM_KEY}/zallet" "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
+          # Default (zebra-state) binary keeps the plain suffixed name; the zaino
+          # backend ships as an additive `-zaino` standalone binary.
+          cp "build/${PLATFORM_KEY}/zallet"       "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
+          cp "build/${PLATFORM_KEY}/zallet-zaino" "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}-zaino"
 
       - name: Generate provenance chain metadata
         env:
@@ -340,11 +343,15 @@ jobs:
           }
           EOF
 
-      - name: GPG sign standalone binary
+      - name: GPG sign standalone binaries
         env:
           BINARY_SUFFIX: ${{ matrix.binary_suffix }}
         run: |
-          gpg -u sysadmin@zodl.com --armor --digest-algo SHA256 --detach-sign "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}"
+          set -euo pipefail
+          for b in "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}" \
+                   "standalone/zallet-${RELEASE_VERSION}-${BINARY_SUFFIX}-zaino"; do
+            gpg -u sysadmin@zodl.com --armor --digest-algo SHA256 --detach-sign "$b"
+          done
 
       - name: Generate SPDX SBOM for standalone binary
         env:
@@ -355,12 +362,14 @@ jobs:
           import os
           from pathlib import Path
 
-          binary_path = Path(f"standalone/zallet-{os.environ['RELEASE_VERSION']}-{os.environ['BINARY_SUFFIX']}")
-          if not binary_path.exists():
-              raise SystemExit(f"Missing binary at {binary_path}")
-          checksum = hashlib.sha256(binary_path.read_bytes()).hexdigest()
-          output = binary_path.parent / f"{binary_path.name}.sbom.spdx"
-          doc = f"""SPDXVersion: SPDX-2.3
+          base = f"standalone/zallet-{os.environ['RELEASE_VERSION']}-{os.environ['BINARY_SUFFIX']}"
+          # SBOM for both backend binaries (default zebra-state + additive zaino).
+          for binary_path in (Path(base), Path(f"{base}-zaino")):
+              if not binary_path.exists():
+                  raise SystemExit(f"Missing binary at {binary_path}")
+              checksum = hashlib.sha256(binary_path.read_bytes()).hexdigest()
+              output = binary_path.parent / f"{binary_path.name}.sbom.spdx"
+              doc = f"""SPDXVersion: SPDX-2.3
           DataLicense: CC0-1.0
           SPDXID: SPDXRef-DOCUMENT
           DocumentName: {binary_path.name}
@@ -373,20 +382,26 @@ jobs:
           FilesAnalyzed: false
           PackageChecksum: SHA256: {checksum}
           """
-          output.write_text(doc, encoding="utf-8")
+              output.write_text(doc, encoding="utf-8")
           PY
 
-      - name: Generate build provenance attestation for binary
+      - name: Generate build provenance attestation for binaries
         id: binary-attest
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
-          subject-path: standalone/zallet-${{ env.RELEASE_VERSION }}-${{ matrix.binary_suffix }}
+          # Attest both backend binaries in one call (multi-line subject-path).
+          subject-path: |
+            standalone/zallet-${{ env.RELEASE_VERSION }}-${{ matrix.binary_suffix }}
+            standalone/zallet-${{ env.RELEASE_VERSION }}-${{ matrix.binary_suffix }}-zaino
 
       - name: Save binary attestation bundle
         env:
           BUNDLE_PATH: ${{ steps.binary-attest.outputs['bundle-path'] }}
         run: |
+          # One bundle covers both subjects; publish it under both names so each
+          # binary has a co-located .intoto.jsonl next to it in the Release.
           cp -- "$BUNDLE_PATH" "standalone/zallet-${RELEASE_VERSION}-${{ matrix.binary_suffix }}.intoto.jsonl"
+          cp -- "$BUNDLE_PATH" "standalone/zallet-${RELEASE_VERSION}-${{ matrix.binary_suffix }}-zaino.intoto.jsonl"
 
       - name: Seed cargo target tree with the imported artifacts
         run: |
@@ -404,8 +419,13 @@ jobs:
 
           mkdir -p "${TARGET_DIR}" "${COMPLETIONS_DIR}" "${MANPAGES_DIR}"
 
-          # Seed binary for cargo-deb --no-build
-          install -m 0755 "build/${PLATFORM_KEY}/zallet" "${TARGET_DIR}/zallet"
+          # Seed both backend binaries for cargo-deb --no-build (the `zallet`
+          # package ships `zallet` = zebra-state + `zallet-zaino` = zaino), plus
+          # a `zallet-zebra-state` symlink so the default backend is nameable
+          # both ways. cargo-deb (^2.10) preserves a symlink asset as a symlink.
+          install -m 0755 "build/${PLATFORM_KEY}/zallet"       "${TARGET_DIR}/zallet"
+          install -m 0755 "build/${PLATFORM_KEY}/zallet-zaino" "${TARGET_DIR}/zallet-zaino"
+          ln -sf zallet "${TARGET_DIR}/zallet-zebra-state"
 
           # Copy the whole completions tree (whatever is inside)
           cp -a "${ROOT}/completions/." "${COMPLETIONS_DIR}/" 2>/dev/null || true

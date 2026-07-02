@@ -18,6 +18,19 @@ section = "utils"
 assets = [
     ["target/release/zallet", "usr/bin/", "755"],
 
+    # Additive second binary: the same wallet built with the mutually-exclusive
+    # `zaino` chain-data backend (talks to Zebra over JSON-RPC; supports
+    # regtest). The release CI seeds it next to `zallet` in target/release/ so a
+    # single `zallet` package ships both backends; the default `zallet` command
+    # is unchanged. Completions/manpages are the `zallet` command's and apply to
+    # both (same CLI surface).
+    ["target/release/zallet-zaino", "usr/bin/", "755"],
+
+    # Explicit alias for the default (zebra-state) binary. Seeded as a symlink
+    # `zallet-zebra-state -> zallet` by the release CI; cargo-deb preserves it as
+    # a symlink in the package, so the backend is nameable both ways.
+    ["target/release/zallet-zebra-state", "usr/bin/", "777"],
+
     # From the bash-completion FAQ (https://github.com/scop/bash-completion/blob/master/README.md#faq):
     # > Q. I author/maintain package X and would like to maintain my own completion code
     # >    for this package. Where should I put it to be sure that interactive bash shells
