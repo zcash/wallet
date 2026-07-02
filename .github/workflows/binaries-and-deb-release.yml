@@ -257,9 +257,16 @@ jobs:
           PLATFORM_KEY="${{ matrix.platform_key }}"
           ARTIFACT_ROOT="build/runtime-artifact/${PLATFORM_KEY}"
 
-          # Basic sanity check: ensure the exported binary exists at the root (as /zallet in the export image)
+          # Basic sanity check: ensure both backend binaries exist at the root
+          # (as /zallet and /zallet-zaino in the export image; zebra-state is
+          # the default binary name, zaino ships as the additive zallet-zaino).
           if [[ ! -s "${ARTIFACT_ROOT}/zallet" ]]; then
             echo "Missing zallet binary under ${ARTIFACT_ROOT}" >&2
+            find "${ARTIFACT_ROOT}" -maxdepth 5 || true
+            exit 1
+          fi
+          if [[ ! -s "${ARTIFACT_ROOT}/zallet-zaino" ]]; then
+            echo "Missing zallet-zaino binary under ${ARTIFACT_ROOT}" >&2
             find "${ARTIFACT_ROOT}" -maxdepth 5 || true
             exit 1
           fi
@@ -267,8 +274,11 @@ jobs:
           # Prepare per-platform staging directory (including /usr/local for rsync)
           mkdir -p "build/${PLATFORM_KEY}/usr/local"
 
-          # Store the binary in a stable place for later steps, and force executable perms
-          install -m 0755 "${ARTIFACT_ROOT}/zallet" "build/${PLATFORM_KEY}/zallet"
+          # Store both backend binaries in a stable place for later steps
+          # (standalone binary + .deb staging both read them from here), and
+          # force executable perms.
+          install -m 0755 "${ARTIFACT_ROOT}/zallet"       "build/${PLATFORM_KEY}/zallet"
+          install -m 0755 "${ARTIFACT_ROOT}/zallet-zaino" "build/${PLATFORM_KEY}/zallet-zaino"
 
           # Copy the usr/local tree as-is (completions, manpages, docs, etc.)
           # If there is no usr/local in the artifact, this won't fail because of '|| true'
