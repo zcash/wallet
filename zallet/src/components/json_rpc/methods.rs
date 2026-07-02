@@ -741,7 +741,7 @@ pub(crate) trait WalletRpc {
     async fn pczt_create(
         &self,
         from_address: String,
-        amounts: Vec<pczt_create::AmountParam>,
+        amounts: Vec<AmountParameter>,
         minconf: Option<u32>,
         privacy_policy: Option<String>,
     ) -> pczt_create::Response;
@@ -1154,7 +1154,7 @@ impl<C: Chain> WalletRpcServer for WalletRpcImpl<C> {
     async fn pczt_create(
         &self,
         from_address: String,
-        amounts: Vec<pczt_create::AmountParam>,
+        amounts: Vec<AmountParameter>,
         minconf: Option<u32>,
         privacy_policy: Option<String>,
     ) -> pczt_create::Response {

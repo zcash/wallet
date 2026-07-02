@@ -5,27 +5,16 @@ use abscissa_core::Application;
 use jsonrpsee::core::{JsonValue, RpcResult};
 use secrecy::ExposeSecret;
 use serde_json::json;
-use zcash_address::unified;
 use zcash_client_backend::data_api::wallet::SpendingKeys;
 use zcash_client_backend::proposal::Proposal;
 use zcash_client_backend::{
-    data_api::{
-        Account,
-        wallet::{
-            ConfirmationsPolicy, create_proposed_transactions,
-            input_selection::GreedyInputSelector, propose_transfer,
-        },
-    },
-    fees::{DustOutputPolicy, StandardFeeRule, standard::MultiOutputChangeStrategy},
+    data_api::{Account, wallet::{ConfirmationsPolicy, create_proposed_transactions}},
+    fees::StandardFeeRule,
     wallet::OvkPolicy,
 };
 use zcash_client_sqlite::ReceivedNoteId;
 use zcash_keys::{address::Address, keys::UnifiedSpendingKey};
 use zcash_proofs::prover::LocalTxProver;
-use zcash_protocol::{
-    PoolType, ShieldedProtocol,
-    value::{MAX_MONEY, Zatoshis},
-};
 
 use crate::{
     components::{
@@ -34,15 +23,13 @@ use crate::{
         json_rpc::{
             asyncop::{ContextInfo, OperationId},
             payments::{
-                AmountParameter, IncompatiblePrivacyPolicy, PrivacyPolicy, SendResult,
-                broadcast_transactions, build_request, enforce_privacy_policy,
-                get_account_for_address,
+                AmountParameter, PrivacyPolicy, SendResult, broadcast_transactions, build_request,
+                get_account_for_address, propose_and_check,
             },
             server::LegacyCode,
         },
         keystore::KeyStore,
     },
-    fl,
     prelude::*,
 };
 
@@ -130,144 +117,14 @@ pub(crate) async fn call<C: Chain>(
     };
 
     let params = *wallet.params();
-
-    // TODO: Fetch the real maximums within the account so we can detect correctly.
-    //       https://github.com/zcash/wallet/issues/257
-    let mut max_sapling_available = Zatoshis::const_from_u64(MAX_MONEY);
-    let mut max_orchard_available = Zatoshis::const_from_u64(MAX_MONEY);
-
-    for payment in request.payments().values() {
-        let value = payment
-            .amount()
-            .expect("We set this for every payment above");
-
-        match Address::try_from_zcash_address(&params, payment.recipient_address().clone()) {
-            Err(e) => return Err(LegacyCode::InvalidParameter.with_message(e.to_string())),
-            Ok(Address::Transparent(_) | Address::Tex(_)) => {
-                if !privacy_policy.allow_revealed_recipients() {
-                    return Err(IncompatiblePrivacyPolicy::TransparentRecipient.into());
-                }
-            }
-            Ok(Address::Sapling(_)) => {
-                match (
-                    privacy_policy.allow_revealed_amounts(),
-                    max_sapling_available - value,
-                ) {
-                    (false, None) => {
-                        return Err(IncompatiblePrivacyPolicy::RevealingSaplingAmount.into());
-                    }
-                    (false, Some(rest)) => max_sapling_available = rest,
-                    (true, _) => (),
-                }
-            }
-            Ok(Address::Unified(ua)) => {
-                match (
-                    privacy_policy.allow_revealed_amounts(),
-                    (
-                        ua.receiver_types().contains(&unified::Typecode::Orchard),
-                        max_orchard_available - value,
-                    ),
-                    (
-                        ua.receiver_types().contains(&unified::Typecode::Sapling),
-                        max_sapling_available - value,
-                    ),
-                ) {
-                    // The preferred receiver is Orchard, and we either allow revealed
-                    // amounts or have sufficient Orchard funds available to avoid it.
-                    (true, (true, _), _) => (),
-                    (false, (true, Some(rest)), _) => max_orchard_available = rest,
-
-                    // The preferred receiver is Sapling, and we either allow revealed
-                    // amounts or have sufficient Sapling funds available to avoid it.
-                    (true, _, (true, _)) => (),
-                    (false, _, (true, Some(rest))) => max_sapling_available = rest,
-
-                    // We need to reveal something in order to make progress.
-                    _ => {
-                        if privacy_policy.allow_revealed_recipients() {
-                            // Nothing to do here.
-                        } else if privacy_policy.allow_revealed_amounts() {
-                            return Err(IncompatiblePrivacyPolicy::TransparentReceiver.into());
-                        } else {
-                            return Err(IncompatiblePrivacyPolicy::RevealingReceiverAmounts.into());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let change_strategy = MultiOutputChangeStrategy::new(
-        StandardFeeRule::Zip317,
-        None,
-        ShieldedProtocol::Orchard,
-        DustOutputPolicy::default(),
-        APP.config().note_management.split_policy(),
-    );
-
-    // TODO: Once `zcash_client_backend` supports spending transparent coins arbitrarily,
-    // consider using the privacy policy here to avoid selecting incompatible funds. This
-    // would match what `zcashd` did more closely (though we might instead decide to let
-    // the selector return its best proposal and then continue to reject afterwards, as we
-    // currently do).
-    let input_selector = GreedyInputSelector::new();
-
-    let proposal = propose_transfer::<_, _, _, _, Infallible>(
+    let proposal = propose_and_check(
         wallet.as_mut(),
         &params,
         account.id(),
-        &input_selector,
-        &change_strategy,
         request,
+        privacy_policy,
         confirmations_policy,
-    )
-    // TODO: Map errors to `zcashd` shape.
-    .map_err(|e| LegacyCode::Wallet.with_message(format!("Failed to propose transaction: {e}")))?;
-
-    enforce_privacy_policy(&proposal, privacy_policy)?;
-
-    let orchard_actions_limit = APP.config().builder.limits.orchard_actions().into();
-    for step in proposal.steps() {
-        let orchard_spends = step
-            .shielded_inputs()
-            .iter()
-            .flat_map(|inputs| inputs.notes())
-            .filter(|note| note.note().protocol() == ShieldedProtocol::Orchard)
-            .count();
-
-        let orchard_outputs = step
-            .payment_pools()
-            .values()
-            .filter(|pool| pool == &&PoolType::ORCHARD)
-            .count()
-            + step
-                .balance()
-                .proposed_change()
-                .iter()
-                .filter(|change| change.output_pool() == PoolType::ORCHARD)
-                .count();
-
-        let orchard_actions = orchard_spends.max(orchard_outputs);
-
-        if orchard_actions > orchard_actions_limit {
-            let (count, kind) = if orchard_outputs <= orchard_actions_limit {
-                (orchard_spends, "inputs")
-            } else if orchard_spends <= orchard_actions_limit {
-                (orchard_outputs, "outputs")
-            } else {
-                (orchard_actions, "actions")
-            };
-
-            return Err(LegacyCode::Misc.with_message(fl!(
-                "err-excess-orchard-actions",
-                count = count,
-                kind = kind,
-                limit = orchard_actions_limit,
-                config = "-orchardactionlimit=N",
-                bound = format!("N >= %u"),
-            )));
-        }
-    }
+    )?;
 
     let derivation = account.source().key_derivation().ok_or_else(|| {
         LegacyCode::InvalidAddressOrKey
