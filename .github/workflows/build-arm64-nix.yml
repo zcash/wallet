@@ -180,12 +180,19 @@ jobs:
         run: |
           set -Eeuo pipefail
           REPO="docker.io/${NS}/${IMG}"
-          # Minimal scratch image around the static musl binary, matching the
-          # amd64 StageX runtime stage (USER 1000, ENTRYPOINT zallet).
-          mkdir -p ctx && cp build/runtime/linux-arm64/zallet ctx/zallet
+          # Minimal scratch image around the static musl binaries, matching the
+          # amd64 StageX runtime stage (both backends + the zebra-state alias
+          # symlink, USER 1000, ENTRYPOINT zallet). -a preserves the symlink
+          # itself rather than following it.
+          mkdir -p ctx
+          cp -a build/runtime/linux-arm64/zallet             ctx/zallet
+          cp -a build/runtime/linux-arm64/zallet-zaino        ctx/zallet-zaino
+          cp -a build/runtime/linux-arm64/zallet-zebra-state  ctx/zallet-zebra-state
           cat > ctx/Dockerfile <<'DF'
           FROM scratch
           COPY zallet /usr/local/bin/zallet
+          COPY zallet-zaino /usr/local/bin/zallet-zaino
+          COPY zallet-zebra-state /usr/local/bin/zallet-zebra-state
           USER 1000:1000
           ENTRYPOINT ["zallet"]
           DF
