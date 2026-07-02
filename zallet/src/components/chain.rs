@@ -162,6 +162,9 @@ enum Incompatibility {
         /// The activation height the full node reports, or `None` if the full node
         /// treats the upgrade as disabled on this network.
         node: Option<u32>,
+        /// The height at which the two sides’ rules first diverge: the earlier of `expected`
+        /// and `node`.
+        divergence_height: u32,
     },
 }
 
@@ -173,13 +176,9 @@ impl Incompatibility {
             Self::UnknownUpgrade {
                 activation_height, ..
             } => *activation_height,
-            // The two sides disagree about where this upgrade takes effect, so divergence
-            // begins at the earlier of the heights either side schedules it.
-            Self::ActivationHeightMismatch { expected, node, .. } => [*expected, *node]
-                .into_iter()
-                .flatten()
-                .min()
-                .expect("a mismatch has at least one scheduled height"),
+            Self::ActivationHeightMismatch {
+                divergence_height, ..
+            } => *divergence_height,
         }
     }
 
@@ -197,6 +196,7 @@ impl Incompatibility {
                 name,
                 expected,
                 node,
+                ..
             } => {
                 let side = |height: &Option<u32>| match height {
                     Some(height) => format!("activates it at height {height}"),
@@ -268,12 +268,20 @@ fn branch_incompatibility<P: consensus::Parameters>(
             let expected = branch
                 .height_bounds(params)
                 .map(|(activation, _)| u32::from(activation));
-            (expected != node).then(|| Incompatibility::ActivationHeightMismatch {
+            // Divergence begins at the earlier of the two scheduled heights.
+            match (expected, node) {
+                (Some(expected), Some(node)) if expected == node => None,
+                (Some(expected), Some(node)) => Some(expected.min(node)),
+                (Some(height), None) => Some(height),
+                (None, mheight) => mheight,
+            }.map(|divergence_height|
+               Incompatibility::ActivationHeightMismatch {
                 branch_id,
                 // The node’s name for the upgrade if it reported one, else our own.
                 name: reported.map_or_else(|| format!("{branch:?}"), |u| u.name.clone()),
                 expected,
                 node,
+                divergence_height,
             })
         }
         // We cannot interpret this branch ID at all. Flag it unless the node leaves it
@@ -307,22 +315,25 @@ enum Decision {
 /// whose divergence height is at or below the tip has already taken effect. The input is
 /// [`NonEmpty`] because there is nothing to classify when no incompatibilities were detected.
 fn classify(incompatibilities: NonEmpty<Incompatibility>, tip: u32) -> Decision {
+    // The earliest divergence height across all incompatibilities.
+    let earliest = incompatibilities
+        .minimum_by_key(|i| i.divergence_height())
+        .divergence_height();
+
+    // Anything whose divergence height is at or below the tip has already taken effect.
     let (active, pending): (Vec<_>, Vec<_>) = incompatibilities
         .into_iter()
         .partition(|i| i.divergence_height() <= tip);
 
-    if !active.is_empty() {
-        return Decision::Diverged(active);
-    }
-
-    let height = pending
-        .iter()
-        .map(Incompatibility::divergence_height)
-        .min()
-        .expect("pending is non-empty when active is empty and there are incompatibilities");
-    Decision::Pending {
-        height,
-        upgrades: pending,
+    if active.is_empty() {
+        // Nothing has diverged yet, so `pending` holds every incompatibility and `earliest`
+        // is their earliest divergence: run normally and shut down once the chain reaches it.
+        Decision::Pending {
+            height: earliest,
+            upgrades: pending,
+        }
+    } else {
+        Decision::Diverged(active)
     }
 }
 
